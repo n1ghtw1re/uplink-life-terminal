@@ -4,13 +4,15 @@ import { generateHeatmap } from '@/data/mockData';
 
 const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
-const HeatmapWidget = () => {
+interface WidgetProps { onClose?: () => void; onFullscreen?: () => void; isFullscreen?: boolean; }
+
+const HeatmapWidget = ({ onClose, onFullscreen, isFullscreen }: WidgetProps) => {
   const heatmap = useMemo(() => generateHeatmap(), []);
   const cellSize = 14;
   const gap = 2;
 
   return (
-    <WidgetWrapper title="STREAK HEATMAP">
+    <WidgetWrapper title="STREAK HEATMAP" onClose={onClose} onFullscreen={onFullscreen} isFullscreen={isFullscreen}>
       <div style={{ display: 'flex', flexDirection: 'column', gap }}>
         {heatmap.map((row, dayIdx) => (
           <div key={dayIdx} style={{ display: 'flex', alignItems: 'center', gap }}>

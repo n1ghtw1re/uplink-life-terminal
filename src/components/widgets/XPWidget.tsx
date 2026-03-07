@@ -2,10 +2,12 @@ import WidgetWrapper from '../WidgetWrapper';
 import ProgressBar from '../ProgressBar';
 import { operatorData, recentXp } from '@/data/mockData';
 
-const XPWidget = () => {
+interface WidgetProps { onClose?: () => void; onFullscreen?: () => void; isFullscreen?: boolean; }
+
+const XPWidget = ({ onClose, onFullscreen, isFullscreen }: WidgetProps) => {
   const op = operatorData;
   return (
-    <WidgetWrapper title="XP & LEVELLING">
+    <WidgetWrapper title="XP & LEVELLING" onClose={onClose} onFullscreen={onFullscreen} isFullscreen={isFullscreen}>
       <div className="font-display text-glow" style={{ fontSize: 18, marginBottom: 8, color: 'hsl(var(--accent-bright))' }}>
         LVL {op.level} // {op.title}
       </div>

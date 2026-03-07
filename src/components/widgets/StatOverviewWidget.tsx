@@ -2,8 +2,10 @@ import WidgetWrapper from '../WidgetWrapper';
 import ProgressBar from '../ProgressBar';
 import { stats, operatorData } from '@/data/mockData';
 
-const StatOverviewWidget = () => (
-  <WidgetWrapper title="STAT OVERVIEW">
+interface WidgetProps { onClose?: () => void; onFullscreen?: () => void; isFullscreen?: boolean; }
+
+const StatOverviewWidget = ({ onClose, onFullscreen, isFullscreen }: WidgetProps) => (
+  <WidgetWrapper title="STAT OVERVIEW" onClose={onClose} onFullscreen={onFullscreen} isFullscreen={isFullscreen}>
     {stats.map(s => (
       <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, opacity: s.dormant ? 0.4 : 1 }}>
         <span style={{ width: 16, fontSize: 14 }}>{s.icon}</span>

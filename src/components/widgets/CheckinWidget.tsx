@@ -2,7 +2,9 @@ import { useState } from 'react';
 import WidgetWrapper from '../WidgetWrapper';
 import { dailyCheckinStats, habits } from '@/data/mockData';
 
-const CheckinWidget = () => {
+interface WidgetProps { onClose?: () => void; onFullscreen?: () => void; isFullscreen?: boolean; }
+
+const CheckinWidget = ({ onClose, onFullscreen, isFullscreen }: WidgetProps) => {
   const [statChecks, setStatChecks] = useState(dailyCheckinStats.map(s => s.checked));
   const [habitChecks, setHabitChecks] = useState(habits.map(h => h.checked));
 
@@ -10,7 +12,7 @@ const CheckinWidget = () => {
   const dateStr = `${now.getFullYear()}.${(now.getMonth()+1).toString().padStart(2,'0')}.${now.getDate().toString().padStart(2,'0')}`;
 
   return (
-    <WidgetWrapper title="DAILY CHECK-IN">
+    <WidgetWrapper title="DAILY CHECK-IN" onClose={onClose} onFullscreen={onFullscreen} isFullscreen={isFullscreen}>
       <div style={{ fontSize: 11, color: 'hsl(var(--text-dim))', marginBottom: 8 }}>{dateStr}</div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4, marginBottom: 10 }}>
         {dailyCheckinStats.map((s, i) => (

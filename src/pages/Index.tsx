@@ -29,6 +29,15 @@ const defaultLayout: LayoutItem[] = [
   { i: 'media', x: 8, y: 3, w: 4, h: 4, minW: 2, minH: 2 },
 ];
 
+const widgetNames: Record<string, string> = {
+  xp: 'XP & LEVELLING',
+  checkin: 'DAILY CHECK-IN',
+  heatmap: 'STREAK HEATMAP',
+  stats: 'STAT OVERVIEW',
+  courses: 'COURSES',
+  media: 'MEDIA LIBRARY',
+};
+
 const Index = () => {
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [theme, setTheme] = useState(() => localStorage.getItem('uplink-theme') || 'AMBER');
@@ -38,6 +47,9 @@ const Index = () => {
   const [showCheckin, setShowCheckin] = useState(false);
   const [showFlash, setShowFlash] = useState(false);
   const [layout, setLayout] = useState(defaultLayout);
+  const [hiddenWidgets, setHiddenWidgets] = useState<string[]>([]);
+  const [fullscreenWidget, setFullscreenWidget] = useState<string | null>(null);
+  const [preFullscreenLayout, setPreFullscreenLayout] = useState<LayoutItem[] | null>(null);
   const [gridSize, setGridSize] = useState({ width: 0, height: 0 });
 
   const sidebarWidth = sidebarExpanded ? 220 : 48;
@@ -95,13 +107,40 @@ const Index = () => {
 
   const rowHeight = Math.floor((gridSize.height - 16 - 8 * 8) / 8);
 
+  const handleClose = (id: string) => {
+    if (fullscreenWidget === id) {
+      handleFullscreen(id); // restore first
+    }
+    setHiddenWidgets(prev => [...prev, id]);
+  };
+
+  const handleFullscreen = (id: string) => {
+    if (fullscreenWidget === id) {
+      // Restore
+      if (preFullscreenLayout) setLayout(preFullscreenLayout);
+      setFullscreenWidget(null);
+      setPreFullscreenLayout(null);
+    } else {
+      // Go fullscreen
+      setPreFullscreenLayout(layout);
+      setFullscreenWidget(id);
+      setLayout(prev => prev.map(item =>
+        item.i === id
+          ? { ...item, x: 0, y: 0, w: 12, h: 8 }
+          : item
+      ));
+    }
+  };
+
+  const visibleLayout = layout.filter(item => !hiddenWidgets.includes(item.i));
+
   const widgetMap: Record<string, React.ReactNode> = {
-    xp: <XPWidget />,
-    checkin: <CheckinWidget />,
-    heatmap: <HeatmapWidget />,
-    stats: <StatOverviewWidget />,
-    courses: <CoursesWidget />,
-    media: <MediaWidget />,
+    xp: <XPWidget onClose={() => handleClose('xp')} onFullscreen={() => handleFullscreen('xp')} isFullscreen={fullscreenWidget === 'xp'} />,
+    checkin: <CheckinWidget onClose={() => handleClose('checkin')} onFullscreen={() => handleFullscreen('checkin')} isFullscreen={fullscreenWidget === 'checkin'} />,
+    heatmap: <HeatmapWidget onClose={() => handleClose('heatmap')} onFullscreen={() => handleFullscreen('heatmap')} isFullscreen={fullscreenWidget === 'heatmap'} />,
+    stats: <StatOverviewWidget onClose={() => handleClose('stats')} onFullscreen={() => handleFullscreen('stats')} isFullscreen={fullscreenWidget === 'stats'} />,
+    courses: <CoursesWidget onClose={() => handleClose('courses')} onFullscreen={() => handleFullscreen('courses')} isFullscreen={fullscreenWidget === 'courses'} />,
+    media: <MediaWidget onClose={() => handleClose('media')} onFullscreen={() => handleFullscreen('media')} isFullscreen={fullscreenWidget === 'media'} />,
   };
 
   return (
@@ -125,7 +164,7 @@ const Index = () => {
           {gridSize.width > 0 && (
             <ReactGridLayout
               className="layout"
-              layout={layout}
+              layout={visibleLayout}
               width={gridSize.width - 16}
               gridConfig={{
                 cols: 12,
@@ -134,23 +173,42 @@ const Index = () => {
                 containerPadding: [0, 0] as [number, number],
               }}
               dragConfig={{
-                enabled: true,
+                enabled: !fullscreenWidget,
                 bounded: false,
                 handle: ".widget-drag-handle",
                 threshold: 3,
               }}
               resizeConfig={{
-                enabled: true,
+                enabled: !fullscreenWidget,
                 handles: ['se', 'sw'],
               }}
               onLayoutChange={(newLayout: RGLLayout) => setLayout(newLayout.map(l => ({ i: l.i, x: l.x, y: l.y, w: l.w, h: l.h, minW: l.minW, minH: l.minH })))}
             >
-              {layout.map(item => (
-                <div key={item.i}>
+              {visibleLayout.map(item => (
+                <div key={item.i} style={{ zIndex: fullscreenWidget === item.i ? 10 : 1 }}>
                   {widgetMap[item.i]}
                 </div>
               ))}
             </ReactGridLayout>
+          )}
+
+          {/* Restore closed widgets bar */}
+          {hiddenWidgets.length > 0 && (
+            <div style={{
+              position: 'absolute', bottom: 8, left: 8, right: 8,
+              display: 'flex', gap: 4, flexWrap: 'wrap',
+            }}>
+              {hiddenWidgets.map(id => (
+                <button
+                  key={id}
+                  className="topbar-btn"
+                  style={{ fontSize: 9 }}
+                  onClick={() => setHiddenWidgets(prev => prev.filter(w => w !== id))}
+                >
+                  + {widgetNames[id] || id}
+                </button>
+              ))}
+            </div>
           )}
         </div>
       </div>
