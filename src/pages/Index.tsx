@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import GridLayout from 'react-grid-layout';
+import ReactGridLayout from 'react-grid-layout';
+import type { Layout as RGLLayout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 
