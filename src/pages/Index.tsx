@@ -132,8 +132,16 @@ const Index = () => {
                 rowHeight: rowHeight > 20 ? rowHeight : 40,
                 margin: [8, 8] as [number, number],
                 containerPadding: [0, 0] as [number, number],
-                draggableHandle: ".widget-drag-handle",
-                resizeHandles: ['se', 'sw'],
+              }}
+              dragConfig={{
+                enabled: true,
+                bounded: false,
+                handle: ".widget-drag-handle",
+                threshold: 3,
+              }}
+              resizeConfig={{
+                enabled: true,
+                handles: ['se', 'sw'],
               }}
               onLayoutChange={(newLayout: RGLLayout) => setLayout(newLayout.map(l => ({ i: l.i, x: l.x, y: l.y, w: l.w, h: l.h, minW: l.minW, minH: l.minH })))}
             >
