@@ -164,7 +164,7 @@ const Index = () => {
           {gridSize.width > 0 && (
             <ReactGridLayout
               className="layout"
-              layout={layout}
+              layout={visibleLayout}
               width={gridSize.width - 16}
               gridConfig={{
                 cols: 12,
@@ -173,23 +173,42 @@ const Index = () => {
                 containerPadding: [0, 0] as [number, number],
               }}
               dragConfig={{
-                enabled: true,
+                enabled: !fullscreenWidget,
                 bounded: false,
                 handle: ".widget-drag-handle",
                 threshold: 3,
               }}
               resizeConfig={{
-                enabled: true,
+                enabled: !fullscreenWidget,
                 handles: ['se', 'sw'],
               }}
               onLayoutChange={(newLayout: RGLLayout) => setLayout(newLayout.map(l => ({ i: l.i, x: l.x, y: l.y, w: l.w, h: l.h, minW: l.minW, minH: l.minH })))}
             >
-              {layout.map(item => (
-                <div key={item.i}>
+              {visibleLayout.map(item => (
+                <div key={item.i} style={{ zIndex: fullscreenWidget === item.i ? 10 : 1 }}>
                   {widgetMap[item.i]}
                 </div>
               ))}
             </ReactGridLayout>
+          )}
+
+          {/* Restore closed widgets bar */}
+          {hiddenWidgets.length > 0 && (
+            <div style={{
+              position: 'absolute', bottom: 8, left: 8, right: 8,
+              display: 'flex', gap: 4, flexWrap: 'wrap',
+            }}>
+              {hiddenWidgets.map(id => (
+                <button
+                  key={id}
+                  className="topbar-btn"
+                  style={{ fontSize: 9 }}
+                  onClick={() => setHiddenWidgets(prev => prev.filter(w => w !== id))}
+                >
+                  + {widgetNames[id] || id}
+                </button>
+              ))}
+            </div>
           )}
         </div>
       </div>
