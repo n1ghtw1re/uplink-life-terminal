@@ -47,6 +47,9 @@ const Index = () => {
   const [showCheckin, setShowCheckin] = useState(false);
   const [showFlash, setShowFlash] = useState(false);
   const [layout, setLayout] = useState(defaultLayout);
+  const [hiddenWidgets, setHiddenWidgets] = useState<string[]>([]);
+  const [fullscreenWidget, setFullscreenWidget] = useState<string | null>(null);
+  const [preFullscreenLayout, setPreFullscreenLayout] = useState<LayoutItem[] | null>(null);
   const [gridSize, setGridSize] = useState({ width: 0, height: 0 });
 
   const sidebarWidth = sidebarExpanded ? 220 : 48;
