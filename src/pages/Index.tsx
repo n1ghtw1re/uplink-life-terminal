@@ -18,7 +18,9 @@ import QuickLogOverlay from '@/components/overlays/QuickLogOverlay';
 import CharacterSheet from '@/components/overlays/CharacterSheet';
 import SearchOverlay from '@/components/overlays/SearchOverlay';
 
-const defaultLayout = [
+type LayoutItem = { i: string; x: number; y: number; w: number; h: number; minW?: number; minH?: number };
+
+const defaultLayout: LayoutItem[] = [
   { i: 'xp', x: 0, y: 0, w: 4, h: 4, minW: 2, minH: 2 },
   { i: 'checkin', x: 4, y: 0, w: 3, h: 3, minW: 2, minH: 2 },
   { i: 'heatmap', x: 7, y: 0, w: 5, h: 3, minW: 3, minH: 2 },
