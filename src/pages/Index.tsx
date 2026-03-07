@@ -132,9 +132,9 @@ const Index = () => {
                 rowHeight: rowHeight > 20 ? rowHeight : 40,
                 margin: [8, 8] as [number, number],
                 containerPadding: [0, 0] as [number, number],
+                draggableHandle: ".widget-drag-handle",
+                resizeHandles: ['se', 'sw'],
               }}
-              draggableHandle=".widget-drag-handle"
-              resizeHandles={['se', 'sw']}
               onLayoutChange={(newLayout: RGLLayout) => setLayout(newLayout.map(l => ({ i: l.i, x: l.x, y: l.y, w: l.w, h: l.h, minW: l.minW, minH: l.minH })))}
             >
               {layout.map(item => (
