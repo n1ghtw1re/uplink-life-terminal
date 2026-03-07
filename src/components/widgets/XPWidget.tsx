@@ -1,5 +1,5 @@
-import WidgetWrapper from './WidgetWrapper';
-import ProgressBar from './ProgressBar';
+import WidgetWrapper from '../WidgetWrapper';
+import ProgressBar from '../ProgressBar';
 import { operatorData, recentXp } from '@/data/mockData';
 
 const XPWidget = () => {
