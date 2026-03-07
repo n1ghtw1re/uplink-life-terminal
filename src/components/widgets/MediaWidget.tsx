@@ -4,7 +4,9 @@ import { books } from '@/data/mockData';
 
 const tabs = ['BOOKS', 'COMICS', 'FILMS', 'TV', 'ALBUMS', 'ALL'];
 
-const MediaWidget = () => {
+interface WidgetProps { onClose?: () => void; onFullscreen?: () => void; isFullscreen?: boolean; }
+
+const MediaWidget = ({ onClose, onFullscreen, isFullscreen }: WidgetProps) => {
   const [activeTab, setActiveTab] = useState('BOOKS');
 
   const reading = books.filter(b => b.status === 'READING');
@@ -12,7 +14,7 @@ const MediaWidget = () => {
   const finished = books.filter(b => b.status === 'FINISHED');
 
   return (
-    <WidgetWrapper title="MEDIA LIBRARY">
+    <WidgetWrapper title="MEDIA LIBRARY" onClose={onClose} onFullscreen={onFullscreen} isFullscreen={isFullscreen}>
       <div style={{ display: 'flex', gap: 4, marginBottom: 10, flexWrap: 'wrap' }}>
         {tabs.map(t => (
           <button

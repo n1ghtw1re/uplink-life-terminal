@@ -2,8 +2,10 @@ import WidgetWrapper from '../WidgetWrapper';
 import ProgressBar from '../ProgressBar';
 import { courses } from '@/data/mockData';
 
-const CoursesWidget = () => (
-  <WidgetWrapper title="COURSES">
+interface WidgetProps { onClose?: () => void; onFullscreen?: () => void; isFullscreen?: boolean; }
+
+const CoursesWidget = ({ onClose, onFullscreen, isFullscreen }: WidgetProps) => (
+  <WidgetWrapper title="COURSES" onClose={onClose} onFullscreen={onFullscreen} isFullscreen={isFullscreen}>
     {courses.map((c, i) => (
       <div key={i} style={{ marginBottom: 10, cursor: 'pointer' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
