@@ -130,7 +130,7 @@ const Index = () => {
               containerPadding={[0, 0]}
               draggableHandle=".widget-drag-handle"
               resizeHandles={['se', 'sw']}
-              onLayoutChange={setLayout}
+              onLayoutChange={(newLayout) => setLayout(newLayout.map(l => ({ ...l })))}
             >
               {layout.map(item => (
                 <div key={item.i}>
