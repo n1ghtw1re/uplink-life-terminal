@@ -107,13 +107,40 @@ const Index = () => {
 
   const rowHeight = Math.floor((gridSize.height - 16 - 8 * 8) / 8);
 
+  const handleClose = (id: string) => {
+    if (fullscreenWidget === id) {
+      handleFullscreen(id); // restore first
+    }
+    setHiddenWidgets(prev => [...prev, id]);
+  };
+
+  const handleFullscreen = (id: string) => {
+    if (fullscreenWidget === id) {
+      // Restore
+      if (preFullscreenLayout) setLayout(preFullscreenLayout);
+      setFullscreenWidget(null);
+      setPreFullscreenLayout(null);
+    } else {
+      // Go fullscreen
+      setPreFullscreenLayout(layout);
+      setFullscreenWidget(id);
+      setLayout(prev => prev.map(item =>
+        item.i === id
+          ? { ...item, x: 0, y: 0, w: 12, h: 8 }
+          : item
+      ));
+    }
+  };
+
+  const visibleLayout = layout.filter(item => !hiddenWidgets.includes(item.i));
+
   const widgetMap: Record<string, React.ReactNode> = {
-    xp: <XPWidget />,
-    checkin: <CheckinWidget />,
-    heatmap: <HeatmapWidget />,
-    stats: <StatOverviewWidget />,
-    courses: <CoursesWidget />,
-    media: <MediaWidget />,
+    xp: <XPWidget onClose={() => handleClose('xp')} onFullscreen={() => handleFullscreen('xp')} isFullscreen={fullscreenWidget === 'xp'} />,
+    checkin: <CheckinWidget onClose={() => handleClose('checkin')} onFullscreen={() => handleFullscreen('checkin')} isFullscreen={fullscreenWidget === 'checkin'} />,
+    heatmap: <HeatmapWidget onClose={() => handleClose('heatmap')} onFullscreen={() => handleFullscreen('heatmap')} isFullscreen={fullscreenWidget === 'heatmap'} />,
+    stats: <StatOverviewWidget onClose={() => handleClose('stats')} onFullscreen={() => handleFullscreen('stats')} isFullscreen={fullscreenWidget === 'stats'} />,
+    courses: <CoursesWidget onClose={() => handleClose('courses')} onFullscreen={() => handleFullscreen('courses')} isFullscreen={fullscreenWidget === 'courses'} />,
+    media: <MediaWidget onClose={() => handleClose('media')} onFullscreen={() => handleFullscreen('media')} isFullscreen={fullscreenWidget === 'media'} />,
   };
 
   return (
