@@ -29,6 +29,15 @@ const defaultLayout: LayoutItem[] = [
   { i: 'media', x: 8, y: 3, w: 4, h: 4, minW: 2, minH: 2 },
 ];
 
+const widgetNames: Record<string, string> = {
+  xp: 'XP & LEVELLING',
+  checkin: 'DAILY CHECK-IN',
+  heatmap: 'STREAK HEATMAP',
+  stats: 'STAT OVERVIEW',
+  courses: 'COURSES',
+  media: 'MEDIA LIBRARY',
+};
+
 const Index = () => {
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [theme, setTheme] = useState(() => localStorage.getItem('uplink-theme') || 'AMBER');
