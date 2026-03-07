@@ -123,24 +123,26 @@ const Index = () => {
 
         <div style={{ flex: 1, overflow: 'hidden', padding: 8 }}>
           {gridSize.width > 0 && (
-            <GridLayout
+            <ReactGridLayout
               className="layout"
               layout={layout}
-              cols={12}
-              rowHeight={rowHeight > 20 ? rowHeight : 40}
               width={gridSize.width - 16}
-              margin={[8, 8]}
-              containerPadding={[0, 0]}
+              gridConfig={{
+                cols: 12,
+                rowHeight: rowHeight > 20 ? rowHeight : 40,
+                margin: [8, 8] as [number, number],
+                containerPadding: [0, 0] as [number, number],
+              }}
               draggableHandle=".widget-drag-handle"
               resizeHandles={['se', 'sw']}
-              onLayoutChange={(newLayout) => setLayout(newLayout.map(l => ({ ...l })))}
+              onLayoutChange={(newLayout: RGLLayout) => setLayout(newLayout.map(l => ({ i: l.i, x: l.x, y: l.y, w: l.w, h: l.h, minW: l.minW, minH: l.minH })))}
             >
               {layout.map(item => (
                 <div key={item.i}>
                   {widgetMap[item.i]}
                 </div>
               ))}
-            </GridLayout>
+            </ReactGridLayout>
           )}
         </div>
       </div>
