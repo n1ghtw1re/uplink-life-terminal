@@ -48,7 +48,10 @@ const Modal = ({ open, onClose, title, children, width = 480, fullScreen = false
           borderBottom: '1px solid hsl(var(--accent-dim))',
           paddingBottom: 8,
         }}>
-          <span className="text-glow" style={{ fontSize: 12, color: 'hsl(var(--accent))' }}>// {title}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span className="text-glow" style={{ fontSize: 12, color: 'hsl(var(--accent))' }}>// {title}</span>
+            {headerExtra}
+          </div>
           <button className="widget-btn" onClick={onClose}>×</button>
         </div>
         {children}
