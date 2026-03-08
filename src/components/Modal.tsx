@@ -8,6 +8,7 @@ interface ModalProps {
   children: React.ReactNode;
   width?: number;
   fullScreen?: boolean;
+  headerExtra?: React.ReactNode;
 }
 
 const Modal = ({ open, onClose, title, children, width = 480, fullScreen = false }: ModalProps) => {
