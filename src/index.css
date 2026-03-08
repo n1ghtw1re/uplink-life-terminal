@@ -743,6 +743,19 @@
   padding: 32px;
 }
 
+.char-sheet-content ::-webkit-scrollbar {
+  width: 4px;
+}
+.char-sheet-content ::-webkit-scrollbar-track {
+  background: #0d0800;
+}
+.char-sheet-content ::-webkit-scrollbar-thumb {
+  background: #996800;
+}
+.char-sheet-content ::-webkit-scrollbar-thumb:hover {
+  background: #ffb000;
+}
+
 .char-sheet-nav {
   height: 48px;
   display: flex;
