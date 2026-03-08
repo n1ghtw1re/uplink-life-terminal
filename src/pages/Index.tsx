@@ -106,7 +106,8 @@ const Index = () => {
     return () => window.removeEventListener('keydown', handleKey);
   }, [handleKey]);
 
-  const rowHeight = Math.floor((gridSize.height - 16 - 8 * 8) / 8);
+  const maxRows = 8;
+  const rowHeight = Math.floor((gridSize.height - 16 - 8 * maxRows) / maxRows);
 
   const handleClose = (id: string) => {
     if (fullscreenWidget === id) setFullscreenWidget(null);
@@ -177,9 +178,10 @@ const Index = () => {
               gridConfig={{
                 cols: 12,
                 rowHeight: rowHeight > 20 ? rowHeight : 40,
+                maxRows: maxRows,
                 margin: [8, 8] as [number, number],
                 containerPadding: [0, 0] as [number, number],
-              }}
+              } as any}
               dragConfig={{
                 enabled: true,
                 bounded: true,
@@ -190,7 +192,18 @@ const Index = () => {
                 enabled: true,
                 handles: ['se', 'sw'],
               }}
-              onLayoutChange={(newLayout: RGLLayout) => setLayout(newLayout.map(l => ({ i: l.i, x: l.x, y: l.y, w: l.w, h: l.h, minW: l.minW, minH: l.minH })))}
+              onLayoutChange={(newLayout: RGLLayout) => {
+                const clamped = newLayout.map(l => {
+                  const h = Math.min(l.h, maxRows);
+                  const y = Math.min(l.y, maxRows - h);
+                  return {
+                    i: l.i, x: l.x, w: l.w,
+                    h, y: Math.max(0, y),
+                    minW: l.minW, minH: l.minH,
+                  };
+                });
+                setLayout(clamped);
+              }}
             >
               {visibleLayout.map(item => (
                 <div key={item.i}>
