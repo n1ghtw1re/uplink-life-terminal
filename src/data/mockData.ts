@@ -127,6 +127,30 @@ export const generateHeatmap = (): number[][] => {
   return data;
 };
 
+export interface Skill {
+  name: string;
+  stats: string[];
+  icon: string;
+  defaultSplit?: number[]; // percentages for each stat, must sum to 100
+}
+
+export const skills: Skill[] = [
+  { name: 'MMA', stats: ['BODY', 'GRIT'], icon: '▲', defaultSplit: [80, 20] },
+  { name: 'Weightlifting', stats: ['BODY'], icon: '▲' },
+  { name: 'Running', stats: ['BODY'], icon: '▲' },
+  { name: 'Coding', stats: ['WIRE'], icon: '⬡' },
+  { name: 'Web Dev', stats: ['WIRE'], icon: '⬡' },
+  { name: 'Spanish', stats: ['MIND', 'COOL'], icon: '◈', defaultSplit: [60, 40] },
+  { name: 'Reading', stats: ['MIND'], icon: '◈' },
+  { name: 'Meditation', stats: ['GHOST'], icon: '░' },
+  { name: 'Music Production', stats: ['FLOW'], icon: '✦' },
+  { name: 'Journaling', stats: ['GRIT'], icon: '▣' },
+  { name: 'Morning Routine', stats: ['GRIT'], icon: '▣' },
+  { name: 'Drawing', stats: ['FLOW'], icon: '✦' },
+  { name: 'Breathwork', stats: ['GHOST'], icon: '░' },
+  { name: 'Networking', stats: ['COOL'], icon: '◆' },
+];
+
 export const dailyCheckinStats = [
   { icon: '▲', name: 'BODY', checked: true },
   { icon: '⬡', name: 'WIRE', checked: true },
