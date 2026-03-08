@@ -497,10 +497,13 @@
 /* Fullscreen widget overlay */
 .fullscreen-backdrop {
   position: fixed;
-  inset: 0;
   top: 48px;
+  left: 0;
+  right: 0;
+  bottom: 0;
   background: rgba(0, 0, 0, 0.85);
   z-index: 998;
+  pointer-events: auto;
 }
 
 .fullscreen-widget {
@@ -512,14 +515,21 @@
   background: hsl(var(--bg-secondary));
   border: 1px solid hsl(var(--accent));
   box-shadow: 0 0 30px hsl(var(--accent-glow) / 0.3);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .fullscreen-widget .widget {
   height: 100%;
+  display: flex;
+  flex-direction: column;
   border: none;
   box-shadow: none;
 }
 
 .fullscreen-widget .widget-body {
+  flex: 1;
   overflow: auto;
+  min-height: 0;
 }
