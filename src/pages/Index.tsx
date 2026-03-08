@@ -235,7 +235,17 @@ const Index = () => {
 
 
       {/* Modals */}
-      <Modal open={showLog} onClose={() => setShowLog(false)} title="QUICK LOG" width={720}>
+      <Modal
+        open={showLog}
+        onClose={() => setShowLog(false)}
+        title="QUICK LOG"
+        width={720}
+        headerExtra={
+          <span style={{ fontSize: 10, color: 'hsl(var(--text-dim))' }}>
+            {new Date().getFullYear()}.{String(new Date().getMonth() + 1).padStart(2, '0')}.{String(new Date().getDate()).padStart(2, '0')}
+          </span>
+        }
+      >
         <QuickLogOverlay onSubmit={() => setShowLog(false)} />
       </Modal>
       <Modal open={showChar} onClose={() => setShowChar(false)} title="CHARACTER SHEET" fullScreen>

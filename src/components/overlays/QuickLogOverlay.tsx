@@ -202,12 +202,16 @@ const QuickLogOverlay = ({ onSubmit }: QuickLogOverlayProps) => {
               ))}
               <span style={{ color: 'hsl(var(--text-dim))', margin: '0 4px' }}>or</span>
               <input
-                className="crt-input"
+                className="crt-input ql-no-spinners"
                 style={{ width: 50, textAlign: 'center' }}
-                type="number"
-                min={1}
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
                 value={duration}
-                onChange={e => handleCustomDuration(Number(e.target.value) || 1)}
+                onChange={e => {
+                  const v = e.target.value.replace(/\D/g, '');
+                  handleCustomDuration(Number(v) || 1);
+                }}
               />
               <span style={{ color: 'hsl(var(--text-dim))' }}>min</span>
             </div>
