@@ -54,7 +54,7 @@ const CharacterSheet = ({ onClose }: CharacterSheetProps) => {
             key={page}
             className={`char-sheet-page-btn ${page === currentPage ? 'active' : ''} ${page > 2 ? 'disabled' : ''}`}
             onClick={() => goToPage(page)}
-            disabled={page > 1}
+            disabled={page > 2}
           >
             {page}
           </button>
