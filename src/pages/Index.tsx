@@ -178,8 +178,10 @@ const Index = () => {
               gridConfig={{
                 cols: 12,
                 rowHeight: rowHeight > 20 ? rowHeight : 40,
+                maxRows: maxRows,
                 margin: [8, 8] as [number, number],
                 containerPadding: [0, 0] as [number, number],
+                compactType: null,
               }}
               dragConfig={{
                 enabled: true,
@@ -191,7 +193,14 @@ const Index = () => {
                 enabled: true,
                 handles: ['se', 'sw'],
               }}
-              onLayoutChange={(newLayout: RGLLayout) => setLayout(newLayout.map(l => ({ i: l.i, x: l.x, y: l.y, w: l.w, h: l.h, minW: l.minW, minH: l.minH })))}
+              onLayoutChange={(newLayout: RGLLayout) => {
+                const clamped = newLayout.map(l => ({
+                  i: l.i, x: l.x, w: l.w, h: l.h,
+                  y: Math.min(l.y, maxRows - l.h),
+                  minW: l.minW, minH: l.minH,
+                }));
+                setLayout(clamped);
+              }}
             >
               {visibleLayout.map(item => (
                 <div key={item.i}>
