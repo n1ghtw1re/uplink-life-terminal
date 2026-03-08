@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import ReactGridLayout from 'react-grid-layout';
 import type { Layout as RGLLayout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
@@ -19,6 +20,8 @@ import CharacterSheet from '@/components/overlays/CharacterSheet';
 import SearchOverlay from '@/components/overlays/SearchOverlay';
 
 type LayoutItem = { i: string; x: number; y: number; w: number; h: number; minW?: number; minH?: number };
+
+const ALL_WIDGET_IDS = ['xp', 'checkin', 'heatmap', 'stats', 'courses', 'media'];
 
 const defaultLayout: LayoutItem[] = [
   { i: 'xp', x: 0, y: 0, w: 4, h: 4, minW: 2, minH: 2 },
@@ -47,14 +50,12 @@ const Index = () => {
   const [showCheckin, setShowCheckin] = useState(false);
   const [showFlash, setShowFlash] = useState(false);
   const [layout, setLayout] = useState(defaultLayout);
-  const [hiddenWidgets, setHiddenWidgets] = useState<string[]>([]);
+  const [activeWidgets, setActiveWidgets] = useState<string[]>(ALL_WIDGET_IDS);
   const [fullscreenWidget, setFullscreenWidget] = useState<string | null>(null);
-  const [preFullscreenLayout, setPreFullscreenLayout] = useState<LayoutItem[] | null>(null);
   const [gridSize, setGridSize] = useState({ width: 0, height: 0 });
 
   const sidebarWidth = sidebarExpanded ? 220 : 48;
 
-  // Measure grid area
   useEffect(() => {
     const update = () => {
       setGridSize({
@@ -67,7 +68,6 @@ const Index = () => {
     return () => window.removeEventListener('resize', update);
   }, [sidebarWidth]);
 
-  // Theme
   useEffect(() => {
     const root = document.documentElement;
     root.classList.remove('theme-green', 'theme-dos');
@@ -82,23 +82,24 @@ const Index = () => {
     setTheme(t);
   };
 
-  // Keyboard shortcuts
   const handleKey = useCallback((e: KeyboardEvent) => {
     const tag = (e.target as HTMLElement).tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA') return;
 
+    if (e.key === 'Escape') {
+      if (fullscreenWidget) { setFullscreenWidget(null); return; }
+      setShowLog(false);
+      setShowChar(false);
+      setShowSearch(false);
+      setShowCheckin(false);
+      return;
+    }
     if (e.key === ' ') { e.preventDefault(); setShowLog(true); }
     if (e.key === 'c' || e.key === 'C') setShowChar(true);
     if (e.key === '/') { e.preventDefault(); setShowSearch(true); }
     if (e.key === '[') setSidebarExpanded(false);
     if (e.key === ']') setSidebarExpanded(true);
-    if (e.key === 'Escape') {
-      setShowLog(false);
-      setShowChar(false);
-      setShowSearch(false);
-      setShowCheckin(false);
-    }
-  }, []);
+  }, [fullscreenWidget]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKey);
@@ -108,39 +109,41 @@ const Index = () => {
   const rowHeight = Math.floor((gridSize.height - 16 - 8 * 8) / 8);
 
   const handleClose = (id: string) => {
-    if (fullscreenWidget === id) {
-      handleFullscreen(id); // restore first
+    if (fullscreenWidget === id) setFullscreenWidget(null);
+    setLayout(prev => prev.filter(item => item.i !== id));
+    setActiveWidgets(prev => prev.filter(w => w !== id));
+  };
+
+  const handleRestore = (id: string) => {
+    const def = defaultLayout.find(d => d.i === id);
+    if (def) {
+      setLayout(prev => [...prev, def]);
+      setActiveWidgets(prev => [...prev, id]);
     }
-    setHiddenWidgets(prev => [...prev, id]);
   };
 
   const handleFullscreen = (id: string) => {
-    if (fullscreenWidget === id) {
-      // Restore
-      if (preFullscreenLayout) setLayout(preFullscreenLayout);
-      setFullscreenWidget(null);
-      setPreFullscreenLayout(null);
-    } else {
-      // Go fullscreen
-      setPreFullscreenLayout(layout);
-      setFullscreenWidget(id);
-      setLayout(prev => prev.map(item =>
-        item.i === id
-          ? { ...item, x: 0, y: 0, w: 12, h: 8 }
-          : item
-      ));
-    }
+    setFullscreenWidget(prev => prev === id ? null : id);
   };
 
-  const visibleLayout = layout.filter(item => !hiddenWidgets.includes(item.i));
+  const visibleLayout = layout.filter(item => activeWidgets.includes(item.i));
+  const closedWidgets = ALL_WIDGET_IDS.filter(id => !activeWidgets.includes(id));
 
-  const widgetMap: Record<string, React.ReactNode> = {
-    xp: <XPWidget onClose={() => handleClose('xp')} onFullscreen={() => handleFullscreen('xp')} isFullscreen={fullscreenWidget === 'xp'} />,
-    checkin: <CheckinWidget onClose={() => handleClose('checkin')} onFullscreen={() => handleFullscreen('checkin')} isFullscreen={fullscreenWidget === 'checkin'} />,
-    heatmap: <HeatmapWidget onClose={() => handleClose('heatmap')} onFullscreen={() => handleFullscreen('heatmap')} isFullscreen={fullscreenWidget === 'heatmap'} />,
-    stats: <StatOverviewWidget onClose={() => handleClose('stats')} onFullscreen={() => handleFullscreen('stats')} isFullscreen={fullscreenWidget === 'stats'} />,
-    courses: <CoursesWidget onClose={() => handleClose('courses')} onFullscreen={() => handleFullscreen('courses')} isFullscreen={fullscreenWidget === 'courses'} />,
-    media: <MediaWidget onClose={() => handleClose('media')} onFullscreen={() => handleFullscreen('media')} isFullscreen={fullscreenWidget === 'media'} />,
+  const renderWidget = (id: string, isFs: boolean) => {
+    const props = {
+      onClose: () => handleClose(id),
+      onFullscreen: () => handleFullscreen(id),
+      isFullscreen: isFs,
+    };
+    switch (id) {
+      case 'xp': return <XPWidget {...props} />;
+      case 'checkin': return <CheckinWidget {...props} />;
+      case 'heatmap': return <HeatmapWidget {...props} />;
+      case 'stats': return <StatOverviewWidget {...props} />;
+      case 'courses': return <CoursesWidget {...props} />;
+      case 'media': return <MediaWidget {...props} />;
+      default: return null;
+    }
   };
 
   return (
@@ -158,9 +161,14 @@ const Index = () => {
       />
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        <Sidebar expanded={sidebarExpanded} onToggle={() => setSidebarExpanded(!sidebarExpanded)} />
+        <Sidebar
+          expanded={sidebarExpanded}
+          onToggle={() => setSidebarExpanded(!sidebarExpanded)}
+          onExpand={() => setSidebarExpanded(true)}
+          onOpenCharSheet={() => setShowChar(true)}
+        />
 
-        <div style={{ flex: 1, overflow: 'hidden', padding: 8 }}>
+        <div style={{ flex: 1, overflow: 'hidden', padding: 8, position: 'relative', height: gridSize.height }}>
           {gridSize.width > 0 && (
             <ReactGridLayout
               className="layout"
@@ -173,37 +181,37 @@ const Index = () => {
                 containerPadding: [0, 0] as [number, number],
               }}
               dragConfig={{
-                enabled: !fullscreenWidget,
-                bounded: false,
+                enabled: true,
+                bounded: true,
                 handle: ".widget-drag-handle",
                 threshold: 3,
               }}
               resizeConfig={{
-                enabled: !fullscreenWidget,
+                enabled: true,
                 handles: ['se', 'sw'],
               }}
               onLayoutChange={(newLayout: RGLLayout) => setLayout(newLayout.map(l => ({ i: l.i, x: l.x, y: l.y, w: l.w, h: l.h, minW: l.minW, minH: l.minH })))}
             >
               {visibleLayout.map(item => (
-                <div key={item.i} style={{ zIndex: fullscreenWidget === item.i ? 10 : 1 }}>
-                  {widgetMap[item.i]}
+                <div key={item.i}>
+                  {renderWidget(item.i, false)}
                 </div>
               ))}
             </ReactGridLayout>
           )}
 
           {/* Restore closed widgets bar */}
-          {hiddenWidgets.length > 0 && (
+          {closedWidgets.length > 0 && (
             <div style={{
               position: 'absolute', bottom: 8, left: 8, right: 8,
               display: 'flex', gap: 4, flexWrap: 'wrap',
             }}>
-              {hiddenWidgets.map(id => (
+              {closedWidgets.map(id => (
                 <button
                   key={id}
                   className="topbar-btn"
                   style={{ fontSize: 9 }}
-                  onClick={() => setHiddenWidgets(prev => prev.filter(w => w !== id))}
+                  onClick={() => handleRestore(id)}
                 >
                   + {widgetNames[id] || id}
                 </button>
@@ -213,19 +221,30 @@ const Index = () => {
         </div>
       </div>
 
+      {/* Fullscreen portal */}
+      {fullscreenWidget && createPortal(
+        <>
+          <div
+            className="fullscreen-backdrop"
+            onClick={() => setFullscreenWidget(null)}
+          />
+          <div className="fullscreen-widget" style={{ left: sidebarWidth }}>
+            {renderWidget(fullscreenWidget, true)}
+          </div>
+        </>,
+        document.body
+      )}
+
       {/* Modals */}
       <Modal open={showLog} onClose={() => setShowLog(false)} title="QUICK LOG">
         <QuickLogOverlay />
       </Modal>
-
       <Modal open={showChar} onClose={() => setShowChar(false)} title="CHARACTER SHEET" fullScreen>
         <CharacterSheet />
       </Modal>
-
       <Modal open={showSearch} onClose={() => setShowSearch(false)} title="SEARCH" width={600}>
         <SearchOverlay />
       </Modal>
-
       <Modal open={showCheckin} onClose={() => setShowCheckin(false)} title="DAILY CHECK-IN" width={500}>
         <CheckinWidget />
       </Modal>
