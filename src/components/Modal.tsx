@@ -11,7 +11,7 @@ interface ModalProps {
   headerExtra?: React.ReactNode;
 }
 
-const Modal = ({ open, onClose, title, children, width = 480, fullScreen = false }: ModalProps) => {
+const Modal = ({ open, onClose, title, children, width = 480, fullScreen = false, headerExtra }: ModalProps) => {
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => {
