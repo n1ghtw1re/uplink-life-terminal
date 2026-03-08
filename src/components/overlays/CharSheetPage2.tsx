@@ -170,63 +170,160 @@ const CharSheetPage2 = () => {
   );
 };
 
-// Full radar with proper labels as text children
-const RadarChartFull = ({ hovered, onHover }: { hovered: string | null; onHover: (c: string | null) => void }) => {
-  const rings = [0.2, 0.4, 0.6, 0.8, 1.0];
-  const dataPoints = CLASS_ORDER.map((cls, i) => getRadarPoint(i, affinityData[cls]));
-  const polygonPoints = dataPoints.map(p => `${p.x},${p.y}`).join(' ');
+// Full radar with corrected geometry and label spacing
+const RadarChartFull = ({ hovered: _hovered, onHover: _onHover }: { hovered: string | null; onHover: (c: string | null) => void }) => {
+  const [hovered, setHovered] = useState<string | null>(null);
+
+  const NUM_CLASSES = 15;
+  const SVG_WIDTH = 500;
+  const SVG_HEIGHT = 500;
+  const cx = SVG_WIDTH / 2;
+  const cy = SVG_HEIGHT / 2;
+  const chartRadius = 180;
+  const labelRadius = 225;
+
+  const affinityData = [
+    { name: 'NETRUNNER', value: 0.12, rare: false, primary: false, secondary: false },
+    { name: 'TECHIE', value: 0.06, rare: false, primary: false, secondary: false },
+    { name: 'EDGERUNNER', value: 0.04, rare: false, primary: false, secondary: false },
+    { name: 'SOLO', value: 0.02, rare: false, primary: false, secondary: false },
+    { name: 'NOMAD', value: 0.02, rare: false, primary: false, secondary: false },
+    { name: 'MEDTECH', value: 0.08, rare: false, primary: false, secondary: false },
+    { name: 'FIXER', value: 0.14, rare: false, primary: false, secondary: false },
+    { name: 'EXEC', value: 0.03, rare: false, primary: false, secondary: false },
+    { name: 'ROCKERBOY', value: 0.42, rare: false, primary: true, secondary: false },
+    { name: 'AGITATOR', value: 0.28, rare: false, primary: false, secondary: false },
+    { name: 'WITCH', value: 0.35, rare: false, primary: false, secondary: true },
+    { name: 'SIGNAL', value: 0.24, rare: false, primary: false, secondary: false },
+    { name: 'HERALD', value: 0.19, rare: true, primary: false, secondary: false },
+    { name: 'PROPHET', value: 0.07, rare: true, primary: false, secondary: false },
+    { name: 'AGITPROP', value: 0.01, rare: true, primary: false, secondary: false },
+  ];
+
+  const polarToCartesian = (index: number, value: number) => {
+    const angle = (2 * Math.PI * index / NUM_CLASSES) - (Math.PI / 2);
+    return {
+      x: cx + chartRadius * value * Math.cos(angle),
+      y: cy + chartRadius * value * Math.sin(angle),
+    };
+  };
+
+  const getLabelPos = (index: number) => {
+    const angle = (2 * Math.PI * index / NUM_CLASSES) - (Math.PI / 2);
+    return {
+      x: cx + labelRadius * Math.cos(angle),
+      y: cy + labelRadius * Math.sin(angle),
+    };
+  };
+
+  const getAnchor = (index: number): string => {
+    const angle = (2 * Math.PI * index / NUM_CLASSES) - (Math.PI / 2);
+    const x = Math.cos(angle);
+    if (x < -0.2) return 'end';
+    if (x > 0.2) return 'start';
+    return 'middle';
+  };
+
+  const gridRing = (scale: number): string =>
+    Array.from({ length: NUM_CLASSES }, (_, i) => {
+      const pt = polarToCartesian(i, scale);
+      return `${pt.x},${pt.y}`;
+    }).join(' ');
+
+  const affinityPolygon = (): string =>
+    affinityData.map((cls, i) => {
+      const value = Math.max(cls.value, 0.04);
+      const pt = polarToCartesian(i, value);
+      return `${pt.x},${pt.y}`;
+    }).join(' ');
 
   return (
-    <div style={{ overflow: 'visible', width: '100%', maxWidth: 400 }}>
-      <svg viewBox="-30 -30 560 560" width="100%" height="100%" style={{ overflow: 'visible' }}>
-        {rings.map(s => (
-          <polygon key={s} points={getGridRing(s)} fill="none" stroke="hsl(30 100% 9%)" strokeWidth="1" />
-        ))}
-        {CLASS_ORDER.map((_, i) => {
-          const p = getRadarPoint(i, 1);
-          return <line key={i} x1={CENTER_X} y1={CENTER_Y} x2={p.x} y2={p.y} stroke="hsl(30 100% 9%)" strokeWidth="0.5" opacity="0.6" />;
-        })}
-        <polygon points={polygonPoints} className="radar-polygon"
-          fill="rgba(255, 176, 0, 0.15)" stroke="hsl(var(--accent))" strokeWidth="1.5"
-          style={{ filter: 'drop-shadow(0 0 4px rgba(255, 176, 0, 0.6))' }} />
-        <g className="radar-points">
-          {CLASS_ORDER.map((cls, i) => {
-            const p = dataPoints[i];
-            const isRare = RARE_CLASSES.has(cls);
-            const isHovered = hovered === cls;
-            return (
-              <circle key={cls} cx={p.x} cy={p.y}
-                r={isRare ? 4 : 3}
-                fill={isRare || isHovered ? 'hsl(var(--accent-bright))' : 'hsl(var(--accent))'}
-                style={{ filter: isRare || isHovered ? 'drop-shadow(0 0 6px rgba(255, 176, 0, 0.9))' : 'none', cursor: 'pointer' }}
-                onMouseEnter={() => onHover(cls)}
-                onMouseLeave={() => onHover(null)}
-              />
-            );
-          })}
-        </g>
-        {CLASS_ORDER.map((cls, i) => {
-          const lp = getLabelPoint(i);
-          const isPrimary = cls === PRIMARY || cls === SECONDARY;
-          const isRare = RARE_CLASSES.has(cls);
-          const isHovered = hovered === cls;
-          const anchor = getLabelAnchor(i);
-          return (
-            <text key={cls} x={lp.x} y={lp.y}
-              textAnchor={anchor} dominantBaseline="central"
-              fontFamily="'IBM Plex Mono', monospace"
-              fontSize={isPrimary ? 8 : 7}
-              fill={isHovered || isPrimary ? 'hsl(var(--accent-bright))' : isRare ? 'hsl(var(--accent))' : 'hsl(var(--accent-dim))'}
-              style={{ cursor: 'pointer' }}
-              onMouseEnter={() => onHover(cls)}
-              onMouseLeave={() => onHover(null)}
-            >
-              {isRare ? `${cls} ✦` : cls}
-            </text>
-          );
-        })}
-      </svg>
-    </div>
+    <svg
+      viewBox="-50 -50 600 600"
+      width="100%"
+      height="100%"
+      style={{ overflow: 'visible', display: 'block' }}
+    >
+      {[0.2, 0.4, 0.6, 0.8, 1.0].map(scale => (
+        <polygon
+          key={scale}
+          points={gridRing(scale)}
+          fill="none"
+          stroke="#261600"
+          strokeWidth={scale === 1.0 ? 1.5 : 1}
+          opacity={scale === 1.0 ? 0.9 : 0.5}
+        />
+      ))}
+
+      {affinityData.map((_, i) => {
+        const outer = polarToCartesian(i, 1.0);
+        return (
+          <line
+            key={i}
+            x1={cx} y1={cy}
+            x2={outer.x} y2={outer.y}
+            stroke="#261600"
+            strokeWidth={0.5}
+            opacity={0.6}
+          />
+        );
+      })}
+
+      <polygon
+        points={affinityPolygon()}
+        fill="rgba(255, 176, 0, 0.12)"
+        stroke="#ffb000"
+        strokeWidth={2}
+        className="radar-polygon"
+        style={{ filter: 'drop-shadow(0 0 5px rgba(255,176,0,0.6))' }}
+      />
+
+      {affinityData.map((cls, i) => {
+        const pt = polarToCartesian(i, Math.max(cls.value, 0.04));
+        const r = cls.primary ? 6 : cls.secondary ? 5 : cls.rare ? 4 : 3;
+        const fill = cls.primary ? '#ffd060' : cls.secondary ? '#ffb000' : cls.rare ? '#cc8800' : '#996800';
+        return (
+          <circle
+            key={cls.name}
+            cx={pt.x} cy={pt.y} r={hovered === cls.name ? r + 2 : r}
+            fill={fill}
+            style={{ filter: 'drop-shadow(0 0 4px rgba(255,176,0,0.7))', cursor: 'pointer' }}
+            onMouseEnter={() => setHovered(cls.name)}
+            onMouseLeave={() => setHovered(null)}
+          />
+        );
+      })}
+
+      {affinityData.map((cls, i) => {
+        const pos = getLabelPos(i);
+        const isHovered = hovered === cls.name;
+        const fill = cls.primary ? '#ffd060'
+          : cls.secondary ? '#ffb000'
+          : isHovered ? '#ffb000'
+          : cls.rare ? '#cc8800'
+          : '#664400';
+        const fontSize = cls.primary ? 11 : cls.secondary ? 10 : 9;
+        return (
+          <text
+            key={cls.name}
+            x={pos.x} y={pos.y}
+            textAnchor={getAnchor(i)}
+            dominantBaseline="middle"
+            fill={fill}
+            fontSize={fontSize}
+            fontFamily="'IBM Plex Mono', monospace"
+            fontWeight={cls.primary ? 'bold' : 'normal'}
+            style={{ cursor: 'pointer' }}
+            onMouseEnter={() => setHovered(cls.name)}
+            onMouseLeave={() => setHovered(null)}
+          >
+            {cls.name}{cls.rare ? ' ✦' : ''}
+          </text>
+        );
+      })}
+
+      <circle cx={cx} cy={cy} r={3} fill="#ffb000" opacity={0.4} />
+    </svg>
   );
 };
 
