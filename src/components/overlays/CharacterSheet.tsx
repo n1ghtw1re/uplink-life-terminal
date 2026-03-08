@@ -36,7 +36,7 @@ const CharacterSheet = ({ onClose }: CharacterSheetProps) => {
         <span className="font-display text-glow-bright" style={{ fontSize: 20, color: 'hsl(var(--accent-bright))' }}>
           VOID_SIGNAL
         </span>
-        <button className="widget-btn" onClick={onClose} style={{ fontSize: 11 }}>[ × CLOSE ]</button>
+        <button className="topbar-btn" onClick={onClose} style={{ fontSize: 11 }}>[ × CLOSE ]</button>
       </div>
 
       {/* Page content */}

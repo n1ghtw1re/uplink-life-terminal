@@ -144,9 +144,15 @@ const CharSheetPage1 = () => {
         {/* Shields */}
         <div style={{ marginBottom: 24 }}>
           <div className="char-label">SHIELDS</div>
-          <div style={{ fontSize: 20, letterSpacing: 4 }}>
+          <div style={{ display: 'flex', gap: 8, fontSize: 18 }}>
             {op.shields.map((s, i) => (
-              <span key={i} style={{ color: s ? 'hsl(var(--accent-bright))' : 'hsl(var(--text-dim))' }} className={s ? 'text-glow' : ''}>
+              <span
+                key={i}
+                style={{
+                  color: s ? 'hsl(var(--accent-bright))' : 'hsl(41 100% 13%)',
+                  textShadow: s ? '0 0 8px hsl(var(--accent-glow) / 0.8)' : 'none',
+                }}
+              >
                 {s ? '▣' : '□'}
               </span>
             ))}
