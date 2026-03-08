@@ -170,17 +170,15 @@ const CharSheetPage2 = () => {
   );
 };
 
-// Full radar with corrected geometry and label spacing
+// Full radar chart with correct angle mapping and responsive sizing
 const RadarChartFull = ({ hovered: _hovered, onHover: _onHover }: { hovered: string | null; onHover: (c: string | null) => void }) => {
   const [hovered, setHovered] = useState<string | null>(null);
 
   const NUM_CLASSES = 15;
-  const SVG_WIDTH = 500;
-  const SVG_HEIGHT = 500;
-  const cx = SVG_WIDTH / 2;
-  const cy = SVG_HEIGHT / 2;
-  const chartRadius = 180;
-  const labelRadius = 225;
+  const cx = 250;
+  const cy = 250;
+  const chartRadius = 200;
+  const labelRadius = 248;
 
   const affinityData = [
     { name: 'NETRUNNER', value: 0.12, rare: false, primary: false, secondary: false },
@@ -219,8 +217,8 @@ const RadarChartFull = ({ hovered: _hovered, onHover: _onHover }: { hovered: str
   const getAnchor = (index: number): string => {
     const angle = (2 * Math.PI * index / NUM_CLASSES) - (Math.PI / 2);
     const x = Math.cos(angle);
-    if (x < -0.2) return 'end';
-    if (x > 0.2) return 'start';
+    if (x < -0.15) return 'end';
+    if (x > 0.15) return 'start';
     return 'middle';
   };
 
@@ -238,92 +236,115 @@ const RadarChartFull = ({ hovered: _hovered, onHover: _onHover }: { hovered: str
     }).join(' ');
 
   return (
-    <svg
-      viewBox="-50 -50 600 600"
-      width="100%"
-      height="100%"
-      style={{ overflow: 'visible', display: 'block' }}
-    >
-      {[0.2, 0.4, 0.6, 0.8, 1.0].map(scale => (
-        <polygon
-          key={scale}
-          points={gridRing(scale)}
-          fill="none"
-          stroke="#261600"
-          strokeWidth={scale === 1.0 ? 1.5 : 1}
-          opacity={scale === 1.0 ? 0.9 : 0.5}
-        />
-      ))}
-
-      {affinityData.map((_, i) => {
-        const outer = polarToCartesian(i, 1.0);
-        return (
-          <line
-            key={i}
-            x1={cx} y1={cy}
-            x2={outer.x} y2={outer.y}
+    <div style={{
+      width: '100%',
+      height: '100%',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: '400px'
+    }}>
+      <svg
+        viewBox="-60 -60 620 620"
+        width="100%"
+        height="100%"
+        preserveAspectRatio="xMidYMid meet"
+        style={{ overflow: 'visible', display: 'block', maxHeight: '100%' }}
+      >
+        {[0.2, 0.4, 0.6, 0.8, 1.0].map(scale => (
+          <polygon
+            key={scale}
+            points={gridRing(scale)}
+            fill="none"
             stroke="#261600"
-            strokeWidth={0.5}
-            opacity={0.6}
+            strokeWidth={scale === 1.0 ? 1.5 : 1}
+            opacity={scale === 1.0 ? 0.9 : 0.5}
           />
-        );
-      })}
+        ))}
 
-      <polygon
-        points={affinityPolygon()}
-        fill="rgba(255, 176, 0, 0.12)"
-        stroke="#ffb000"
-        strokeWidth={2}
-        className="radar-polygon"
-        style={{ filter: 'drop-shadow(0 0 5px rgba(255,176,0,0.6))' }}
-      />
+        {affinityData.map((_, i) => {
+          const outer = polarToCartesian(i, 1.0);
+          return (
+            <line
+              key={i}
+              x1={cx} y1={cy}
+              x2={outer.x} y2={outer.y}
+              stroke="#261600"
+              strokeWidth={0.5}
+              opacity={0.6}
+            />
+          );
+        })}
 
-      {affinityData.map((cls, i) => {
-        const pt = polarToCartesian(i, Math.max(cls.value, 0.04));
-        const r = cls.primary ? 6 : cls.secondary ? 5 : cls.rare ? 4 : 3;
-        const fill = cls.primary ? '#ffd060' : cls.secondary ? '#ffb000' : cls.rare ? '#cc8800' : '#996800';
-        return (
-          <circle
-            key={cls.name}
-            cx={pt.x} cy={pt.y} r={hovered === cls.name ? r + 2 : r}
-            fill={fill}
-            style={{ filter: 'drop-shadow(0 0 4px rgba(255,176,0,0.7))', cursor: 'pointer' }}
-            onMouseEnter={() => setHovered(cls.name)}
-            onMouseLeave={() => setHovered(null)}
-          />
-        );
-      })}
+        <polygon
+          points={affinityPolygon()}
+          fill="rgba(255, 176, 0, 0.12)"
+          stroke="#ffb000"
+          strokeWidth={2}
+          className="radar-polygon"
+          style={{ filter: 'drop-shadow(0 0 5px rgba(255,176,0,0.6))' }}
+        />
 
-      {affinityData.map((cls, i) => {
-        const pos = getLabelPos(i);
-        const isHovered = hovered === cls.name;
-        const fill = cls.primary ? '#ffd060'
-          : cls.secondary ? '#ffb000'
-          : isHovered ? '#ffb000'
-          : cls.rare ? '#cc8800'
-          : '#664400';
-        const fontSize = cls.primary ? 11 : cls.secondary ? 10 : 9;
-        return (
-          <text
-            key={cls.name}
-            x={pos.x} y={pos.y}
-            textAnchor={getAnchor(i)}
-            dominantBaseline="middle"
-            fill={fill}
-            fontSize={fontSize}
-            fontFamily="'IBM Plex Mono', monospace"
-            fontWeight={cls.primary ? 'bold' : 'normal'}
-            style={{ cursor: 'pointer' }}
-            onMouseEnter={() => setHovered(cls.name)}
-            onMouseLeave={() => setHovered(null)}
-          >
-            {cls.name}{cls.rare ? ' ✦' : ''}
-          </text>
-        );
-      })}
+        {affinityData.map((cls, i) => {
+          const pt = polarToCartesian(i, Math.max(cls.value, 0.04));
+          const r = cls.primary ? 6 : cls.secondary ? 5 : cls.rare ? 4 : 3;
+          const fill = cls.primary ? '#ffd060' : cls.secondary ? '#ffb000' : cls.rare ? '#cc8800' : '#996800';
+          return (
+            <circle
+              key={cls.name}
+              cx={pt.x} cy={pt.y} r={hovered === cls.name ? r + 2 : r}
+              fill={fill}
+              style={{ filter: 'drop-shadow(0 0 4px rgba(255,176,0,0.7))', cursor: 'pointer' }}
+              onMouseEnter={() => setHovered(cls.name)}
+              onMouseLeave={() => setHovered(null)}
+            />
+          );
+        })}
 
-      <circle cx={cx} cy={cy} r={3} fill="#ffb000" opacity={0.4} />
-    </svg>
+        {affinityData.map((cls, i) => {
+          const pos = getLabelPos(i);
+          const isHovered = hovered === cls.name;
+          let fontSize: number;
+          let fill: string;
+          let fontWeight: string | number = 'normal';
+          
+          if (cls.primary) {
+            fontSize = 12;
+            fill = '#ffd060';
+            fontWeight = 'bold';
+          } else if (cls.secondary) {
+            fontSize = 11;
+            fill = '#ffb000';
+          } else if (cls.rare) {
+            fontSize = 10;
+            fill = '#cc8800';
+          } else {
+            fontSize = 10;
+            fill = isHovered ? '#ffb000' : '#664400';
+          }
+
+          return (
+            <text
+              key={cls.name}
+              x={pos.x} y={pos.y}
+              textAnchor={getAnchor(i)}
+              dominantBaseline="middle"
+              fill={fill}
+              fontSize={fontSize}
+              fontFamily="'IBM Plex Mono', monospace"
+              fontWeight={fontWeight}
+              style={{ cursor: 'pointer' }}
+              onMouseEnter={() => setHovered(cls.name)}
+              onMouseLeave={() => setHovered(null)}
+            >
+              {cls.name}{cls.rare ? ' ✦' : ''}
+            </text>
+          );
+        })}
+
+        <circle cx={cx} cy={cy} r={3} fill="#ffb000" opacity={0.4} />
+      </svg>
+    </div>
   );
 };
 
