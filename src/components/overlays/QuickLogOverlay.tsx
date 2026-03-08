@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { skills, courses, operatorData } from '@/data/mockData';
 import type { Skill } from '@/data/mockData';
 import { toast } from '@/hooks/use-toast';
+import { triggerXPFloat } from '@/components/effects/XPFloatLayer';
 
 const DURATION_PRESETS = [
   { label: '15m', value: 15 },
