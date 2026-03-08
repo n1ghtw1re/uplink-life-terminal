@@ -533,3 +533,95 @@
   overflow: auto;
   min-height: 0;
 }
+
+/* Quick Log dropdown */
+.ql-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  background: hsl(var(--bg-primary));
+  border: 1px solid hsl(var(--accent-dim));
+  border-top: none;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.ql-dropdown-item {
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 11px;
+  color: hsl(var(--text-primary));
+}
+
+.ql-dropdown-item:hover,
+.ql-dropdown-item--active {
+  background: hsl(var(--accent) / 0.15);
+}
+
+/* Quick Log preset buttons */
+.ql-preset-btn {
+  border: 1px solid hsl(var(--accent-dim));
+  padding: 4px 8px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  color: hsl(var(--text-dim));
+  background: transparent;
+  cursor: pointer;
+}
+
+.ql-preset-btn:hover {
+  border-color: hsl(var(--accent));
+  color: hsl(var(--accent));
+}
+
+.ql-preset-btn--active {
+  border-color: hsl(var(--accent));
+  color: hsl(var(--accent));
+  box-shadow: 0 0 6px hsl(var(--accent-glow) / 0.4);
+}
+
+/* Quick Log split slider */
+.ql-split-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  background: hsl(var(--bg-tertiary));
+  border: 1px solid hsl(var(--accent-dim));
+  outline: none;
+  cursor: pointer;
+}
+
+.ql-split-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  background: hsl(var(--accent));
+  box-shadow: 0 0 6px hsl(var(--accent-glow) / 0.8);
+  cursor: pointer;
+  border: none;
+}
+
+.ql-split-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  background: hsl(var(--accent));
+  box-shadow: 0 0 6px hsl(var(--accent-glow) / 0.8);
+  cursor: pointer;
+  border: none;
+}
+
+/* Quick Log select styling */
+.ql-dropdown::-webkit-scrollbar {
+  width: 4px;
+}
+.ql-dropdown::-webkit-scrollbar-track {
+  background: hsl(var(--bg-primary));
+}
+.ql-dropdown::-webkit-scrollbar-thumb {
+  background: hsl(var(--accent-dim));
+}
