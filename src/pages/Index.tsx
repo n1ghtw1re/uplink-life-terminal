@@ -231,19 +231,8 @@ const Index = () => {
         </div>
       </div>
 
-      {/* Fullscreen portal */}
-      {fullscreenWidget && createPortal(
-        <>
-          <div
-            className="fullscreen-backdrop"
-            onClick={() => setFullscreenWidget(null)}
-          />
-          <div className="fullscreen-widget" style={{ left: sidebarWidth }}>
-            {renderWidget(fullscreenWidget, true)}
-          </div>
-        </>,
-        document.body
-      )}
+
+
 
       {/* Modals */}
       <Modal open={showLog} onClose={() => setShowLog(false)} title="QUICK LOG">
