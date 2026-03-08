@@ -73,7 +73,7 @@ function poly() {
 
 const Radar = ({ hovered, onHover }: { hovered: string | null; onHover: (n: string | null) => void }) => (
   <svg
-    viewBox="-55 -55 610 610"
+    viewBox="-55 -55 610 630"
     width="100%"
     height="100%"
     preserveAspectRatio="xMidYMid meet"
@@ -217,7 +217,7 @@ const CharSheetPage2 = () => {
           // CLASS BREAKDOWN
         </div>
 
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', , overflow: 'hidden' }}>
           {SORTED.map(cls => {
             const isPri = cls.name === PRIMARY;
             const isSec = cls.name === SECONDARY;
@@ -231,7 +231,7 @@ const CharSheetPage2 = () => {
 
             return (
               <div key={cls.name}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: isLow && !isHov ? 0.5 : 1, cursor: 'pointer' }}
+                style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 9, opacity: isLow && !isHov ? 0.5 : 1, cursor: 'pointer' }}
                 onMouseEnter={() => setHovered(cls.name)}
                 onMouseLeave={() => setHovered(null)}
               >
