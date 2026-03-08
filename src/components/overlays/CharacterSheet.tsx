@@ -28,7 +28,7 @@ const CharacterSheet = ({ onClose }: CharacterSheetProps) => {
       case 1: return <CharSheetPage1 />;
       case 2: return <CharSheetPage2 />;
       case 3: return <CharSheetPage3 />;
-      default: return null;
+      case 4: return <CharSheetPage4 />;
     }
   };
 
