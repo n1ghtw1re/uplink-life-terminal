@@ -171,7 +171,7 @@ const Index = () => {
           onOpenCharSheet={() => setShowChar(true)}
         />
 
-        <div style={{ flex: 1, overflow: 'hidden', padding: 8, position: 'relative', height: gridSize.height }}>
+        <div style={{ flex: 1, overflow: 'hidden', padding: 8, position: 'relative' }}>
           {gridSize.width > 0 && (
             <ReactGridLayout
               className="layout"
@@ -216,6 +216,18 @@ const Index = () => {
             </ReactGridLayout>
           )}
 
+          {/* Fullscreen overlay - inside the grid area, not a portal */}
+          {fullscreenWidget && (
+            <>
+              <div
+                className="fullscreen-backdrop"
+                onClick={() => setFullscreenWidget(null)}
+              />
+              <div className="fullscreen-widget">
+                {renderWidget(fullscreenWidget, true)}
+              </div>
+            </>
+          )}
         </div>
       </div>
 
