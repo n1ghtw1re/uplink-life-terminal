@@ -180,8 +180,6 @@ const Index = () => {
                 rowHeight: rowHeight > 20 ? rowHeight : 40,
                 maxRows: maxRows,
                 margin: [8, 8] as [number, number],
-                containerPadding: [0, 0] as [number, number],
-                compactType: null,
               }}
               dragConfig={{
                 enabled: true,
