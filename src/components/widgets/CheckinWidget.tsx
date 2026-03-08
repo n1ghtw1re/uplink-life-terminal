@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import WidgetWrapper from '../WidgetWrapper';
 import { dailyCheckinStats, habits } from '@/data/mockData';
+import { triggerXPFloat } from '@/components/effects/XPFloatLayer';
 
 interface WidgetProps { onClose?: () => void; onFullscreen?: () => void; isFullscreen?: boolean; }
 
