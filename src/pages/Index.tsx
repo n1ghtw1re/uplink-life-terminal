@@ -235,7 +235,7 @@ const Index = () => {
 
 
       {/* Modals */}
-      <Modal open={showLog} onClose={() => setShowLog(false)} title="QUICK LOG" width={520}>
+      <Modal open={showLog} onClose={() => setShowLog(false)} title="QUICK LOG" width={720}>
         <QuickLogOverlay onSubmit={() => setShowLog(false)} />
       </Modal>
       <Modal open={showChar} onClose={() => setShowChar(false)} title="CHARACTER SHEET" fullScreen>

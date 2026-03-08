@@ -143,221 +143,223 @@ const QuickLogOverlay = ({ onSubmit }: QuickLogOverlayProps) => {
   const yesterdayStr = `${yesterday.getFullYear()}.${String(yesterday.getMonth() + 1).padStart(2, '0')}.${String(yesterday.getDate()).padStart(2, '0')}`;
 
   const activeCourses = courses.filter(c => c.status === 'ACTIVE');
+  const hasDualStat = selectedSkill && selectedSkill.stats.length === 2;
 
   return (
     <div style={{ fontSize: 11 }}>
-      {/* SKILL FIELD */}
-      <div style={{ marginBottom: 12, position: 'relative' }}>
-        <div style={{ color: 'hsl(var(--text-dim))', marginBottom: 4 }}>SKILL:</div>
-        <input
-          ref={inputRef}
-          className="crt-input"
-          style={{ width: '100%' }}
-          placeholder="start typing..."
-          value={query}
-          onChange={e => {
-            setQuery(e.target.value);
-            setShowDropdown(true);
-            setHighlightIdx(0);
-            if (!e.target.value) setSelectedSkill(null);
-          }}
-          onFocus={() => setShowDropdown(true)}
-          onKeyDown={handleInputKeyDown}
-        />
-        {showDropdown && filtered.length > 0 && (
-          <div className="ql-dropdown">
-            {filtered.map((skill, i) => (
-              <div
-                key={skill.name}
-                className={`ql-dropdown-item ${i === highlightIdx ? 'ql-dropdown-item--active' : ''}`}
-                onMouseEnter={() => setHighlightIdx(i)}
-                onClick={() => selectSkill(skill)}
-              >
-                <span style={{ color: 'hsl(var(--accent))', marginRight: 8 }}>{skill.icon}</span>
-                <span style={{ flex: 1 }}>{skill.name}</span>
-                <span style={{ color: 'hsl(var(--text-dim))', fontSize: 10 }}>{skill.stats.join(' / ')}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* DURATION */}
-      <div style={{ marginBottom: 12 }}>
-        <div style={{ color: 'hsl(var(--text-dim))', marginBottom: 4 }}>DURATION:</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-          {DURATION_PRESETS.map(p => (
-            <button
-              key={p.value}
-              className={`ql-preset-btn ${activePreset === p.value ? 'ql-preset-btn--active' : ''}`}
-              onClick={() => handleDurationPreset(p.value)}
-            >
-              {p.label}
-            </button>
-          ))}
-          <span style={{ color: 'hsl(var(--text-dim))', margin: '0 4px' }}>or</span>
-          <input
-            className="crt-input"
-            style={{ width: 50, textAlign: 'center' }}
-            type="number"
-            min={1}
-            value={duration}
-            onChange={e => handleCustomDuration(Number(e.target.value) || 1)}
-          />
-          <span style={{ color: 'hsl(var(--text-dim))' }}>min</span>
-        </div>
-      </div>
-
-      {/* STAT SPLIT - only for 2-stat skills */}
-      {selectedSkill && selectedSkill.stats.length === 2 && (
-        <div style={{ marginBottom: 12 }}>
-          <div style={{ color: 'hsl(var(--text-dim))', marginBottom: 4 }}>STAT SPLIT:</div>
-          {selectedSkill.stats.map((stat, idx) => (
-            <div key={stat} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <span style={{ width: 50, fontSize: 10, color: 'hsl(var(--accent))' }}>
-                {STAT_ICONS[stat] || '?'} {stat}
-              </span>
-              <input
-                type="range"
-                className="ql-split-slider"
-                min={10}
-                max={90}
-                value={split[idx]}
-                onChange={e => handleSplitChange(idx, Number(e.target.value))}
-                style={{ flex: 1 }}
-              />
-              <span style={{ width: 30, textAlign: 'right', fontSize: 10, color: 'hsl(var(--text-dim))' }}>
-                {split[idx]}%
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* OPTIONAL SECTION */}
-      <div style={{
-        borderTop: '1px solid hsl(var(--accent-dim))',
-        paddingTop: 8,
-        marginBottom: 12,
-      }}>
-        <div style={{ color: 'hsl(var(--text-dim))', marginBottom: 8, fontSize: 10, letterSpacing: 1 }}>
-          ── OPTIONAL ──────────────────────
-        </div>
-
-        {/* NOTES */}
-        <div style={{ marginBottom: 8 }}>
-          <div style={{ color: 'hsl(var(--text-dim))', marginBottom: 4 }}>NOTES:</div>
-          <input
-            className="crt-input"
-            style={{ width: '100%' }}
-            placeholder="notes for this session..."
-            value={notes}
-            onChange={e => setNotes(e.target.value)}
-            maxLength={100}
-          />
-        </div>
-
-        {/* TAG TO */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ color: 'hsl(var(--text-dim))', marginBottom: 4 }}>TAG TO:</div>
-            <select
+      {/* TWO-COLUMN LAYOUT */}
+      <div style={{ display: 'flex', gap: 16 }}>
+        {/* LEFT COLUMN — Core fields */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {/* SKILL FIELD */}
+          <div style={{ marginBottom: 10, position: 'relative' }}>
+            <div style={{ color: 'hsl(var(--text-dim))', marginBottom: 4 }}>SKILL:</div>
+            <input
+              ref={inputRef}
               className="crt-input"
               style={{ width: '100%' }}
-              value={tagCourse}
-              onChange={e => setTagCourse(e.target.value)}
-            >
-              <option value="">course ▾</option>
-              {activeCourses.map(c => (
-                <option key={c.name} value={c.name}>{c.name}</option>
-              ))}
-            </select>
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ color: 'hsl(var(--text-dim))', marginBottom: 4 }}>&nbsp;</div>
-            <select
-              className="crt-input"
-              style={{ width: '100%' }}
-              disabled
-            >
-              <option>no active projects</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Toggles */}
-        <label className="crt-checkbox" style={{ marginBottom: 6, display: 'flex' }}>
-          <span
-            className="crt-checkbox-box"
-            onClick={() => setIsLegacy(!isLegacy)}
-          >
-            {isLegacy ? '×' : ''}
-          </span>
-          <span style={{ color: isLegacy ? 'hsl(var(--accent))' : 'hsl(var(--text-dim))' }}>
-            LEGACY ENTRY
-          </span>
-        </label>
-
-        <label className="crt-checkbox" style={{ display: 'flex' }}>
-          <span
-            className="crt-checkbox-box"
-            onClick={() => setLogYesterday(!logYesterday)}
-          >
-            {logYesterday ? '×' : ''}
-          </span>
-          <span style={{ color: logYesterday ? 'hsl(var(--accent))' : 'hsl(var(--text-dim))' }}>
-            LOG FOR YESTERDAY
-          </span>
-        </label>
-        {logYesterday && (
-          <div style={{ color: 'hsl(var(--text-dim))', fontSize: 10, marginTop: 4, paddingLeft: 20 }}>
-            DATE: {yesterdayStr}
-          </div>
-        )}
-      </div>
-
-      {/* XP PREVIEW */}
-      <div style={{
-        borderTop: '1px solid hsl(var(--accent-dim))',
-        paddingTop: 8,
-        marginBottom: 12,
-      }}>
-        <div style={{ color: 'hsl(var(--text-dim))', marginBottom: 8, fontSize: 10, letterSpacing: 1 }}>
-          ── XP PREVIEW ────────────────────
-        </div>
-        <div style={{ color: 'hsl(var(--accent))', fontSize: 10, lineHeight: 1.8 }}>
-          <div>
-            SKILL{'  '}+{skillXp} XP{isLegacy && <span style={{ color: 'hsl(var(--text-dim))', marginLeft: 8 }}>[LEGACY]</span>}
-          </div>
-          {selectedSkill ? (
-            selectedSkill.stats.length === 2 ? (
-              <div style={{ display: 'flex', gap: 24 }}>
-                <span>{selectedSkill.stats[0]}{'  '}+{statXps[0]} XP</span>
-                <span>{selectedSkill.stats[1]}{'  '}+{statXps[1]} XP</span>
+              placeholder="start typing..."
+              value={query}
+              onChange={e => {
+                setQuery(e.target.value);
+                setShowDropdown(true);
+                setHighlightIdx(0);
+                if (!e.target.value) setSelectedSkill(null);
+              }}
+              onFocus={() => setShowDropdown(true)}
+              onKeyDown={handleInputKeyDown}
+            />
+            {showDropdown && filtered.length > 0 && (
+              <div className="ql-dropdown">
+                {filtered.map((skill, i) => (
+                  <div
+                    key={skill.name}
+                    className={`ql-dropdown-item ${i === highlightIdx ? 'ql-dropdown-item--active' : ''}`}
+                    onMouseEnter={() => setHighlightIdx(i)}
+                    onClick={() => selectSkill(skill)}
+                  >
+                    <span style={{ color: 'hsl(var(--accent))', marginRight: 8 }}>{skill.icon}</span>
+                    <span style={{ flex: 1 }}>{skill.name}</span>
+                    <span style={{ color: 'hsl(var(--text-dim))', fontSize: 10 }}>{skill.stats.join(' / ')}</span>
+                  </div>
+                ))}
               </div>
-            ) : (
-              <div>{selectedSkill.stats[0]}{'  '}+{statXps[0]} XP</div>
-            )
-          ) : (
-            <div style={{ color: 'hsl(var(--text-dim))' }}>STAT{'  '}+{statTotalXp} XP</div>
-          )}
-          <div>MASTER{'  '}+{masterXp} XP</div>
-          <div>
-            MULT:{'  '}{mult.toFixed(1)}×{'  '}
-            {isLegacy ? (
-              <span style={{ color: 'hsl(var(--text-dim))' }}>[LEGACY — no multiplier]</span>
-            ) : (
-              <span className="text-glow">[ON FIRE]</span>
             )}
-            {'    '}TOTAL: +{totalXp} XP
+          </div>
+
+          {/* DURATION */}
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ color: 'hsl(var(--text-dim))', marginBottom: 4 }}>DURATION:</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+              {DURATION_PRESETS.map(p => (
+                <button
+                  key={p.value}
+                  className={`ql-preset-btn ${activePreset === p.value ? 'ql-preset-btn--active' : ''}`}
+                  onClick={() => handleDurationPreset(p.value)}
+                >
+                  {p.label}
+                </button>
+              ))}
+              <span style={{ color: 'hsl(var(--text-dim))', margin: '0 4px' }}>or</span>
+              <input
+                className="crt-input"
+                style={{ width: 50, textAlign: 'center' }}
+                type="number"
+                min={1}
+                value={duration}
+                onChange={e => handleCustomDuration(Number(e.target.value) || 1)}
+              />
+              <span style={{ color: 'hsl(var(--text-dim))' }}>min</span>
+            </div>
+          </div>
+
+          {/* STAT SPLIT */}
+          {hasDualStat && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ color: 'hsl(var(--text-dim))', marginBottom: 4 }}>STAT SPLIT:</div>
+              {selectedSkill.stats.map((stat, idx) => (
+                <div key={stat} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <span style={{ width: 50, fontSize: 10, color: 'hsl(var(--accent))' }}>
+                    {STAT_ICONS[stat] || '?'} {stat}
+                  </span>
+                  <input
+                    type="range"
+                    className="ql-split-slider"
+                    min={10}
+                    max={90}
+                    value={split[idx]}
+                    onChange={e => handleSplitChange(idx, Number(e.target.value))}
+                    style={{ flex: 1 }}
+                  />
+                  <span style={{ width: 30, textAlign: 'right', fontSize: 10, color: 'hsl(var(--text-dim))' }}>
+                    {split[idx]}%
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* NOTES */}
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ color: 'hsl(var(--text-dim))', marginBottom: 4 }}>NOTES:</div>
+            <input
+              className="crt-input"
+              style={{ width: '100%' }}
+              placeholder="notes for this session..."
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              maxLength={100}
+            />
+          </div>
+
+          {/* TAG TO */}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ color: 'hsl(var(--text-dim))', marginBottom: 4 }}>TAG TO:</div>
+              <select
+                className="crt-input"
+                style={{ width: '100%' }}
+                value={tagCourse}
+                onChange={e => setTagCourse(e.target.value)}
+              >
+                <option value="">course ▾</option>
+                {activeCourses.map(c => (
+                  <option key={c.name} value={c.name}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ color: 'hsl(var(--text-dim))', marginBottom: 4 }}>&nbsp;</div>
+              <select className="crt-input" style={{ width: '100%' }} disabled>
+                <option>no active projects</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* DIVIDER */}
+        <div style={{
+          width: 1,
+          background: 'hsl(var(--accent-dim))',
+          alignSelf: 'stretch',
+        }} />
+
+        {/* RIGHT COLUMN — Options + XP Preview */}
+        <div style={{ width: 240, flexShrink: 0 }}>
+          {/* Toggles */}
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ color: 'hsl(var(--text-dim))', marginBottom: 6, fontSize: 10, letterSpacing: 1 }}>
+              ── OPTIONS ───────────
+            </div>
+            <label className="crt-checkbox" style={{ marginBottom: 6, display: 'flex' }}>
+              <span className="crt-checkbox-box" onClick={() => setIsLegacy(!isLegacy)}>
+                {isLegacy ? '×' : ''}
+              </span>
+              <span style={{ color: isLegacy ? 'hsl(var(--accent))' : 'hsl(var(--text-dim))' }}>
+                LEGACY ENTRY
+              </span>
+            </label>
+            <label className="crt-checkbox" style={{ display: 'flex' }}>
+              <span className="crt-checkbox-box" onClick={() => setLogYesterday(!logYesterday)}>
+                {logYesterday ? '×' : ''}
+              </span>
+              <span style={{ color: logYesterday ? 'hsl(var(--accent))' : 'hsl(var(--text-dim))' }}>
+                LOG FOR YESTERDAY
+              </span>
+            </label>
+            {logYesterday && (
+              <div style={{ color: 'hsl(var(--text-dim))', fontSize: 10, marginTop: 4, paddingLeft: 20 }}>
+                DATE: {yesterdayStr}
+              </div>
+            )}
+          </div>
+
+          {/* XP PREVIEW */}
+          <div style={{
+            borderTop: '1px solid hsl(var(--accent-dim))',
+            paddingTop: 8,
+          }}>
+            <div style={{ color: 'hsl(var(--text-dim))', marginBottom: 6, fontSize: 10, letterSpacing: 1 }}>
+              ── XP PREVIEW ────────
+            </div>
+            <div style={{ color: 'hsl(var(--accent))', fontSize: 10, lineHeight: 1.8 }}>
+              <div>
+                SKILL{'  '}+{skillXp} XP{isLegacy && <span style={{ color: 'hsl(var(--text-dim))', marginLeft: 8 }}>[LEGACY]</span>}
+              </div>
+              {selectedSkill ? (
+                selectedSkill.stats.length === 2 ? (
+                  <>
+                    <div>{selectedSkill.stats[0]}{'  '}+{statXps[0]} XP</div>
+                    <div>{selectedSkill.stats[1]}{'  '}+{statXps[1]} XP</div>
+                  </>
+                ) : (
+                  <div>{selectedSkill.stats[0]}{'  '}+{statXps[0]} XP</div>
+                )
+              ) : (
+                <div style={{ color: 'hsl(var(--text-dim))' }}>STAT{'  '}+{statTotalXp} XP</div>
+              )}
+              <div>MASTER{'  '}+{masterXp} XP</div>
+              <div style={{ borderTop: '1px solid hsl(var(--accent-dim))', marginTop: 4, paddingTop: 4 }}>
+                MULT: {mult.toFixed(1)}×{' '}
+                {isLegacy ? (
+                  <span style={{ color: 'hsl(var(--text-dim))' }}>[LEGACY]</span>
+                ) : (
+                  <span className="text-glow">[ON FIRE]</span>
+                )}
+              </div>
+              <div style={{ fontSize: 12, color: 'hsl(var(--accent-bright))' }} className="text-glow">
+                TOTAL: +{totalXp} XP
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* BUTTONS */}
+      {/* BUTTONS — full width bottom */}
       <div style={{
         borderTop: '1px solid hsl(var(--accent-dim))',
         paddingTop: 8,
+        marginTop: 12,
         display: 'flex',
         gap: 8,
       }}>
