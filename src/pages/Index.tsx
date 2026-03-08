@@ -106,7 +106,8 @@ const Index = () => {
     return () => window.removeEventListener('keydown', handleKey);
   }, [handleKey]);
 
-  const rowHeight = Math.floor((gridSize.height - 16 - 8 * 8) / 8);
+  const maxRows = 8;
+  const rowHeight = Math.floor((gridSize.height - 16 - 8 * maxRows) / maxRows);
 
   const handleClose = (id: string) => {
     if (fullscreenWidget === id) setFullscreenWidget(null);
