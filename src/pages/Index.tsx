@@ -175,8 +175,7 @@ const Index = () => {
               className="layout"
               layout={visibleLayout}
               width={gridSize.width - 16}
-              preventCollision={true}
-              compactType={null}
+              compactor={strictCompactor}
               gridConfig={{
                 cols: 12,
                 rowHeight: rowHeight > 20 ? rowHeight : 40,
