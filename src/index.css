@@ -496,19 +496,19 @@
 
 /* Fullscreen widget overlay */
 .fullscreen-backdrop {
-  position: fixed;
-  top: 48px;
+  position: absolute;
+  top: 0;
   left: 0;
   right: 0;
   bottom: 0;
   background: rgba(0, 0, 0, 0.85);
   z-index: 998;
-  pointer-events: auto;
 }
 
 .fullscreen-widget {
-  position: fixed;
-  top: 48px;
+  position: absolute;
+  top: 0;
+  left: 0;
   right: 0;
   bottom: 0;
   z-index: 999;

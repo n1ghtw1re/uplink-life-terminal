@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { createPortal } from 'react-dom';
+
 import ReactGridLayout, { getCompactor } from 'react-grid-layout';
 import type { Layout as RGLLayout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
@@ -171,7 +171,7 @@ const Index = () => {
           onOpenCharSheet={() => setShowChar(true)}
         />
 
-        <div style={{ flex: 1, overflow: 'hidden', padding: 8, position: 'relative', height: gridSize.height }}>
+        <div style={{ flex: 1, overflow: 'hidden', padding: 8, position: 'relative' }}>
           {gridSize.width > 0 && (
             <ReactGridLayout
               className="layout"
@@ -216,22 +216,23 @@ const Index = () => {
             </ReactGridLayout>
           )}
 
+          {/* Fullscreen overlay - inside the grid area, not a portal */}
+          {fullscreenWidget && (
+            <>
+              <div
+                className="fullscreen-backdrop"
+                onClick={() => setFullscreenWidget(null)}
+              />
+              <div className="fullscreen-widget">
+                {renderWidget(fullscreenWidget, true)}
+              </div>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Fullscreen portal */}
-      {fullscreenWidget && createPortal(
-        <>
-          <div
-            className="fullscreen-backdrop"
-            onClick={() => setFullscreenWidget(null)}
-          />
-          <div className="fullscreen-widget" style={{ left: sidebarWidth }}>
-            {renderWidget(fullscreenWidget, true)}
-          </div>
-        </>,
-        document.body
-      )}
+
+
 
       {/* Modals */}
       <Modal open={showLog} onClose={() => setShowLog(false)} title="QUICK LOG">
