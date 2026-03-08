@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import CharSheetPage1 from './CharSheetPage1';
 import CharSheetPage2 from './CharSheetPage2';
+import CharSheetPage3 from './CharSheetPage3';
 interface CharacterSheetProps {
   onClose: () => void;
 }
