@@ -24,6 +24,7 @@ const CharacterSheet = ({ onClose }: CharacterSheetProps) => {
   const renderPage = () => {
     switch (currentPage) {
       case 1: return <CharSheetPage1 />;
+      case 2: return <CharSheetPage2 />;
       default: return null;
     }
   };
