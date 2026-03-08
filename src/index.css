@@ -707,6 +707,21 @@
   animation: charSheetIn 150ms ease-out forwards;
 }
 
+/* ADD THESE: */
+.char-sheet-header {
+  flex-shrink: 0;
+}
+
+.char-sheet-content {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.char-sheet-nav {
+  flex-shrink: 0;
+}
+
 @keyframes charSheetIn {
   from { opacity: 0; }
   to { opacity: 1; }

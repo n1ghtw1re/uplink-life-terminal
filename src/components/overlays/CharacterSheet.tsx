@@ -41,8 +41,8 @@ const CharacterSheet = ({ onClose }: CharacterSheetProps) => {
       </div>
 
       {/* Page content */}
-      <div className="char-sheet-content">
-        <div className={animClass}>
+      <div className="char-sheet-content" style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        <div className={animClass} style={{ height: '100%', overflow: 'hidden' }}>
           {renderPage()}
         </div>
       </div>
