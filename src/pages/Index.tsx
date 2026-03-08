@@ -193,11 +193,15 @@ const Index = () => {
                 handles: ['se', 'sw'],
               }}
               onLayoutChange={(newLayout: RGLLayout) => {
-                const clamped = newLayout.map(l => ({
-                  i: l.i, x: l.x, w: l.w, h: l.h,
-                  y: Math.min(l.y, maxRows - l.h),
-                  minW: l.minW, minH: l.minH,
-                }));
+                const clamped = newLayout.map(l => {
+                  const h = Math.min(l.h, maxRows);
+                  const y = Math.min(l.y, maxRows - h);
+                  return {
+                    i: l.i, x: l.x, w: l.w,
+                    h, y: Math.max(0, y),
+                    minW: l.minW, minH: l.minH,
+                  };
+                });
                 setLayout(clamped);
               }}
             >
