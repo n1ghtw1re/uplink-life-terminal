@@ -248,9 +248,7 @@ const Index = () => {
       >
         <QuickLogOverlay onSubmit={() => setShowLog(false)} />
       </Modal>
-      <Modal open={showChar} onClose={() => setShowChar(false)} title="CHARACTER SHEET" fullScreen>
-        <CharacterSheet />
-      </Modal>
+      {showChar && <CharacterSheet onClose={() => setShowChar(false)} />}
       <Modal open={showSearch} onClose={() => setShowSearch(false)} title="SEARCH" width={600}>
         <SearchOverlay />
       </Modal>

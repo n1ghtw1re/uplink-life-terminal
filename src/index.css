@@ -689,3 +689,115 @@
 .ql-dropdown::-webkit-scrollbar-thumb {
   background: hsl(var(--accent-dim));
 }
+
+/* ═══════════════════════════════════════════════════
+   CHARACTER SHEET OVERLAY
+   ═══════════════════════════════════════════════════ */
+
+.char-sheet-overlay {
+  position: fixed;
+  top: 48px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 990;
+  background: hsl(var(--bg-primary));
+  display: flex;
+  flex-direction: column;
+  animation: charSheetIn 150ms ease-out forwards;
+}
+
+@keyframes charSheetIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.char-sheet-header {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  border-bottom: 1px solid hsl(var(--accent-dim));
+  flex-shrink: 0;
+}
+
+.char-sheet-content {
+  flex: 1;
+  overflow: hidden;
+  padding: 32px;
+}
+
+.char-sheet-nav {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-top: 1px solid hsl(30 100% 9%);
+  flex-shrink: 0;
+}
+
+.char-sheet-page-btn {
+  width: 32px;
+  height: 32px;
+  border: 1px solid hsl(var(--accent-dim));
+  background: transparent;
+  color: hsl(var(--text-dim));
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.char-sheet-page-btn:hover:not(.disabled) {
+  border-color: hsl(var(--accent));
+}
+
+.char-sheet-page-btn.active {
+  background: hsl(var(--accent));
+  color: hsl(var(--bg-primary));
+  border-color: hsl(var(--accent));
+}
+
+.char-sheet-page-btn.disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* Page transitions */
+@keyframes scanlineWipe {
+  0% { clip-path: inset(0 100% 0 0); }
+  100% { clip-path: inset(0 0% 0 0); }
+}
+
+@keyframes scanlineWipeOut {
+  0% { clip-path: inset(0 0% 0 0); }
+  100% { clip-path: inset(0 0 0 100%); }
+}
+
+.page-enter {
+  animation: scanlineWipe 200ms steps(20, end) forwards;
+}
+
+.page-exit {
+  animation: scanlineWipeOut 150ms steps(20, end) forwards;
+}
+
+/* Column layout */
+.char-sheet-left {
+  border-right: 1px solid hsl(30 100% 9%);
+  padding-right: 32px;
+}
+
+.char-sheet-right {
+  padding-left: 32px;
+}
+
+.char-label {
+  font-size: 9px;
+  color: hsl(var(--text-dim));
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
