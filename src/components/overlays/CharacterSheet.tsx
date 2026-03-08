@@ -53,9 +53,9 @@ const CharacterSheet = ({ onClose }: CharacterSheetProps) => {
         {Array.from({ length: TOTAL_PAGES }, (_, i) => i + 1).map(page => (
           <button
             key={page}
-            className={`char-sheet-page-btn ${page === currentPage ? 'active' : ''} ${page > 2 ? 'disabled' : ''}`}
+            className={`char-sheet-page-btn ${page === currentPage ? 'active' : ''} ${page > 3 ? 'disabled' : ''}`}
             onClick={() => goToPage(page)}
-            disabled={page > 2}
+            disabled={page > 3}
           >
             {page}
           </button>
