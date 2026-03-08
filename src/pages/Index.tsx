@@ -110,6 +110,8 @@ const Index = () => {
   const rowHeight = Math.floor((gridSize.height - 16 - 8 * maxRows) / maxRows);
 
   const strictCompactor = useMemo(() => getCompactor(null, false, true), []);
+
+  const handleClose = (id: string) => {
     if (fullscreenWidget === id) setFullscreenWidget(null);
     setLayout(prev => prev.filter(item => item.i !== id));
     setActiveWidgets(prev => prev.filter(w => w !== id));
