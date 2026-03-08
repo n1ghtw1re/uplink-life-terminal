@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import Index from "./pages/Index";
+import XPFloatLayer from "@/components/effects/XPFloatLayer";
 
 const queryClient = new QueryClient();
 
@@ -12,6 +13,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <Index />
+      <XPFloatLayer />
     </TooltipProvider>
   </QueryClientProvider>
 );

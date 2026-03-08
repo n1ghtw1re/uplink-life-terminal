@@ -850,3 +850,39 @@
   text-transform: uppercase;
   margin-bottom: 4px;
 }
+
+/* XP Float Animation */
+@keyframes xpFloat {
+  0% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+  20% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(-8px) scale(1.1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-48px) scale(0.9);
+  }
+}
+
+.xp-float {
+  position: fixed;
+  pointer-events: none;
+  z-index: 9999;
+  font-family: 'VT323', monospace;
+  font-size: 20px;
+  color: hsl(var(--accent));
+  text-shadow:
+    0 0 8px hsla(var(--accent-glow) / 0.9),
+    0 0 20px hsla(var(--accent-glow) / 0.5);
+  white-space: nowrap;
+  animation: xpFloat 1.2s ease-out forwards;
+  user-select: none;
+}
+
+.xp-float-large {
+  font-size: 26px;
+  animation: xpFloat 1.6s ease-out forwards;
+}

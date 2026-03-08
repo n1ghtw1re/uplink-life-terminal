@@ -119,8 +119,17 @@ const QuickLogOverlay = ({ onSubmit }: QuickLogOverlayProps) => {
 
   const totalXp = skillXp + statTotalXp + masterXp;
 
-  const handleSubmit = () => {
+  const handleSubmit = (e: React.MouseEvent<HTMLButtonElement>) => {
     if (!selectedSkill) return;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top - 10;
+
+    // Cascade: skill XP, stat XP, master XP
+    triggerXPFloat(cx, cy, skillXp, mult > 1 ? mult : undefined);
+    setTimeout(() => triggerXPFloat(cx - 50, cy, statTotalXp, mult > 1 ? mult : undefined), 200);
+    setTimeout(() => triggerXPFloat(cx + 50, cy, masterXp, mult > 1 ? mult : undefined), 400);
+
     setSubmitting(true);
     setTimeout(() => {
       onSubmit?.(totalXp);
