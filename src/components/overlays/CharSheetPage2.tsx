@@ -18,14 +18,36 @@ const affinityData: Record<string, number> = {
 const PRIMARY = 'ROCKERBOY';
 const SECONDARY = 'WITCH';
 
-const getPoint = (index: number, value: number, total: number, radius: number, cx: number, cy: number) => {
-  const angle = (Math.PI * 2 * index / total) - Math.PI / 2;
-  return { x: cx + radius * value * Math.cos(angle), y: cy + radius * value * Math.sin(angle) };
+const SVG_SIZE = 500;
+const CENTER_X = 250;
+const CENTER_Y = 250;
+const CHART_RADIUS = 160;
+const LABEL_RADIUS = 195;
+const NUM_CLASSES = 15;
+
+const getRadarPoint = (index: number, value: number) => {
+  const angle = (2 * Math.PI * index / NUM_CLASSES) - (Math.PI / 2);
+  return { x: CENTER_X + CHART_RADIUS * value * Math.cos(angle), y: CENTER_Y + CHART_RADIUS * value * Math.sin(angle) };
 };
 
-const getRingPoints = (scale: number, total: number, radius: number, cx: number, cy: number) =>
-  Array.from({ length: total }, (_, i) => getPoint(i, scale, total, radius, cx, cy))
-    .map(p => `${p.x},${p.y}`).join(' ');
+const getLabelPoint = (index: number) => {
+  const angle = (2 * Math.PI * index / NUM_CLASSES) - (Math.PI / 2);
+  return { x: CENTER_X + LABEL_RADIUS * Math.cos(angle), y: CENTER_Y + LABEL_RADIUS * Math.sin(angle) };
+};
+
+const getGridRing = (scale: number) =>
+  Array.from({ length: NUM_CLASSES }, (_, i) => {
+    const angle = (2 * Math.PI * i / NUM_CLASSES) - (Math.PI / 2);
+    return `${CENTER_X + CHART_RADIUS * scale * Math.cos(angle)},${CENTER_Y + CHART_RADIUS * scale * Math.sin(angle)}`;
+  }).join(' ');
+
+const getLabelAnchor = (index: number) => {
+  const angle = (2 * Math.PI * index / NUM_CLASSES) - (Math.PI / 2);
+  const x = Math.cos(angle);
+  if (x < -0.3) return 'end';
+  if (x > 0.3) return 'start';
+  return 'middle';
+};
 
 const RadarChart = ({ hovered, onHover }: { hovered: string | null; onHover: (c: string | null) => void }) => {
   const size = 320;
