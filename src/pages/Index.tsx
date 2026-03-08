@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import ReactGridLayout from 'react-grid-layout';
+import ReactGridLayout, { getCompactor } from 'react-grid-layout';
 import type { Layout as RGLLayout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
@@ -109,6 +109,8 @@ const Index = () => {
   const maxRows = 8;
   const rowHeight = Math.floor((gridSize.height - 16 - 8 * maxRows) / maxRows);
 
+  const strictCompactor = useMemo(() => getCompactor(null, false, true), []);
+
   const handleClose = (id: string) => {
     if (fullscreenWidget === id) setFullscreenWidget(null);
     setLayout(prev => prev.filter(item => item.i !== id));
@@ -175,6 +177,7 @@ const Index = () => {
               className="layout"
               layout={visibleLayout}
               width={gridSize.width - 16}
+              compactor={strictCompactor}
               gridConfig={{
                 cols: 12,
                 rowHeight: rowHeight > 20 ? rowHeight : 40,
