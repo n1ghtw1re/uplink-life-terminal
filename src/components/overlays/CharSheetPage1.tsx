@@ -69,27 +69,50 @@ const CharSheetPage1 = () => {
         <div style={{ marginBottom: 24 }}>
           <div className="char-label">CUSTOM DESIGNATION</div>
           {editing ? (
-            <input
-              className="crt-input"
-              autoFocus
-              value={editValue}
-              onChange={e => setEditValue(e.target.value)}
-              onBlur={saveEdit}
-              onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') setEditing(false); }}
-              style={{ fontSize: 14, width: '100%', maxWidth: 280 }}
-            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                className="crt-input"
+                autoFocus
+                value={editValue}
+                onChange={e => setEditValue(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') setEditing(false); }}
+                style={{ fontSize: 14, flex: 1, maxWidth: 280 }}
+              />
+              <button
+                className="topbar-btn"
+                onClick={saveEdit}
+                style={{ fontSize: 9, padding: '2px 6px' }}
+              >[ save ]</button>
+            </div>
           ) : customDesignation ? (
-            <div>
-              <span className="font-display" style={{ fontSize: 18, color: 'hsl(var(--accent-bright))' }}>{customDesignation}</span>
-              <button className="widget-btn" onClick={startEdit} style={{ marginLeft: 8, fontSize: 9 }}>[ edit ]</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 14, color: 'hsl(var(--accent))' }}>{customDesignation}</span>
+              <button
+                onClick={startEdit}
+                style={{
+                  border: '1px solid hsl(var(--accent-dim))',
+                  color: 'hsl(var(--text-dim))',
+                  background: 'transparent',
+                  fontFamily: "'IBM Plex Mono', monospace",
+                  fontSize: 9,
+                  padding: '2px 6px',
+                  cursor: 'pointer',
+                }}
+              >[ edit ]</button>
             </div>
           ) : (
-            <div
+            <button
               onClick={startEdit}
-              style={{ color: 'hsl(var(--text-dim))', fontStyle: 'italic', cursor: 'pointer', fontSize: 11 }}
-            >
-              [ not set — click to edit ]
-            </div>
+              style={{
+                border: '1px solid hsl(var(--accent-dim))',
+                color: 'hsl(var(--text-dim))',
+                background: 'transparent',
+                fontFamily: "'IBM Plex Mono', monospace",
+                fontSize: 10,
+                padding: '4px 10px',
+                cursor: 'pointer',
+              }}
+            >[ + SET DESIGNATION ]</button>
           )}
         </div>
 
@@ -121,9 +144,15 @@ const CharSheetPage1 = () => {
         {/* Shields */}
         <div style={{ marginBottom: 24 }}>
           <div className="char-label">SHIELDS</div>
-          <div style={{ fontSize: 20, letterSpacing: 4 }}>
+          <div style={{ display: 'flex', gap: 8, fontSize: 18 }}>
             {op.shields.map((s, i) => (
-              <span key={i} style={{ color: s ? 'hsl(var(--accent-bright))' : 'hsl(var(--text-dim))' }} className={s ? 'text-glow' : ''}>
+              <span
+                key={i}
+                style={{
+                  color: s ? 'hsl(var(--accent-bright))' : 'hsl(41 100% 13%)',
+                  textShadow: s ? '0 0 8px hsl(var(--accent-glow) / 0.8)' : 'none',
+                }}
+              >
                 {s ? '▣' : '□'}
               </span>
             ))}
