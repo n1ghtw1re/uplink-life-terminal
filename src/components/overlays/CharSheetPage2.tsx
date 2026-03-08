@@ -1,83 +1,205 @@
 import { useState } from 'react';
 
-const CLASS_ORDER = [
-  'NETRUNNER', 'TECHIE', 'EDGERUNNER', 'SOLO', 'NOMAD', 'MEDTECH',
-  'FIXER', 'EXEC', 'ROCKERBOY', 'AGITATOR', 'WITCH', 'SIGNAL',
-  'HERALD', 'PROPHET', 'AGITPROP',
-] as const;
+// ─── DATA ─────────────────────────────────────────────────────────────────────
 
-const RARE_CLASSES = new Set(['HERALD', 'PROPHET', 'AGITPROP']);
-
-const affinityData: Record<string, number> = {
-  NETRUNNER: 0.12, TECHIE: 0.06, EDGERUNNER: 0.04, SOLO: 0.02,
-  NOMAD: 0.02, MEDTECH: 0.08, FIXER: 0.14, EXEC: 0.03,
-  ROCKERBOY: 0.42, AGITATOR: 0.28, WITCH: 0.35, SIGNAL: 0.24,
-  HERALD: 0.19, PROPHET: 0.07, AGITPROP: 0.01,
-};
-
-const PRIMARY = 'ROCKERBOY';
+const PRIMARY   = 'ROCKERBOY';
 const SECONDARY = 'WITCH';
 
-const SVG_SIZE = 500;
-const CENTER_X = 250;
-const CENTER_Y = 250;
-const CHART_RADIUS = 160;
-const LABEL_RADIUS = 195;
-const NUM_CLASSES = 15;
+const CLASSES = [
+  { name: 'NETRUNNER',  value: 0.12, rare: false },
+  { name: 'TECHIE',     value: 0.06, rare: false },
+  { name: 'EDGERUNNER', value: 0.04, rare: false },
+  { name: 'SOLO',       value: 0.02, rare: false },
+  { name: 'NOMAD',      value: 0.02, rare: false },
+  { name: 'MEDTECH',    value: 0.08, rare: false },
+  { name: 'FIXER',      value: 0.14, rare: false },
+  { name: 'EXEC',       value: 0.03, rare: false },
+  { name: 'ROCKERBOY',  value: 0.42, rare: false },
+  { name: 'AGITATOR',   value: 0.28, rare: false },
+  { name: 'WITCH',      value: 0.35, rare: false },
+  { name: 'SIGNAL',     value: 0.24, rare: false },
+  { name: 'HERALD',     value: 0.19, rare: true  },
+  { name: 'PROPHET',    value: 0.07, rare: true  },
+  { name: 'AGITPROP',   value: 0.01, rare: true  },
+];
 
-const getRadarPoint = (index: number, value: number) => {
-  const angle = (2 * Math.PI * index / NUM_CLASSES) - (Math.PI / 2);
-  return { x: CENTER_X + CHART_RADIUS * value * Math.cos(angle), y: CENTER_Y + CHART_RADIUS * value * Math.sin(angle) };
-};
+const SORTED = [...CLASSES].sort((a, b) => b.value - a.value);
 
-const getLabelPoint = (index: number) => {
-  const angle = (2 * Math.PI * index / NUM_CLASSES) - (Math.PI / 2);
-  return { x: CENTER_X + LABEL_RADIUS * Math.cos(angle), y: CENTER_Y + LABEL_RADIUS * Math.sin(angle) };
-};
+// ─── RADAR GEOMETRY ───────────────────────────────────────────────────────────
 
-const getGridRing = (scale: number) =>
-  Array.from({ length: NUM_CLASSES }, (_, i) => {
-    const angle = (2 * Math.PI * i / NUM_CLASSES) - (Math.PI / 2);
-    return `${CENTER_X + CHART_RADIUS * scale * Math.cos(angle)},${CENTER_Y + CHART_RADIUS * scale * Math.sin(angle)}`;
-  }).join(' ');
+const N   = 15;
+const CX  = 250;
+const CY  = 250;
+const CR  = 190;  // chart radius (outer ring)
+const LR  = 238;  // label radius (outside ring)
 
-const getLabelAnchor = (index: number) => {
-  const angle = (2 * Math.PI * index / NUM_CLASSES) - (Math.PI / 2);
-  const x = Math.cos(angle);
-  if (x < -0.3) return 'end';
-  if (x > 0.3) return 'start';
+// Cartesian point on a spoke at a given value (0–1)
+function pt(index: number, value: number) {
+  const a = (2 * Math.PI * index / N) - (Math.PI / 2);
+  return { x: CX + CR * value * Math.cos(a), y: CY + CR * value * Math.sin(a) };
+}
+
+// Label position outside the ring
+function lpt(index: number) {
+  const a = (2 * Math.PI * index / N) - (Math.PI / 2);
+  return { x: CX + LR * Math.cos(a), y: CY + LR * Math.sin(a) };
+}
+
+// SVG text-anchor based on x position
+function anc(index: number) {
+  const x = Math.cos((2 * Math.PI * index / N) - (Math.PI / 2));
+  if (x < -0.15) return 'end';
+  if (x >  0.15) return 'start';
   return 'middle';
-};
+}
 
+// Polygon points string for a concentric grid ring
+function ring(scale: number) {
+  return Array.from({ length: N }, (_, i) => {
+    const p = pt(i, scale);
+    return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+  }).join(' ');
+}
 
+// Affinity polygon points string
+function poly() {
+  return CLASSES.map((cls, i) => {
+    const p = pt(i, Math.max(cls.value, 0.05));
+    return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+  }).join(' ');
+}
 
+// ─── RADAR COMPONENT ──────────────────────────────────────────────────────────
 
-// Sort classes by affinity descending
-const sortedClasses = [...CLASS_ORDER].sort((a, b) => affinityData[b] - affinityData[a]);
+const Radar = ({ hovered, onHover }: { hovered: string | null; onHover: (n: string | null) => void }) => (
+  <svg
+    viewBox="-55 -55 610 610"
+    width="100%"
+    height="100%"
+    preserveAspectRatio="xMidYMid meet"
+    style={{ overflow: 'visible', display: 'block' }}
+  >
+    {/* Grid rings */}
+    {[0.2, 0.4, 0.6, 0.8, 1.0].map(s => (
+      <polygon key={s} points={ring(s)} fill="none"
+        stroke={s === 1.0 ? '#3a2000' : '#261600'}
+        strokeWidth={s === 1.0 ? 1.5 : 0.8}
+      />
+    ))}
+
+    {/* Spokes */}
+    {CLASSES.map((_, i) => {
+      const o = pt(i, 1.0);
+      return <line key={i} x1={CX} y1={CY} x2={o.x} y2={o.y} stroke="#261600" strokeWidth={0.6} />;
+    })}
+
+    {/* Affinity polygon */}
+    <polygon
+      points={poly()}
+      fill="rgba(255,176,0,0.13)"
+      stroke="#ffb000"
+      strokeWidth={2}
+      strokeLinejoin="round"
+      style={{ filter: 'drop-shadow(0 0 6px rgba(255,176,0,0.55))' }}
+    />
+
+    {/* Data dots */}
+    {CLASSES.map((cls, i) => {
+      const p    = pt(i, Math.max(cls.value, 0.05));
+      const isPri = cls.name === PRIMARY;
+      const isSec = cls.name === SECONDARY;
+      const isHov = hovered === cls.name;
+      const r    = isPri ? 6 : isSec ? 5 : cls.rare ? 4 : 3;
+      const fill = isPri ? '#ffd060' : isSec ? '#ffb000' : cls.rare ? '#cc8800' : '#886600';
+      return (
+        <circle key={cls.name} cx={p.x} cy={p.y} r={isHov ? r + 2 : r} fill={fill}
+          style={{ filter: isHov || isPri ? 'drop-shadow(0 0 6px rgba(255,208,96,1))' : 'drop-shadow(0 0 3px rgba(255,176,0,0.5))', cursor: 'pointer' }}
+          onMouseEnter={() => onHover(cls.name)}
+          onMouseLeave={() => onHover(null)}
+        />
+      );
+    })}
+
+    {/* Labels */}
+    {CLASSES.map((cls, i) => {
+      const pos   = lpt(i);
+      const isPri = cls.name === PRIMARY;
+      const isSec = cls.name === SECONDARY;
+      const isHov = hovered === cls.name;
+      const fill  = isPri ? '#ffd060' : isSec ? '#ffb000' : isHov ? '#ffb000' : cls.rare ? '#aa7700' : '#665500';
+      const size  = isPri ? 12 : isSec ? 11 : 9;
+      return (
+        <text key={cls.name} x={pos.x} y={pos.y}
+          textAnchor={anc(i)} dominantBaseline="middle"
+          fill={fill} fontSize={size}
+          fontWeight={isPri ? 'bold' : 'normal'}
+          fontFamily="'IBM Plex Mono', monospace"
+          style={{ filter: isPri || isHov ? 'drop-shadow(0 0 4px rgba(255,208,96,0.9))' : 'none', cursor: 'pointer' }}
+          onMouseEnter={() => onHover(cls.name)}
+          onMouseLeave={() => onHover(null)}
+        >
+          {cls.name}{cls.rare ? ' ✦' : ''}
+        </text>
+      );
+    })}
+
+    {/* Centre dot */}
+    <circle cx={CX} cy={CY} r={3} fill="#ffb000" opacity={0.4} />
+
+    {/* Hover tooltip */}
+    {hovered && (() => {
+      const cls = CLASSES.find(d => d.name === hovered);
+      if (!cls) return null;
+      return (
+        <g>
+          <rect x={CX - 52} y={CY - 14} width={104} height={20}
+            fill="#1a0f00" stroke="#ffb000" strokeWidth={0.8} rx={1} />
+          <text x={CX} y={CY - 4} textAnchor="middle" dominantBaseline="middle"
+            fill="#ffd060" fontSize={9} fontFamily="'IBM Plex Mono', monospace">
+            {cls.name}  {Math.round(cls.value * 100)}%
+          </text>
+        </g>
+      );
+    })()}
+  </svg>
+);
+
+// ─── PAGE 2 ───────────────────────────────────────────────────────────────────
 
 const CharSheetPage2 = () => {
   const [hovered, setHovered] = useState<string | null>(null);
 
   return (
     <div style={{ display: 'flex', height: '100%', gap: 0 }}>
-      {/* LEFT — RADAR */}
-      <div className="char-sheet-left" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ color: 'hsl(var(--text-dim))', fontSize: 10, marginBottom: 16 }}>// CLASS AFFINITY</div>
 
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <RadarChartFull hovered={hovered} onHover={setHovered} />
+      {/* ── LEFT — RADAR ─────────────────────────────────────────── */}
+      <div className="char-sheet-left" style={{
+        flex: 1, minWidth: 0,
+        display: 'flex', flexDirection: 'column',
+      }}>
+        <div style={{ color: 'hsl(var(--text-dim))', fontSize: 10, marginBottom: 12 }}>
+          // CLASS AFFINITY
         </div>
 
-        {/* Primary / Secondary */}
-        <div style={{ borderTop: '1px solid hsl(30 100% 9%)', paddingTop: 12, marginTop: 12 }}>
-          <div style={{ display: 'flex', gap: 32, marginBottom: 8 }}>
+        {/* Radar fills remaining space */}
+        <div style={{ flex: 1, minHeight: 0 }}>
+          <Radar hovered={hovered} onHover={setHovered} />
+        </div>
+
+        {/* Primary / secondary + last shift */}
+        <div style={{ borderTop: '1px solid #261600', paddingTop: 10, marginTop: 8 }}>
+          <div style={{ display: 'flex', gap: 32, marginBottom: 6 }}>
             <div>
               <span style={{ fontSize: 9, color: 'hsl(var(--text-dim))' }}>PRIMARY: </span>
-              <span className="font-display" style={{ fontSize: 16, color: 'hsl(var(--accent-bright))' }}>{PRIMARY}</span>
+              <span className="font-display" style={{ fontSize: 16, color: 'hsl(var(--accent-bright))' }}>
+                {PRIMARY}
+              </span>
             </div>
             <div>
               <span style={{ fontSize: 9, color: 'hsl(var(--text-dim))' }}>SECONDARY: </span>
-              <span className="font-display" style={{ fontSize: 16, color: 'hsl(var(--accent-bright))' }}>{SECONDARY}</span>
+              <span className="font-display" style={{ fontSize: 16, color: 'hsl(var(--accent-bright))' }}>
+                {SECONDARY}
+              </span>
             </div>
           </div>
           <div style={{ fontSize: 9, color: 'hsl(41 100% 18%)' }}>
@@ -86,264 +208,80 @@ const CharSheetPage2 = () => {
         </div>
       </div>
 
-      {/* RIGHT — BREAKDOWN */}
-      <div className="char-sheet-right" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ color: 'hsl(var(--text-dim))', fontSize: 10, marginBottom: 12 }}>// CLASS BREAKDOWN</div>
+      {/* ── RIGHT — BREAKDOWN ────────────────────────────────────── */}
+      <div className="char-sheet-right" style={{
+        flex: 1, minWidth: 0,
+        display: 'flex', flexDirection: 'column',
+      }}>
+        <div style={{ color: 'hsl(var(--text-dim))', fontSize: 10, marginBottom: 12 }}>
+          // CLASS BREAKDOWN
+        </div>
 
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-          {sortedClasses.map(cls => {
-            const val = affinityData[cls];
-            const pct = Math.round(val * 100);
-            const isPrimary = cls === PRIMARY;
-            const isSecondary = cls === SECONDARY;
-            const isRare = RARE_CLASSES.has(cls);
-            const isLow = val < 0.05;
-            const isHov = hovered === cls;
+          {SORTED.map(cls => {
+            const isPri = cls.name === PRIMARY;
+            const isSec = cls.name === SECONDARY;
+            const isHov = hovered === cls.name;
+            const isLow = cls.value < 0.05;
+            const pct   = Math.round(cls.value * 100);
 
-            const nameColor = isPrimary || isHov
+            const nameColor = isPri || isHov
               ? 'hsl(var(--accent-bright))'
               : isLow ? 'hsl(41 100% 25%)' : 'hsl(var(--accent))';
 
             return (
-              <div key={cls}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: isLow && !isHov ? 0.6 : 1, cursor: 'pointer' }}
-                onMouseEnter={() => setHovered(cls)}
+              <div key={cls.name}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: isLow && !isHov ? 0.5 : 1, cursor: 'pointer' }}
+                onMouseEnter={() => setHovered(cls.name)}
                 onMouseLeave={() => setHovered(null)}
               >
-                {/* Indicator */}
+                {/* Arrow indicator */}
                 <span style={{ width: 10, fontSize: 8, color: 'hsl(var(--accent-bright))' }}>
-                  {isPrimary ? '▶' : isSecondary ? '▷' : ''}
+                  {isPri ? '▶' : isSec ? '▷' : ''}
                 </span>
 
                 {/* Name */}
                 <span style={{
-                  fontSize: isPrimary ? 11 : 10,
+                  fontSize: isPri ? 11 : 10,
                   fontFamily: "'IBM Plex Mono', monospace",
                   color: nameColor,
-                  width: 90,
-                  flexShrink: 0,
+                  width: 95, flexShrink: 0,
                 }}>
-                  {cls}{isRare ? ' ✦' : ''}
+                  {cls.name}{cls.rare ? ' ✦' : ''}
                 </span>
 
                 {/* Bar */}
-                <div style={{
-                  flex: 1,
-                  height: 4,
-                  background: 'hsl(30 100% 9%)',
-                  position: 'relative',
-                }}>
+                <div style={{ flex: 1, height: 4, background: 'hsl(30 100% 9%)', position: 'relative' }}>
                   <div style={{
-                    width: `${pct}%`,
-                    height: '100%',
-                    background: isPrimary ? 'hsl(var(--accent-bright))' : 'hsl(var(--accent))',
-                    boxShadow: isPrimary || isHov ? '0 0 6px hsl(var(--accent-glow) / 0.6)' : '0 0 4px hsl(var(--accent-glow) / 0.3)',
+                    width: `${pct}%`, height: '100%',
+                    background: isPri ? 'hsl(var(--accent-bright))' : 'hsl(var(--accent))',
+                    boxShadow: isPri || isHov ? '0 0 6px rgba(255,176,0,0.6)' : '0 0 3px rgba(255,176,0,0.3)',
                   }} />
                 </div>
 
                 {/* Percentage */}
                 <span style={{
-                  fontSize: 10,
-                  fontFamily: "'IBM Plex Mono', monospace",
+                  fontSize: 10, fontFamily: "'IBM Plex Mono', monospace",
                   color: isLow ? 'hsl(41 100% 20%)' : 'hsl(var(--text-dim))',
-                  width: 30,
-                  textAlign: 'right',
-                  flexShrink: 0,
+                  width: 28, textAlign: 'right', flexShrink: 0,
                 }}>
                   {pct}%
                 </span>
 
                 {/* Tag */}
-                {isPrimary && <span className="multiplier-tag" style={{ fontSize: 8 }}>PRIMARY</span>}
-                {isSecondary && <span className="multiplier-tag" style={{ fontSize: 8 }}>SECONDARY</span>}
+                {isPri && <span className="multiplier-tag" style={{ fontSize: 8 }}>PRIMARY</span>}
+                {isSec && <span className="multiplier-tag" style={{ fontSize: 8 }}>SECONDARY</span>}
               </div>
             );
           })}
         </div>
 
         {/* Legend */}
-        <div style={{ fontSize: 9, color: 'hsl(41 100% 18%)', marginTop: 12, lineHeight: 1.8 }}>
+        <div style={{ fontSize: 9, color: 'hsl(41 100% 18%)', marginTop: 10, lineHeight: 1.8 }}>
           ✦ = RARE CLASS &nbsp;&nbsp; ▶ = PRIMARY &nbsp;&nbsp; ▷ = SECONDARY
         </div>
       </div>
-    </div>
-  );
-};
 
-// Full radar chart with correct angle mapping and responsive sizing
-const RadarChartFull = ({ hovered: _hovered, onHover: _onHover }: { hovered: string | null; onHover: (c: string | null) => void }) => {
-  const [hovered, setHovered] = useState<string | null>(null);
-
-  const NUM_CLASSES = 15;
-  const cx = 250;
-  const cy = 250;
-  const chartRadius = 200;
-  const labelRadius = 248;
-
-  const affinityData = [
-    { name: 'NETRUNNER', value: 0.12, rare: false, primary: false, secondary: false },
-    { name: 'TECHIE', value: 0.06, rare: false, primary: false, secondary: false },
-    { name: 'EDGERUNNER', value: 0.04, rare: false, primary: false, secondary: false },
-    { name: 'SOLO', value: 0.02, rare: false, primary: false, secondary: false },
-    { name: 'NOMAD', value: 0.02, rare: false, primary: false, secondary: false },
-    { name: 'MEDTECH', value: 0.08, rare: false, primary: false, secondary: false },
-    { name: 'FIXER', value: 0.14, rare: false, primary: false, secondary: false },
-    { name: 'EXEC', value: 0.03, rare: false, primary: false, secondary: false },
-    { name: 'ROCKERBOY', value: 0.42, rare: false, primary: true, secondary: false },
-    { name: 'AGITATOR', value: 0.28, rare: false, primary: false, secondary: false },
-    { name: 'WITCH', value: 0.35, rare: false, primary: false, secondary: true },
-    { name: 'SIGNAL', value: 0.24, rare: false, primary: false, secondary: false },
-    { name: 'HERALD', value: 0.19, rare: true, primary: false, secondary: false },
-    { name: 'PROPHET', value: 0.07, rare: true, primary: false, secondary: false },
-    { name: 'AGITPROP', value: 0.01, rare: true, primary: false, secondary: false },
-  ];
-
-  const polarToCartesian = (index: number, value: number) => {
-    const angle = (2 * Math.PI * index / NUM_CLASSES) - (Math.PI / 2);
-    return {
-      x: cx + chartRadius * value * Math.cos(angle),
-      y: cy + chartRadius * value * Math.sin(angle),
-    };
-  };
-
-  const getLabelPos = (index: number) => {
-    const angle = (2 * Math.PI * index / NUM_CLASSES) - (Math.PI / 2);
-    return {
-      x: cx + labelRadius * Math.cos(angle),
-      y: cy + labelRadius * Math.sin(angle),
-    };
-  };
-
-  const getAnchor = (index: number): string => {
-    const angle = (2 * Math.PI * index / NUM_CLASSES) - (Math.PI / 2);
-    const x = Math.cos(angle);
-    if (x < -0.15) return 'end';
-    if (x > 0.15) return 'start';
-    return 'middle';
-  };
-
-  const gridRing = (scale: number): string =>
-    Array.from({ length: NUM_CLASSES }, (_, i) => {
-      const pt = polarToCartesian(i, scale);
-      return `${pt.x},${pt.y}`;
-    }).join(' ');
-
-  const affinityPolygon = (): string =>
-    affinityData.map((cls, i) => {
-      const value = Math.max(cls.value, 0.04);
-      const pt = polarToCartesian(i, value);
-      return `${pt.x},${pt.y}`;
-    }).join(' ');
-
-  return (
-    <div style={{
-      width: '100%',
-      height: '100%',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      minHeight: '400px'
-    }}>
-      <svg
-        viewBox="-60 -60 620 620"
-        width="100%"
-        height="100%"
-        preserveAspectRatio="xMidYMid meet"
-        style={{ overflow: 'visible', display: 'block', maxHeight: '100%' }}
-      >
-        {[0.2, 0.4, 0.6, 0.8, 1.0].map(scale => (
-          <polygon
-            key={scale}
-            points={gridRing(scale)}
-            fill="none"
-            stroke="#261600"
-            strokeWidth={scale === 1.0 ? 1.5 : 1}
-            opacity={scale === 1.0 ? 0.9 : 0.5}
-          />
-        ))}
-
-        {affinityData.map((_, i) => {
-          const outer = polarToCartesian(i, 1.0);
-          return (
-            <line
-              key={i}
-              x1={cx} y1={cy}
-              x2={outer.x} y2={outer.y}
-              stroke="#261600"
-              strokeWidth={0.5}
-              opacity={0.6}
-            />
-          );
-        })}
-
-        <polygon
-          points={affinityPolygon()}
-          fill="rgba(255, 176, 0, 0.12)"
-          stroke="#ffb000"
-          strokeWidth={2}
-          className="radar-polygon"
-          style={{ filter: 'drop-shadow(0 0 5px rgba(255,176,0,0.6))' }}
-        />
-
-        {affinityData.map((cls, i) => {
-          const pt = polarToCartesian(i, Math.max(cls.value, 0.04));
-          const r = cls.primary ? 6 : cls.secondary ? 5 : cls.rare ? 4 : 3;
-          const fill = cls.primary ? '#ffd060' : cls.secondary ? '#ffb000' : cls.rare ? '#cc8800' : '#996800';
-          return (
-            <circle
-              key={cls.name}
-              cx={pt.x} cy={pt.y} r={hovered === cls.name ? r + 2 : r}
-              fill={fill}
-              style={{ filter: 'drop-shadow(0 0 4px rgba(255,176,0,0.7))', cursor: 'pointer' }}
-              onMouseEnter={() => setHovered(cls.name)}
-              onMouseLeave={() => setHovered(null)}
-            />
-          );
-        })}
-
-        {affinityData.map((cls, i) => {
-          const pos = getLabelPos(i);
-          const isHovered = hovered === cls.name;
-          let fontSize: number;
-          let fill: string;
-          let fontWeight: string | number = 'normal';
-          
-          if (cls.primary) {
-            fontSize = 12;
-            fill = '#ffd060';
-            fontWeight = 'bold';
-          } else if (cls.secondary) {
-            fontSize = 11;
-            fill = '#ffb000';
-          } else if (cls.rare) {
-            fontSize = 10;
-            fill = '#cc8800';
-          } else {
-            fontSize = 10;
-            fill = isHovered ? '#ffb000' : '#664400';
-          }
-
-          return (
-            <text
-              key={cls.name}
-              x={pos.x} y={pos.y}
-              textAnchor={getAnchor(i)}
-              dominantBaseline="middle"
-              fill={fill}
-              fontSize={fontSize}
-              fontFamily="'IBM Plex Mono', monospace"
-              fontWeight={fontWeight}
-              style={{ cursor: 'pointer' }}
-              onMouseEnter={() => setHovered(cls.name)}
-              onMouseLeave={() => setHovered(null)}
-            >
-              {cls.name}{cls.rare ? ' ✦' : ''}
-            </text>
-          );
-        })}
-
-        <circle cx={cx} cy={cy} r={3} fill="#ffb000" opacity={0.4} />
-      </svg>
     </div>
   );
 };
