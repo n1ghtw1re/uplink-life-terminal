@@ -260,23 +260,26 @@ const QuickLogOverlay = ({ onSubmit }: QuickLogOverlayProps) => {
           <div style={{ display: 'flex', gap: 8 }}>
             <div style={{ flex: 1 }}>
               <div style={{ color: 'hsl(var(--text-dim))', marginBottom: 4 }}>TAG TO:</div>
-              <select
-                className="crt-input"
-                style={{ width: '100%' }}
-                value={tagCourse}
-                onChange={e => setTagCourse(e.target.value)}
-              >
-                <option value="">course ▾</option>
-                {activeCourses.map(c => (
-                  <option key={c.name} value={c.name}>{c.name}</option>
-                ))}
-              </select>
+              <div className="crt-select-wrapper">
+                <select
+                  className="crt-select"
+                  value={tagCourse}
+                  onChange={e => setTagCourse(e.target.value)}
+                >
+                  <option value="">course</option>
+                  {activeCourses.map(c => (
+                    <option key={c.name} value={c.name}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ color: 'hsl(var(--text-dim))', marginBottom: 4 }}>&nbsp;</div>
-              <select className="crt-input" style={{ width: '100%' }} disabled>
-                <option>no active projects</option>
-              </select>
+              <div className="crt-select-wrapper">
+                <select className="crt-select" disabled>
+                  <option>no active projects</option>
+                </select>
+              </div>
             </div>
           </div>
         </div>
@@ -284,14 +287,15 @@ const QuickLogOverlay = ({ onSubmit }: QuickLogOverlayProps) => {
         {/* DIVIDER */}
         <div style={{
           width: 1,
-          background: 'hsl(var(--accent-dim))',
+          background: '#261600',
           alignSelf: 'stretch',
+          flexShrink: 0,
         }} />
 
         {/* RIGHT COLUMN — Options + XP Preview */}
-        <div style={{ width: 240, flexShrink: 0 }}>
+        <div style={{ width: 240, flexShrink: 0, alignSelf: 'start', paddingLeft: 8 }}>
           {/* Toggles */}
-          <div style={{ marginBottom: 12 }}>
+          <div style={{ marginBottom: 10 }}>
             <div style={{ color: 'hsl(var(--text-dim))', marginBottom: 6, fontSize: 10, letterSpacing: 1 }}>
               ── OPTIONS ───────────
             </div>
@@ -343,16 +347,21 @@ const QuickLogOverlay = ({ onSubmit }: QuickLogOverlayProps) => {
                 <div style={{ color: 'hsl(var(--text-dim))' }}>STAT{'  '}+{statTotalXp} XP</div>
               )}
               <div>MASTER{'  '}+{masterXp} XP</div>
-              <div style={{ borderTop: '1px solid hsl(var(--accent-dim))', marginTop: 4, paddingTop: 4 }}>
-                MULT: {mult.toFixed(1)}×{' '}
+              <div style={{ borderTop: '1px solid #261600', marginTop: 6, paddingTop: 6, fontSize: 10 }}>
+                MULT: {mult.toFixed(1)}×
                 {isLegacy ? (
-                  <span style={{ color: 'hsl(var(--text-dim))' }}>[LEGACY]</span>
+                  <span className="multiplier-tag" style={{ opacity: 0.5 }}>LEGACY</span>
+                ) : mult >= 3 ? (
+                  <span className="multiplier-tag pulse-glow" style={{ borderColor: 'hsl(var(--accent))', color: 'hsl(var(--accent))' }}>LEGENDARY {mult}×</span>
                 ) : (
-                  <span className="text-glow">[ON FIRE]</span>
+                  <span className="multiplier-tag">ON FIRE</span>
                 )}
               </div>
-              <div style={{ fontSize: 12, color: 'hsl(var(--accent-bright))' }} className="text-glow">
-                TOTAL: +{totalXp} XP
+              <div style={{ marginTop: 4 }}>
+                <span style={{ fontSize: 13, color: 'hsl(var(--accent-bright))' }}>TOTAL: </span>
+                <span className="font-display text-glow-bright" style={{ fontSize: 16, color: 'hsl(var(--accent-bright))' }}>
+                  +{totalXp} XP
+                </span>
               </div>
             </div>
           </div>
