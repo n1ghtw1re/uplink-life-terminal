@@ -785,6 +785,26 @@
   animation: scanlineWipeOut 150ms steps(20, end) forwards;
 }
 
+/* Radar chart animations */
+@keyframes radarDraw {
+  from { opacity: 0; transform: scale(0.3); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.radar-polygon {
+  transform-origin: center;
+  animation: radarDraw 400ms ease-out forwards;
+  animation-delay: 200ms;
+  opacity: 0;
+}
+
+.radar-points {
+  transform-origin: center;
+  animation: radarDraw 400ms ease-out forwards;
+  animation-delay: 350ms;
+  opacity: 0;
+}
+
 /* Column layout */
 .char-sheet-left {
   border-right: 1px solid hsl(30 100% 9%);

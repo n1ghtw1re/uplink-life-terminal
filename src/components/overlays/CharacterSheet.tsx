@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import CharSheetPage1 from './CharSheetPage1';
-
+import CharSheetPage2 from './CharSheetPage2';
 interface CharacterSheetProps {
   onClose: () => void;
 }
@@ -12,7 +12,7 @@ const CharacterSheet = ({ onClose }: CharacterSheetProps) => {
   const [animClass, setAnimClass] = useState('');
 
   const goToPage = useCallback((page: number) => {
-    if (page === currentPage || page > 1) return; // pages 2-5 disabled
+    if (page === currentPage || page > 2) return; // pages 3-5 disabled
     setAnimClass('page-exit');
     setTimeout(() => {
       setCurrentPage(page);
@@ -24,6 +24,7 @@ const CharacterSheet = ({ onClose }: CharacterSheetProps) => {
   const renderPage = () => {
     switch (currentPage) {
       case 1: return <CharSheetPage1 />;
+      case 2: return <CharSheetPage2 />;
       default: return null;
     }
   };
@@ -51,9 +52,9 @@ const CharacterSheet = ({ onClose }: CharacterSheetProps) => {
         {Array.from({ length: TOTAL_PAGES }, (_, i) => i + 1).map(page => (
           <button
             key={page}
-            className={`char-sheet-page-btn ${page === currentPage ? 'active' : ''} ${page > 1 ? 'disabled' : ''}`}
+            className={`char-sheet-page-btn ${page === currentPage ? 'active' : ''} ${page > 2 ? 'disabled' : ''}`}
             onClick={() => goToPage(page)}
-            disabled={page > 1}
+            disabled={page > 2}
           >
             {page}
           </button>
