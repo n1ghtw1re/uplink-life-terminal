@@ -200,24 +200,6 @@ const Index = () => {
             </ReactGridLayout>
           )}
 
-          {/* Restore closed widgets bar */}
-          {closedWidgets.length > 0 && (
-            <div style={{
-              position: 'absolute', bottom: 8, left: 8, right: 8,
-              display: 'flex', gap: 4, flexWrap: 'wrap',
-            }}>
-              {closedWidgets.map(id => (
-                <button
-                  key={id}
-                  className="topbar-btn"
-                  style={{ fontSize: 9 }}
-                  onClick={() => handleRestore(id)}
-                >
-                  + {widgetNames[id] || id}
-                </button>
-              ))}
-            </div>
-          )}
         </div>
       </div>
 
