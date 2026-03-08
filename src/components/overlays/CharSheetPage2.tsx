@@ -217,7 +217,7 @@ const CharSheetPage2 = () => {
           // CLASS BREAKDOWN
         </div>
 
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', , overflow: 'hidden' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', overflow: 'hidden' }}>
           {SORTED.map(cls => {
             const isPri = cls.name === PRIMARY;
             const isSec = cls.name === SECONDARY;
