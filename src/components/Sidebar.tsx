@@ -4,13 +4,40 @@ import { stats, arsenalCounts, trackingCounts } from '@/data/mockData';
 interface SidebarProps {
   expanded: boolean;
   onToggle: () => void;
+  onExpand?: () => void;
+  onOpenCharSheet?: () => void;
 }
 
-const Sidebar = ({ expanded, onToggle }: SidebarProps) => {
+const sectionMap: Record<string, string> = {
+  'BODY': 'stats', 'WIRE': 'stats', 'MIND': 'stats',
+  'COOL': 'stats', 'GRIT': 'stats', 'FLOW': 'stats', 'GHOST': 'stats',
+  'Arsenal': 'arsenal',
+  'Goals': 'tracking', 'Habits': 'tracking',
+  'Settings': 'system',
+};
+
+const Sidebar = ({ expanded, onToggle, onExpand, onOpenCharSheet }: SidebarProps) => {
   const [openSection, setOpenSection] = useState<string | null>(null);
 
   const toggleSection = (section: string) => {
     setOpenSection(openSection === section ? null : section);
+  };
+
+  const handleCollapsedClick = (label: string) => {
+    if (label === 'Character Sheet') {
+      onOpenCharSheet?.();
+      return;
+    }
+    if (label === 'Dashboard') {
+      onExpand?.();
+      setOpenSection(null);
+      return;
+    }
+    const section = sectionMap[label];
+    if (section) {
+      onExpand?.();
+      setOpenSection(section);
+    }
   };
 
   const collapsedIcons = [
@@ -91,6 +118,7 @@ const Sidebar = ({ expanded, onToggle }: SidebarProps) => {
               <div
                 key={i}
                 title={item.label}
+                onClick={() => handleCollapsedClick(item.label)}
                 style={{
                   width: 40,
                   height: 40,
@@ -116,7 +144,7 @@ const Sidebar = ({ expanded, onToggle }: SidebarProps) => {
           <div className="sidebar-item" style={{ padding: '8px 12px', fontWeight: 600, color: 'hsl(var(--accent))' }}>
             ⌂ DASHBOARD
           </div>
-          <div className="sidebar-item" style={{ padding: '8px 12px' }}>
+          <div className="sidebar-item" style={{ padding: '8px 12px', cursor: 'pointer' }} onClick={() => onOpenCharSheet?.()}>
             ◈ CHARACTER SHEET
           </div>
           <div style={{ height: 1, background: 'hsl(var(--accent-dim))', margin: '4px 0' }} />

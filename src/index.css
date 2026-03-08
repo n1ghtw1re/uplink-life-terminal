@@ -493,3 +493,33 @@
 .crt-input::placeholder {
   color: hsl(var(--text-dim));
 }
+
+/* Fullscreen widget overlay */
+.fullscreen-backdrop {
+  position: fixed;
+  inset: 0;
+  top: 48px;
+  background: rgba(0, 0, 0, 0.85);
+  z-index: 998;
+}
+
+.fullscreen-widget {
+  position: fixed;
+  top: 48px;
+  right: 0;
+  bottom: 0;
+  z-index: 999;
+  background: hsl(var(--bg-secondary));
+  border: 1px solid hsl(var(--accent));
+  box-shadow: 0 0 30px hsl(var(--accent-glow) / 0.3);
+}
+
+.fullscreen-widget .widget {
+  height: 100%;
+  border: none;
+  box-shadow: none;
+}
+
+.fullscreen-widget .widget-body {
+  overflow: auto;
+}
