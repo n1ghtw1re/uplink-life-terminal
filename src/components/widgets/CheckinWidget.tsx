@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import WidgetWrapper from '../WidgetWrapper';
 import { dailyCheckinStats, habits } from '@/data/mockData';
+import { triggerXPFloat } from '@/components/effects/XPFloatLayer';
 
 interface WidgetProps { onClose?: () => void; onFullscreen?: () => void; isFullscreen?: boolean; }
 
@@ -40,7 +41,14 @@ const CheckinWidget = ({ onClose, onFullscreen, isFullscreen }: WidgetProps) => 
           <span style={{ color: 'hsl(var(--text-dim))' }}>STK: {h.streak}d {'▣'.repeat(h.shields)}{'░'.repeat(2 - h.shields)}</span>
         </div>
       ))}
-      <button className="topbar-btn" style={{ marginTop: 10, width: '100%', fontSize: 10 }}>
+      <button
+        className="topbar-btn"
+        style={{ marginTop: 10, width: '100%', fontSize: 10 }}
+        onClick={(e) => {
+          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+          triggerXPFloat(rect.left + rect.width / 2, rect.top - 10, 50, 2.0);
+        }}
+      >
         {'>> SUBMIT CHECK-IN'}
       </button>
     </WidgetWrapper>
