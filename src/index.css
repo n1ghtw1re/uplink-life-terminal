@@ -615,7 +615,71 @@
   border: none;
 }
 
-/* Quick Log select styling */
+/* CRT Select dropdown */
+.crt-select {
+  appearance: none;
+  -webkit-appearance: none;
+  background: hsl(var(--bg-primary));
+  border: 1px solid hsl(var(--accent-dim));
+  color: hsl(var(--text-primary));
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  padding: 6px 28px 6px 10px;
+  cursor: pointer;
+  width: 100%;
+  outline: none;
+  text-shadow: 0 0 6px hsl(var(--accent-glow) / 0.4);
+}
+
+.crt-select:hover {
+  border-color: hsl(var(--accent));
+  box-shadow: 0 0 8px hsl(var(--accent-glow) / 0.2);
+}
+
+.crt-select:focus {
+  border-color: hsl(var(--accent));
+  box-shadow: 0 0 10px hsl(var(--accent-glow) / 0.3);
+}
+
+.crt-select:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.crt-select option {
+  background: hsl(var(--bg-primary));
+  color: hsl(var(--text-primary));
+}
+
+.crt-select-wrapper {
+  position: relative;
+}
+
+.crt-select-wrapper::after {
+  content: '▾';
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: hsl(var(--accent-dim));
+  pointer-events: none;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+}
+
+/* Multiplier tag pill */
+.multiplier-tag {
+  display: inline-block;
+  border: 1px solid hsl(var(--accent-dim));
+  color: hsl(var(--accent-dim));
+  font-size: 9px;
+  padding: 1px 5px;
+  font-family: 'IBM Plex Mono', monospace;
+  vertical-align: middle;
+  margin-left: 4px;
+}
+
+/* Quick Log scrollbar */
 .ql-dropdown::-webkit-scrollbar {
   width: 4px;
 }
