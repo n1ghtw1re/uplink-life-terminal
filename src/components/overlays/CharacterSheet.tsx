@@ -14,7 +14,7 @@ const CharacterSheet = ({ onClose }: CharacterSheetProps) => {
   const [animClass, setAnimClass] = useState('');
 
   const goToPage = useCallback((page: number) => {
-    if (page === currentPage || page > 3) return;
+    if (page === currentPage || page > 4) return;
     setAnimClass('page-exit');
     setTimeout(() => {
       setCurrentPage(page);
