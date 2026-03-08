@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 const statSections = [
   {
     icon: '▲', name: 'BODY', level: 4,
@@ -45,6 +47,18 @@ const dormantStats = [
 ];
 
 const CharSheetPage3 = () => {
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({
+    BODY: false,
+    WIRE: true,
+    MIND: false,
+    FLOW: false,
+    GHOST: true,
+  });
+
+  const toggleCard = (name: string) => {
+    setExpanded(prev => ({ ...prev, [name]: !prev[name] }));
+  };
+
   return (
     <div style={{ height: '100%', overflowY: 'auto', paddingRight: 4 }}>
       {/* Header */}
@@ -53,57 +67,95 @@ const CharSheetPage3 = () => {
       </div>
 
       {/* Active stats grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
-        {statSections.map(stat => (
-          <div
-            key={stat.name}
-            style={{
-              background: '#1a0f00',
-              border: '1px solid #261600',
-              padding: '10px 12px',
-              display: 'flex',
-              flexDirection: 'column',
-            }}
-            onMouseEnter={e => (e.currentTarget.style.borderColor = '#3a2000')}
-            onMouseLeave={e => (e.currentTarget.style.borderColor = '#261600')}
-          >
-            {/* Stat header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: '#ffb000' }}>
-                {stat.icon} {stat.name}
-              </span>
-              <span style={{ fontFamily: "'VT323', monospace", fontSize: 14, color: '#ffd060' }}>
-                LVL {stat.level}
-              </span>
-            </div>
-            {/* Divider */}
-            <div style={{ height: 1, background: '#261600', marginBottom: 8 }} />
-            {/* Skills */}
-            {stat.skills.map((skill, si) => (
-              <div key={skill.name} style={{ marginBottom: si < stat.skills.length - 1 ? 8 : 0 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
-                  <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: '#996800' }}>
-                    {skill.name}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16, alignItems: 'start' }}>
+        {statSections.map(stat => {
+          const isExpanded = expanded[stat.name];
+          return (
+            <div
+              key={stat.name}
+              style={{
+                background: '#1a0f00',
+                border: '1px solid #261600',
+                padding: '10px 12px',
+                display: 'flex',
+                flexDirection: 'column',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.borderColor = '#3a2000')}
+              onMouseLeave={e => (e.currentTarget.style.borderColor = '#261600')}
+            >
+              {/* Stat header — clickable */}
+              <div
+                onClick={() => toggleCard(stat.name)}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                }}
+              >
+                <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: '#ffb000' }}>
+                  {stat.icon} {stat.name}
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontFamily: "'VT323', monospace", fontSize: 14, color: '#ffd060' }}>
+                    LVL {stat.level}
                   </span>
-                  <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: '#ffd060' }}>
-                    LVL {skill.level}
+                  <span style={{
+                    fontSize: 10,
+                    color: '#996800',
+                    minWidth: 32,
+                    textAlign: 'right',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 2,
+                  }}>
+                    <span style={{
+                      display: 'inline-block',
+                      transition: 'transform 200ms ease',
+                      transform: isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)',
+                    }}>▾</span>
+                    {!isExpanded && <span>({stat.skills.length})</span>}
                   </span>
-                </div>
-                {/* XP bar */}
-                <div style={{ width: '100%', height: 4, background: '#261600', position: 'relative' }}>
-                  <div
-                    style={{
-                      width: `${skill.xpPct}%`,
-                      height: '100%',
-                      background: '#ffb000',
-                      boxShadow: '0 0 4px rgba(255,176,0,0.3)',
-                    }}
-                  />
                 </div>
               </div>
-            ))}
-          </div>
-        ))}
+
+              {/* Collapsible body */}
+              <div style={{
+                overflow: 'hidden',
+                maxHeight: isExpanded ? 400 : 0,
+                opacity: isExpanded ? 1 : 0,
+                transition: 'max-height 200ms ease, opacity 200ms ease',
+              }}>
+                {/* Divider */}
+                <div style={{ height: 1, background: '#261600', margin: '6px 0 8px' }} />
+                {/* Skills */}
+                {stat.skills.map((skill, si) => (
+                  <div key={skill.name} style={{ marginBottom: si < stat.skills.length - 1 ? 8 : 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                      <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: '#996800' }}>
+                        {skill.name}
+                      </span>
+                      <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: '#ffd060' }}>
+                        LVL {skill.level}
+                      </span>
+                    </div>
+                    <div style={{ width: '100%', height: 4, background: '#261600', position: 'relative' }}>
+                      <div
+                        style={{
+                          width: `${skill.xpPct}%`,
+                          height: '100%',
+                          background: '#ffb000',
+                          boxShadow: '0 0 4px rgba(255,176,0,0.3)',
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* Dormant section */}
