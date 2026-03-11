@@ -29,7 +29,7 @@ const CharacterSheet = ({ onClose, onSkillClick }: CharacterSheetProps) => {
     switch (currentPage) {
       case 1: return <CharSheetPage1 />;
       case 2: return <CharSheetPage2 />;
-      case 3: return <CharSheetPage3 />;
+      case 3: return <CharSheetPage3 onSkillClick={onSkillClick} />;
       case 4: return <CharSheetPage4 />;
       case 5: return <CharSheetPage5 />;
     }
