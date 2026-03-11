@@ -18,6 +18,8 @@ import MediaWidget from '@/components/widgets/MediaWidget';
 import QuickLogOverlay from '@/components/overlays/QuickLogOverlay';
 import CharacterSheet from '@/components/overlays/CharacterSheet';
 import SearchOverlay from '@/components/overlays/SearchOverlay';
+import DetailDrawer from '@/components/drawer/DetailDrawer';
+import type { DrawerItem } from '@/components/drawer/DetailDrawer';
 
 type LayoutItem = { i: string; x: number; y: number; w: number; h: number; minW?: number; minH?: number };
 
