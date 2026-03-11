@@ -260,7 +260,8 @@ const Index = () => {
       >
         <QuickLogOverlay onSubmit={() => setShowLog(false)} />
       </Modal>
-      {showChar && <CharacterSheet onClose={() => setShowChar(false)} />}
+      {showChar && <CharacterSheet onClose={() => setShowChar(false)} onSkillClick={(skillName: string) => openDrawer('skill', skillName)} />}
+      <DetailDrawer open={drawerOpen} item={drawerItem} onClose={closeDrawer} onOpenLog={() => setShowLog(true)} />
       <Modal open={showSearch} onClose={() => setShowSearch(false)} title="SEARCH" width={600}>
         <SearchOverlay />
       </Modal>
