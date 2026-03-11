@@ -18,6 +18,8 @@ import MediaWidget from '@/components/widgets/MediaWidget';
 import QuickLogOverlay from '@/components/overlays/QuickLogOverlay';
 import CharacterSheet from '@/components/overlays/CharacterSheet';
 import SearchOverlay from '@/components/overlays/SearchOverlay';
+import DetailDrawer from '@/components/drawer/DetailDrawer';
+import type { DrawerItem } from '@/components/drawer/DetailDrawer';
 
 type LayoutItem = { i: string; x: number; y: number; w: number; h: number; minW?: number; minH?: number };
 
@@ -49,6 +51,8 @@ const Index = () => {
   const [showSearch, setShowSearch] = useState(false);
   const [showCheckin, setShowCheckin] = useState(false);
   const [showFlash, setShowFlash] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerItem, setDrawerItem] = useState<DrawerItem | null>(null);
   const [layout, setLayout] = useState(defaultLayout);
   const [activeWidgets, setActiveWidgets] = useState<string[]>(ALL_WIDGET_IDS);
   const [fullscreenWidget, setFullscreenWidget] = useState<string | null>(null);
@@ -56,17 +60,26 @@ const Index = () => {
 
   const sidebarWidth = sidebarExpanded ? 220 : 48;
 
+  const openDrawer = (type: 'skill', id: string) => {
+    setDrawerItem({ type, id });
+    setDrawerOpen(true);
+  };
+
+  const closeDrawer = () => setDrawerOpen(false);
+
+  const drawerWidth = drawerOpen ? 420 : 0;
+
   useEffect(() => {
     const update = () => {
       setGridSize({
-        width: window.innerWidth - sidebarWidth,
+        width: window.innerWidth - sidebarWidth - drawerWidth,
         height: window.innerHeight - 48,
       });
     };
     update();
     window.addEventListener('resize', update);
     return () => window.removeEventListener('resize', update);
-  }, [sidebarWidth]);
+  }, [sidebarWidth, drawerWidth]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -87,6 +100,7 @@ const Index = () => {
     if (tag === 'INPUT' || tag === 'TEXTAREA') return;
 
     if (e.key === 'Escape') {
+      if (drawerOpen) { closeDrawer(); return; }
       if (fullscreenWidget) { setFullscreenWidget(null); return; }
       setShowLog(false);
       setShowChar(false);
@@ -99,7 +113,7 @@ const Index = () => {
     if (e.key === '/') { e.preventDefault(); setShowSearch(true); }
     if (e.key === '[') setSidebarExpanded(false);
     if (e.key === ']') setSidebarExpanded(true);
-  }, [fullscreenWidget]);
+  }, [fullscreenWidget, drawerOpen]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKey);
@@ -142,7 +156,7 @@ const Index = () => {
       case 'xp': return <XPWidget {...props} />;
       case 'checkin': return <CheckinWidget {...props} />;
       case 'heatmap': return <HeatmapWidget {...props} />;
-      case 'stats': return <StatOverviewWidget {...props} />;
+      case 'stats': return <StatOverviewWidget {...props} onStatClick={(statKey: string) => openDrawer('skill', statKey)} />;
       case 'courses': return <CoursesWidget {...props} />;
       case 'media': return <MediaWidget {...props} />;
       default: return null;
@@ -171,7 +185,7 @@ const Index = () => {
           onOpenCharSheet={() => setShowChar(true)}
         />
 
-        <div style={{ flex: 1, overflow: 'hidden', padding: 8, position: 'relative' }}>
+        <div style={{ flex: 1, overflow: 'hidden', padding: 8, position: 'relative', marginRight: drawerOpen ? 420 : 0, transition: 'margin-right 200ms ease' }}>
           {gridSize.width > 0 && (
             <ReactGridLayout
               className="layout"
@@ -248,7 +262,8 @@ const Index = () => {
       >
         <QuickLogOverlay onSubmit={() => setShowLog(false)} />
       </Modal>
-      {showChar && <CharacterSheet onClose={() => setShowChar(false)} />}
+      {showChar && <CharacterSheet onClose={() => setShowChar(false)} onSkillClick={(skillName: string) => openDrawer('skill', skillName)} />}
+      <DetailDrawer open={drawerOpen} item={drawerItem} onClose={closeDrawer} onOpenLog={() => setShowLog(true)} />
       <Modal open={showSearch} onClose={() => setShowSearch(false)} title="SEARCH" width={600}>
         <SearchOverlay />
       </Modal>

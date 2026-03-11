@@ -2,12 +2,12 @@ import WidgetWrapper from '../WidgetWrapper';
 import ProgressBar from '../ProgressBar';
 import { stats, operatorData } from '@/data/mockData';
 
-interface WidgetProps { onClose?: () => void; onFullscreen?: () => void; isFullscreen?: boolean; }
+interface WidgetProps { onClose?: () => void; onFullscreen?: () => void; isFullscreen?: boolean; onStatClick?: (statKey: string) => void; }
 
-const StatOverviewWidget = ({ onClose, onFullscreen, isFullscreen }: WidgetProps) => (
+const StatOverviewWidget = ({ onClose, onFullscreen, isFullscreen, onStatClick }: WidgetProps) => (
   <WidgetWrapper title="STAT OVERVIEW" onClose={onClose} onFullscreen={onFullscreen} isFullscreen={isFullscreen}>
     {stats.map(s => (
-      <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, opacity: s.dormant ? 0.4 : 1 }}>
+      <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, opacity: s.dormant ? 0.4 : 1, cursor: s.dormant ? 'default' : 'pointer' }} onClick={() => !s.dormant && onStatClick?.(s.key)}>
         <span style={{ width: 16, fontSize: 14 }}>{s.icon}</span>
         <span style={{ width: 40, fontSize: 10 }}>{s.name}</span>
         {s.dormant ? (

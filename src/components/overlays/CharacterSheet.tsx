@@ -1,18 +1,22 @@
 import { useState, useCallback } from 'react';
 import CharSheetPage1 from './CharSheetPage1';
 import CharSheetPage2 from './CharSheetPage2';
+import CharSheetPage3 from './CharSheetPage3';
+import CharSheetPage4 from './CharSheetPage4';
+import CharSheetPage5 from './CharSheetPage5';
 interface CharacterSheetProps {
   onClose: () => void;
+  onSkillClick?: (skillName: string) => void;
 }
 
 const TOTAL_PAGES = 5;
 
-const CharacterSheet = ({ onClose }: CharacterSheetProps) => {
+const CharacterSheet = ({ onClose, onSkillClick }: CharacterSheetProps) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [animClass, setAnimClass] = useState('');
 
   const goToPage = useCallback((page: number) => {
-    if (page === currentPage || page > 2) return; // pages 3-5 disabled
+    if (page === currentPage || page > 5) return;
     setAnimClass('page-exit');
     setTimeout(() => {
       setCurrentPage(page);
@@ -25,7 +29,9 @@ const CharacterSheet = ({ onClose }: CharacterSheetProps) => {
     switch (currentPage) {
       case 1: return <CharSheetPage1 />;
       case 2: return <CharSheetPage2 />;
-      default: return null;
+      case 3: return <CharSheetPage3 onSkillClick={onSkillClick} />;
+      case 4: return <CharSheetPage4 />;
+      case 5: return <CharSheetPage5 />;
     }
   };
 
@@ -52,9 +58,9 @@ const CharacterSheet = ({ onClose }: CharacterSheetProps) => {
         {Array.from({ length: TOTAL_PAGES }, (_, i) => i + 1).map(page => (
           <button
             key={page}
-            className={`char-sheet-page-btn ${page === currentPage ? 'active' : ''} ${page > 2 ? 'disabled' : ''}`}
+            className={`char-sheet-page-btn ${page === currentPage ? 'active' : ''}`}
             onClick={() => goToPage(page)}
-            disabled={page > 2}
+            disabled={false}
           >
             {page}
           </button>
