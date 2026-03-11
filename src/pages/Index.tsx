@@ -183,7 +183,7 @@ const Index = () => {
           onOpenCharSheet={() => setShowChar(true)}
         />
 
-        <div style={{ flex: 1, overflow: 'hidden', padding: 8, position: 'relative' }}>
+        <div style={{ flex: 1, overflow: 'hidden', padding: 8, position: 'relative', marginRight: drawerOpen ? 420 : 0, transition: 'margin-right 200ms ease' }}>
           {gridSize.width > 0 && (
             <ReactGridLayout
               className="layout"
