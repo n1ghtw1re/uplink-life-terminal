@@ -6,11 +6,12 @@ import CharSheetPage4 from './CharSheetPage4';
 import CharSheetPage5 from './CharSheetPage5';
 interface CharacterSheetProps {
   onClose: () => void;
+  onSkillClick?: (skillName: string) => void;
 }
 
 const TOTAL_PAGES = 5;
 
-const CharacterSheet = ({ onClose }: CharacterSheetProps) => {
+const CharacterSheet = ({ onClose, onSkillClick }: CharacterSheetProps) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [animClass, setAnimClass] = useState('');
 
