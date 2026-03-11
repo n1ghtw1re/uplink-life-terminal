@@ -67,17 +67,19 @@ const Index = () => {
 
   const closeDrawer = () => setDrawerOpen(false);
 
+  const drawerWidth = drawerOpen ? 420 : 0;
+
   useEffect(() => {
     const update = () => {
       setGridSize({
-        width: window.innerWidth - sidebarWidth,
+        width: window.innerWidth - sidebarWidth - drawerWidth,
         height: window.innerHeight - 48,
       });
     };
     update();
     window.addEventListener('resize', update);
     return () => window.removeEventListener('resize', update);
-  }, [sidebarWidth]);
+  }, [sidebarWidth, drawerWidth]);
 
   useEffect(() => {
     const root = document.documentElement;
