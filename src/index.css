@@ -951,3 +951,17 @@
   width: 90%;
   text-align: center;
 }
+
+/* Detail Drawer scrollbar */
+.drawer-scroll-area::-webkit-scrollbar {
+  width: 4px;
+}
+.drawer-scroll-area::-webkit-scrollbar-track {
+  background: #0d0800;
+}
+.drawer-scroll-area::-webkit-scrollbar-thumb {
+  background: #996800;
+}
+.drawer-scroll-area::-webkit-scrollbar-thumb:hover {
+  background: #ffb000;
+}
