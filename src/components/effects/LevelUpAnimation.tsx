@@ -168,19 +168,34 @@ const LevelUpAnimation = () => {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
           <div className="levelup-modal">
-            {/* ASCII art */}
-            <div style={{ marginBottom: 8, fontFamily: "'IBM Plex Mono', monospace", fontSize: 8, lineHeight: 1.2, color: 'hsl(41 100% 50%)', whiteSpace: 'pre', textShadow: '0 0 8px hsla(41 100% 50% / 0.6)' }}>
-              {LEVEL_UP_ASCII.map((line, i) => <div key={i}>{line}</div>)}
-            </div>
-
-            {/* LEVEL UP typewriter */}
-            <div style={{
-              fontFamily: "'VT323', monospace", fontSize: 48,
-              color: 'hsl(41 100% 69%)',
-              textShadow: '0 0 16px hsla(41 100% 50% / 0.9), 0 0 40px hsla(41 100% 50% / 0.5)',
-              marginBottom: 16, minHeight: 58,
-            }}>
-              {titleText}
+            {/* ASCII art LEVEL UP */}
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <pre style={{
+                fontFamily: "'IBM Plex Mono', monospace",
+                fontSize: '11px',
+                lineHeight: '1.2',
+                color: 'hsl(41 100% 50%)',
+                textShadow: '0 0 8px rgba(255, 176, 0, 0.8), 0 0 20px rgba(255, 176, 0, 0.4)',
+                textAlign: 'left',
+                display: 'inline-block',
+                margin: '0 auto 24px auto',
+                whiteSpace: 'pre',
+                letterSpacing: '0px',
+              }}>
+{`██╗     ███████╗██╗   ██╗███████╗██╗
+██║     ██╔════╝██║   ██║██╔════╝██║
+██║     █████╗  ██║   ██║█████╗  ██║
+██║     ██╔══╝  ╚██╗ ██╔╝██╔══╝  ██║
+███████╗███████╗ ╚████╔╝ ███████╗███████╗
+╚══════╝╚══════╝  ╚═══╝  ╚══════╝╚══════╝
+                                          
+    ██╗   ██╗██████╗ 
+    ██║   ██║██╔══██╗
+    ██║   ██║██████╔╝
+    ██║   ██║██╔═══╝ 
+    ╚██████╔╝██║     
+     ╚═════╝ ╚═╝     `}
+              </pre>
             </div>
 
             {/* Level achieved */}
