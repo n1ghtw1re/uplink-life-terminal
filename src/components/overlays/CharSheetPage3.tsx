@@ -46,7 +46,7 @@ const dormantStats = [
   { icon: '▣', name: 'GRIT' },
 ];
 
-const CharSheetPage3 = () => {
+const CharSheetPage3 = ({ onSkillClick }: { onSkillClick?: (name: string) => void }) => {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
     BODY: false,
     WIRE: true,
