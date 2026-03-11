@@ -51,6 +51,8 @@ const Index = () => {
   const [showSearch, setShowSearch] = useState(false);
   const [showCheckin, setShowCheckin] = useState(false);
   const [showFlash, setShowFlash] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerItem, setDrawerItem] = useState<DrawerItem | null>(null);
   const [layout, setLayout] = useState(defaultLayout);
   const [activeWidgets, setActiveWidgets] = useState<string[]>(ALL_WIDGET_IDS);
   const [fullscreenWidget, setFullscreenWidget] = useState<string | null>(null);
