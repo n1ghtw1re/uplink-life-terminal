@@ -98,6 +98,7 @@ const Index = () => {
     if (tag === 'INPUT' || tag === 'TEXTAREA') return;
 
     if (e.key === 'Escape') {
+      if (drawerOpen) { closeDrawer(); return; }
       if (fullscreenWidget) { setFullscreenWidget(null); return; }
       setShowLog(false);
       setShowChar(false);
