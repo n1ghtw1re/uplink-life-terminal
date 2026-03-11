@@ -154,7 +154,7 @@ const Index = () => {
       case 'xp': return <XPWidget {...props} />;
       case 'checkin': return <CheckinWidget {...props} />;
       case 'heatmap': return <HeatmapWidget {...props} />;
-      case 'stats': return <StatOverviewWidget {...props} />;
+      case 'stats': return <StatOverviewWidget {...props} onStatClick={(statKey: string) => openDrawer('skill', statKey)} />;
       case 'courses': return <CoursesWidget {...props} />;
       case 'media': return <MediaWidget {...props} />;
       default: return null;
