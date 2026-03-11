@@ -111,7 +111,7 @@ const Index = () => {
     if (e.key === '/') { e.preventDefault(); setShowSearch(true); }
     if (e.key === '[') setSidebarExpanded(false);
     if (e.key === ']') setSidebarExpanded(true);
-  }, [fullscreenWidget]);
+  }, [fullscreenWidget, drawerOpen]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKey);
