@@ -143,6 +143,33 @@ export function getMasterLevel(totalXP: number): {
   };
 }
 
+// Stat XP thresholds — same curve as master but per-stat
+const STAT_LEVEL_THRESHOLDS = [0, 300, 800, 1600, 2800, 4500, 7000, 10500, 15000, 21000];
+
+export function getStatLevel(totalXP: number): {
+  level: number;
+  xpInLevel: number;
+  xpForLevel: number;
+} {
+  let level = 1;
+  for (let i = STAT_LEVEL_THRESHOLDS.length - 1; i >= 0; i--) {
+    if (totalXP >= STAT_LEVEL_THRESHOLDS[i]) { level = i + 1; break; }
+  }
+  const current = STAT_LEVEL_THRESHOLDS[level - 1];
+  const next = level < 10 ? STAT_LEVEL_THRESHOLDS[level] : STAT_LEVEL_THRESHOLDS[9] + 10000;
+  return { level, xpInLevel: totalXP - current, xpForLevel: next - current };
+}
+
+export const STAT_LEVEL_TITLES: Record<StatKey, string[]> = {
+  body:  ['SEDENTARY','STIRRING','MOVING','ACTIVE','CONDITIONED','TRAINED','ATHLETIC','ELITE','APEX','UNKILLABLE'],
+  wire:  ['OFFLINE','CURIOUS','CONNECTED','CAPABLE','SKILLED','FLUENT','EXPERT','ARCHITECT','WIZARD','GHOST'],
+  mind:  ['BLANK','AWAKENING','AWARE','INFORMED','STUDIED','LEARNED','SCHOLAR','EXPERT','SAGE','ORACLE'],
+  cool:  ['UNKNOWN','NOTICED','PRESENT','CREDIBLE','RESPECTED','INFLUENTIAL','AUTHORITATIVE','ICONIC','LEGENDARY','UNTOUCHABLE'],
+  grit:  ['DRIFTING','TRYING','CONSISTENT','DISCIPLINED','HARDENED','IRONCLAD','RELENTLESS','UNBREAKABLE','TITANIUM','IMMOVABLE'],
+  flow:  ['SILENT','DABBLING','MAKING','CREATING','FLOWING','EXPRESSIVE','MASTERFUL','INSPIRED','VISIONARY','SIGNAL'],
+  ghost: ['ABSENT','STIRRING','PRESENT','AWARE','STILL','CENTRED','DEEP','CLEAR','TRANSPARENT','VOID'],
+};
+
 // ─── INTERFACES ──────────────────────────────────────────────
 
 export interface Operator {

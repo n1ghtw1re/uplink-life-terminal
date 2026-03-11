@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { operatorData } from '@/data/mockData';
+import { useAuth } from '@/contexts/AuthContext';
+import { useOperator } from '@/hooks/useOperator';
 import ProgressBar from './ProgressBar';
 
 interface TopBarProps {
@@ -13,6 +14,8 @@ interface TopBarProps {
 
 const TopBar = ({ onOpenLog, onOpenCheckin, onOpenCharSheet, onOpenSearch, theme, onThemeChange }: TopBarProps) => {
   const [time, setTime] = useState(new Date());
+  const { user } = useAuth();
+  const { data: op, isLoading } = useOperator(user?.id);
 
   useEffect(() => {
     const iv = setInterval(() => setTime(new Date()), 1000);
@@ -23,8 +26,15 @@ const TopBar = ({ onOpenLog, onOpenCheckin, onOpenCharSheet, onOpenSearch, theme
   const timeStr = `${fmt(time.getHours())}:${fmt(time.getMinutes())}:${fmt(time.getSeconds())}`;
   const dateStr = `${time.getFullYear()}.${fmt(time.getMonth() + 1)}.${fmt(time.getDate())}`;
 
-  const op = operatorData;
-  const multClass = op.multiplier >= 3 ? 'pulse-glow' : op.multiplier >= 2 ? 'text-glow-bright' : '';
+  const level      = op?.level      ?? 1;
+  const title      = op?.title      ?? 'INITIALISING';
+  const xpInLevel  = op?.xpInLevel  ?? 0;
+  const xpForLevel = op?.xpForLevel ?? 500;
+  const streak     = op?.streak     ?? 0;
+  const multiplier = op?.multiplier ?? 1.0;
+  const totalXP    = op?.totalXP    ?? 0;
+
+  const multClass = multiplier >= 3 ? 'pulse-glow' : multiplier >= 2 ? 'text-glow-bright' : '';
 
   return (
     <div style={{
@@ -39,23 +49,28 @@ const TopBar = ({ onOpenLog, onOpenCheckin, onOpenCharSheet, onOpenSearch, theme
       zIndex: 100,
       position: 'relative',
     }}>
-      {/* Section 1 - Identity */}
       <span className="font-display text-glow-bright" style={{ fontSize: 20, color: 'hsl(var(--accent))' }}>[ UPLINK ]</span>
       <span style={{ fontSize: 11, color: 'hsl(var(--text-dim))' }}>SYS-TIME: {timeStr}</span>
       <span style={{ fontSize: 11, color: 'hsl(var(--text-dim))' }}>DATE: {dateStr}</span>
       <span style={{ color: 'hsl(var(--text-dim))', opacity: 0.5 }}>│</span>
 
-      {/* Section 2 - Operator */}
-      <span className="font-display text-glow" style={{ fontSize: 16, color: 'hsl(var(--accent-bright))' }}>
-        LVL {op.level} // {op.title}
-      </span>
-      <ProgressBar value={op.xp} max={op.xpToNext} width="120px" />
-      <span style={{ fontSize: 10, color: 'hsl(var(--text-dim))' }}>{op.xp.toLocaleString()} XP</span>
-      <span style={{ fontSize: 10, color: 'hsl(var(--text-dim))' }}>STK: {op.streak}d</span>
-      <span className={multClass} style={{ fontSize: 10, color: 'hsl(var(--accent-bright))' }}>{op.multiplier.toFixed(1)}×</span>
+      {isLoading ? (
+        <span style={{ fontSize: 11, color: 'hsl(var(--text-dim))' }}>CONNECTING...</span>
+      ) : (
+        <>
+          <span className="font-display text-glow" style={{ fontSize: 16, color: 'hsl(var(--accent-bright))' }}>
+            LVL {level} // {title}
+          </span>
+          <ProgressBar value={xpInLevel} max={xpForLevel} width="120px" />
+          <span style={{ fontSize: 10, color: 'hsl(var(--text-dim))' }}>{totalXP.toLocaleString()} XP</span>
+          <span style={{ fontSize: 10, color: 'hsl(var(--text-dim))' }}>STK: {streak}d</span>
+          <span className={multClass} style={{ fontSize: 10, color: 'hsl(var(--accent-bright))' }}>
+            {multiplier.toFixed(1)}x
+          </span>
+        </>
+      )}
       <span style={{ color: 'hsl(var(--text-dim))', opacity: 0.5 }}>│</span>
 
-      {/* Section 3 - Quick actions */}
       <div style={{ display: 'flex', gap: 4 }}>
         <button className="topbar-btn" onClick={onOpenSearch}>
           ⌕ <span style={{ fontSize: 9, opacity: 0.5 }}>/</span>
@@ -70,7 +85,6 @@ const TopBar = ({ onOpenLog, onOpenCheckin, onOpenCharSheet, onOpenSearch, theme
       </div>
       <span style={{ color: 'hsl(var(--text-dim))', opacity: 0.5 }}>│</span>
 
-      {/* Section 4 - Themes */}
       <div style={{ display: 'flex', gap: 4 }}>
         {['AMBER', 'GRN', 'DOS'].map(t => (
           <button
@@ -83,7 +97,6 @@ const TopBar = ({ onOpenLog, onOpenCheckin, onOpenCharSheet, onOpenSearch, theme
         <button className="theme-pill locked" disabled>🔒 ICE</button>
       </div>
 
-      {/* Section 5 - Cursor */}
       <div style={{ marginLeft: 'auto' }}>
         <span className="cursor-blink text-glow" />
       </div>
