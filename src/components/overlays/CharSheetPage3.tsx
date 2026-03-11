@@ -46,7 +46,7 @@ const dormantStats = [
   { icon: '▣', name: 'GRIT' },
 ];
 
-const CharSheetPage3 = () => {
+const CharSheetPage3 = ({ onSkillClick }: { onSkillClick?: (name: string) => void }) => {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
     BODY: false,
     WIRE: true,
@@ -133,7 +133,12 @@ const CharSheetPage3 = () => {
                 {stat.skills.map((skill, si) => (
                   <div key={skill.name} style={{ marginBottom: si < stat.skills.length - 1 ? 8 : 0 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
-                      <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: '#996800' }}>
+                      <span
+                        style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: '#996800', cursor: 'pointer' }}
+                        onClick={(e) => { e.stopPropagation(); onSkillClick?.(skill.name); }}
+                        onMouseEnter={e => { e.currentTarget.style.color = '#ffb000'; }}
+                        onMouseLeave={e => { e.currentTarget.style.color = '#996800'; }}
+                      >
                         {skill.name}
                       </span>
                       <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: '#ffd060' }}>
