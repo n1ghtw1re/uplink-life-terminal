@@ -60,6 +60,13 @@ const Index = () => {
 
   const sidebarWidth = sidebarExpanded ? 220 : 48;
 
+  const openDrawer = (type: 'skill', id: string) => {
+    setDrawerItem({ type, id });
+    setDrawerOpen(true);
+  };
+
+  const closeDrawer = () => setDrawerOpen(false);
+
   useEffect(() => {
     const update = () => {
       setGridSize({
