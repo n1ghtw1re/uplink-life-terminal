@@ -132,7 +132,8 @@ const QuickLogOverlay = ({ onSubmit }: QuickLogOverlayProps) => {
   const totalXp = skillXp + statTotalXp + masterXp;
 
   const handleSubmit = async (e: React.MouseEvent<HTMLButtonElement>) => {
-    if (!selectedSkill || !user) return;
+  console.log('SUBMIT', { selectedSkill, user, duration }); // ADD THIS
+  if (!selectedSkill || !user) return;
 
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const cx = rect.left + rect.width / 2;
