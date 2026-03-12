@@ -1,6 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { skills, courses, operatorData } from '@/data/mockData';
-import type { Skill } from '@/data/mockData';
+import { useAuth } from '@/contexts/AuthContext';
+import { useOperator } from '@/hooks/useOperator';
+import { useSkills, SkillOption } from '@/hooks/useSkills';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { logSession } from '@/services/sessionService';
+import { StatKey, STAT_META, getStreakTier, STREAK_MULTIPLIERS } from '@/types';
 import { toast } from '@/hooks/use-toast';
 import { triggerXPFloat } from '@/components/effects/XPFloatLayer';
 
@@ -12,9 +17,8 @@ const DURATION_PRESETS = [
   { label: '2h', value: 120 },
 ];
 
-const STAT_ICONS: Record<string, string> = {
-  BODY: '▲', WIRE: '⬡', MIND: '◈', COOL: '◆', GRIT: '▣', FLOW: '✦', GHOST: '░',
-};
+const LEGACY_RATE = 0.5;
+const BASE_XP_PER_HOUR = 100;
 
 function fuzzyMatch(query: string, target: string): boolean {
   const q = query.toLowerCase();
@@ -31,18 +35,46 @@ interface QuickLogOverlayProps {
 }
 
 const QuickLogOverlay = ({ onSubmit }: QuickLogOverlayProps) => {
+  const { user } = useAuth();
+  const { data: op } = useOperator(user?.id);
+  const { data: skills } = useSkills(user?.id);
+  const queryClient = useQueryClient();
+
+  const { data: activeCourses } = useQuery({
+    queryKey: ['courses-active', user?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('courses')
+        .select('id, name')
+        .eq('user_id', user!.id)
+        .eq('status', 'ACTIVE');
+      return data ?? [];
+    },
+    enabled: !!user?.id,
+  });
+
+  const logMutation = useMutation({
+    mutationFn: logSession,
+    onSuccess: (session) => {
+      queryClient.invalidateQueries({ queryKey: ['operator', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['stats', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['xp-recent', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['checkins-heatmap', user?.id] });
+      onSubmit?.(session.skillXpAwarded + session.masterXpAwarded);
+    },
+  });
+
   const [query, setQuery] = useState('');
-  const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null);
+  const [selectedSkill, setSelectedSkill] = useState<SkillOption | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const [highlightIdx, setHighlightIdx] = useState(0);
   const [duration, setDuration] = useState(60);
   const [activePreset, setActivePreset] = useState<number | null>(60);
   const [split, setSplit] = useState<number[]>([50, 50]);
   const [notes, setNotes] = useState('');
-  const [tagCourse, setTagCourse] = useState('');
+  const [tagCourseId, setTagCourseId] = useState('');
   const [isLegacy, setIsLegacy] = useState(false);
   const [logYesterday, setLogYesterday] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -50,51 +82,30 @@ const QuickLogOverlay = ({ onSubmit }: QuickLogOverlayProps) => {
   }, []);
 
   const filtered = query.length > 0
-    ? skills.filter(s => fuzzyMatch(query, s.name)).slice(0, 6)
-    : skills.slice(0, 6);
+    ? (skills ?? []).filter(s => fuzzyMatch(query, s.name)).slice(0, 6)
+    : (skills ?? []).slice(0, 6);
 
-  const selectSkill = useCallback((skill: Skill) => {
+  const selectSkill = useCallback((skill: SkillOption) => {
     setSelectedSkill(skill);
     setQuery(skill.name);
     setShowDropdown(false);
     setHighlightIdx(0);
-    if (skill.stats.length === 2) {
-      setSplit(skill.defaultSplit || [50, 50]);
+    if (skill.statKeys.length === 2) {
+      setSplit(skill.defaultSplit?.length === 2 ? skill.defaultSplit : [50, 50]);
     }
   }, []);
 
   const handleInputKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       e.stopPropagation();
-      if (showDropdown) {
-        setShowDropdown(false);
-      } else {
-        setQuery('');
-        setSelectedSkill(null);
-      }
+      if (showDropdown) { setShowDropdown(false); }
+      else { setQuery(''); setSelectedSkill(null); }
       return;
     }
     if (!showDropdown) return;
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setHighlightIdx(i => Math.min(i + 1, filtered.length - 1));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setHighlightIdx(i => Math.max(i - 1, 0));
-    } else if (e.key === 'Enter' && filtered[highlightIdx]) {
-      e.preventDefault();
-      selectSkill(filtered[highlightIdx]);
-    }
-  };
-
-  const handleDurationPreset = (val: number) => {
-    setDuration(val);
-    setActivePreset(val);
-  };
-
-  const handleCustomDuration = (val: number) => {
-    setDuration(val);
-    setActivePreset(null);
+    if (e.key === 'ArrowDown') { e.preventDefault(); setHighlightIdx(i => Math.min(i + 1, filtered.length - 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setHighlightIdx(i => Math.max(i - 1, 0)); }
+    else if (e.key === 'Enter' && filtered[highlightIdx]) { e.preventDefault(); selectSkill(filtered[highlightIdx]); }
   };
 
   const handleSplitChange = (idx: number, val: number) => {
@@ -105,70 +116,80 @@ const QuickLogOverlay = ({ onSubmit }: QuickLogOverlayProps) => {
     setSplit(newSplit);
   };
 
-  // XP calculations
-  const mult = isLegacy ? 1.0 : operatorData.multiplier;
-  const legacyFactor = isLegacy ? 0.6 : 1.0;
-  const baseSkillXp = duration * 2;
-  const skillXp = Math.round(baseSkillXp * mult * legacyFactor);
-  const statTotalXp = Math.round(baseSkillXp * 0.6 * mult * legacyFactor);
-  const masterXp = Math.round(baseSkillXp * 0.3 * mult * legacyFactor);
-
-  const statXps = selectedSkill?.stats.length === 2
+  // XP preview — mirrors xpService logic
+  const streak = op?.streak ?? 0;
+  const streakTier = getStreakTier(streak);
+  const mult = isLegacy ? 1.0 : (STREAK_MULTIPLIERS[streakTier] ?? 1.0);
+  const legacyFactor = isLegacy ? LEGACY_RATE : 1.0;
+  const baseAmount = Math.floor((duration / 60) * BASE_XP_PER_HOUR);
+  const skillXp = Math.round(baseAmount * mult * legacyFactor);
+  const statTotalXp = Math.round(baseAmount * 0.6 * mult * legacyFactor);
+  const masterXp = Math.round(baseAmount * 0.3 * mult * legacyFactor);
+  const hasDualStat = selectedSkill && selectedSkill.statKeys.length === 2;
+  const statXps = hasDualStat
     ? [Math.round(statTotalXp * split[0] / 100), Math.round(statTotalXp * split[1] / 100)]
     : [statTotalXp];
-
   const totalXp = skillXp + statTotalXp + masterXp;
 
-  const handleSubmit = (e: React.MouseEvent<HTMLButtonElement>) => {
-    if (!selectedSkill) return;
+  const handleSubmit = async (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (!selectedSkill || !user) return;
+
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const cx = rect.left + rect.width / 2;
     const cy = rect.top - 10;
-
-    // Cascade: skill XP, stat XP, master XP
     triggerXPFloat(cx, cy, skillXp, mult > 1 ? mult : undefined);
     setTimeout(() => triggerXPFloat(cx - 50, cy, statTotalXp, mult > 1 ? mult : undefined), 200);
     setTimeout(() => triggerXPFloat(cx + 50, cy, masterXp, mult > 1 ? mult : undefined), 400);
 
-    setSubmitting(true);
-    setTimeout(() => {
-      onSubmit?.(totalXp);
-      toast({
-        title: '✓ SESSION LOGGED',
-        description: `${selectedSkill.name}  ${duration}min  +${totalXp} XP  ${!isLegacy ? `[ON FIRE ${mult}×]` : '[LEGACY]'}`,
-      });
-      setSubmitting(false);
-    }, 300);
-  };
+    const statSplit = selectedSkill.statKeys.length === 2
+      ? [
+          { stat: selectedSkill.statKeys[0], percent: split[0] },
+          { stat: selectedSkill.statKeys[1], percent: split[1] },
+        ]
+      : [{ stat: selectedSkill.statKeys[0], percent: 100 }];
 
-  const handleFullForm = () => {
-    toast({
-      title: 'FULL FORM — COMING SOON',
-      description: 'Detailed session logging will be available in a future build.',
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    logMutation.mutate({
+      userId: user.id,
+      skillId: selectedSkill.id,
+      skillName: selectedSkill.name,
+      durationMinutes: duration,
+      statSplit,
+      notes: notes || undefined,
+      isLegacy,
+      loggedAt: logYesterday ? yesterday : undefined,
+    }, {
+      onSuccess: () => {
+        toast({
+          title: '✓ SESSION LOGGED',
+          description: `${selectedSkill.name}  ${duration}min  +${totalXp} XP${isLegacy ? ' [LEGACY]' : ` [${streakTier.replace('_', ' ')} ${mult}×]`}`,
+        });
+      },
+      onError: (err) => {
+        toast({ title: 'ERROR', description: String(err) });
+      },
     });
   };
 
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = `${yesterday.getFullYear()}.${String(yesterday.getMonth() + 1).padStart(2, '0')}.${String(yesterday.getDate()).padStart(2, '0')}`;
-
-  const activeCourses = courses.filter(c => c.status === 'ACTIVE');
-  const hasDualStat = selectedSkill && selectedSkill.stats.length === 2;
+  const yesterdayStr = `${yesterday.getFullYear()}.${String(yesterday.getMonth()+1).padStart(2,'0')}.${String(yesterday.getDate()).padStart(2,'0')}`;
 
   return (
     <div style={{ fontSize: 11 }}>
-      {/* TWO-COLUMN LAYOUT */}
       <div style={{ display: 'flex', gap: 16 }}>
-        {/* LEFT COLUMN — Core fields */}
+        {/* LEFT COLUMN */}
         <div style={{ flex: 1, minWidth: 0 }}>
-          {/* SKILL FIELD */}
+          {/* SKILL */}
           <div style={{ marginBottom: 10, position: 'relative' }}>
             <div style={{ color: 'hsl(var(--text-dim))', marginBottom: 4 }}>SKILL:</div>
             <input
               ref={inputRef}
               className="crt-input"
               style={{ width: '100%' }}
-              placeholder="start typing..."
+              placeholder={skills?.length === 0 ? 'no skills yet — add skills first' : 'start typing...'}
               value={query}
               onChange={e => {
                 setQuery(e.target.value);
@@ -183,14 +204,16 @@ const QuickLogOverlay = ({ onSubmit }: QuickLogOverlayProps) => {
               <div className="ql-dropdown">
                 {filtered.map((skill, i) => (
                   <div
-                    key={skill.name}
+                    key={skill.id}
                     className={`ql-dropdown-item ${i === highlightIdx ? 'ql-dropdown-item--active' : ''}`}
                     onMouseEnter={() => setHighlightIdx(i)}
                     onClick={() => selectSkill(skill)}
                   >
                     <span style={{ color: 'hsl(var(--accent))', marginRight: 8 }}>{skill.icon}</span>
                     <span style={{ flex: 1 }}>{skill.name}</span>
-                    <span style={{ color: 'hsl(var(--text-dim))', fontSize: 10 }}>{skill.stats.join(' / ')}</span>
+                    <span style={{ color: 'hsl(var(--text-dim))', fontSize: 10 }}>
+                      {skill.statKeys.map(k => k.toUpperCase()).join(' / ')}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -205,7 +228,7 @@ const QuickLogOverlay = ({ onSubmit }: QuickLogOverlayProps) => {
                 <button
                   key={p.value}
                   className={`ql-preset-btn ${activePreset === p.value ? 'ql-preset-btn--active' : ''}`}
-                  onClick={() => handleDurationPreset(p.value)}
+                  onClick={() => { setDuration(p.value); setActivePreset(p.value); }}
                 >
                   {p.label}
                 </button>
@@ -216,11 +239,11 @@ const QuickLogOverlay = ({ onSubmit }: QuickLogOverlayProps) => {
                 style={{ width: 50, textAlign: 'center' }}
                 type="text"
                 inputMode="numeric"
-                pattern="[0-9]*"
                 value={duration}
                 onChange={e => {
                   const v = e.target.value.replace(/\D/g, '');
-                  handleCustomDuration(Number(v) || 1);
+                  setDuration(Number(v) || 1);
+                  setActivePreset(null);
                 }}
               />
               <span style={{ color: 'hsl(var(--text-dim))' }}>min</span>
@@ -231,16 +254,15 @@ const QuickLogOverlay = ({ onSubmit }: QuickLogOverlayProps) => {
           {hasDualStat && (
             <div style={{ marginBottom: 10 }}>
               <div style={{ color: 'hsl(var(--text-dim))', marginBottom: 4 }}>STAT SPLIT:</div>
-              {selectedSkill.stats.map((stat, idx) => (
-                <div key={stat} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                  <span style={{ width: 50, fontSize: 10, color: 'hsl(var(--accent))' }}>
-                    {STAT_ICONS[stat] || '?'} {stat}
+              {selectedSkill.statKeys.map((statKey, idx) => (
+                <div key={statKey} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <span style={{ width: 60, fontSize: 10, color: 'hsl(var(--accent))' }}>
+                    {STAT_META[statKey]?.icon} {statKey.toUpperCase()}
                   </span>
                   <input
                     type="range"
                     className="ql-split-slider"
-                    min={10}
-                    max={90}
+                    min={10} max={90}
                     value={split[idx]}
                     onChange={e => handleSplitChange(idx, Number(e.target.value))}
                     style={{ flex: 1 }}
@@ -271,14 +293,10 @@ const QuickLogOverlay = ({ onSubmit }: QuickLogOverlayProps) => {
             <div style={{ flex: 1 }}>
               <div style={{ color: 'hsl(var(--text-dim))', marginBottom: 4 }}>TAG TO:</div>
               <div className="crt-select-wrapper">
-                <select
-                  className="crt-select"
-                  value={tagCourse}
-                  onChange={e => setTagCourse(e.target.value)}
-                >
+                <select className="crt-select" value={tagCourseId} onChange={e => setTagCourseId(e.target.value)}>
                   <option value="">course</option>
-                  {activeCourses.map(c => (
-                    <option key={c.name} value={c.name}>{c.name}</option>
+                  {(activeCourses ?? []).map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </select>
               </div>
@@ -295,35 +313,21 @@ const QuickLogOverlay = ({ onSubmit }: QuickLogOverlayProps) => {
         </div>
 
         {/* DIVIDER */}
-        <div style={{
-          width: 1,
-          background: '#261600',
-          alignSelf: 'stretch',
-          flexShrink: 0,
-        }} />
+        <div style={{ width: 1, background: '#261600', alignSelf: 'stretch', flexShrink: 0 }} />
 
-        {/* RIGHT COLUMN — Options + XP Preview */}
+        {/* RIGHT COLUMN */}
         <div style={{ width: 240, flexShrink: 0, alignSelf: 'start', paddingLeft: 8 }}>
-          {/* Toggles */}
           <div style={{ marginBottom: 10 }}>
             <div style={{ color: 'hsl(var(--text-dim))', marginBottom: 6, fontSize: 10, letterSpacing: 1 }}>
               ── OPTIONS ───────────
             </div>
             <label className="crt-checkbox" style={{ marginBottom: 6, display: 'flex' }}>
-              <span className="crt-checkbox-box" onClick={() => setIsLegacy(!isLegacy)}>
-                {isLegacy ? '×' : ''}
-              </span>
-              <span style={{ color: isLegacy ? 'hsl(var(--accent))' : 'hsl(var(--text-dim))' }}>
-                LEGACY ENTRY
-              </span>
+              <span className="crt-checkbox-box" onClick={() => setIsLegacy(!isLegacy)}>{isLegacy ? '×' : ''}</span>
+              <span style={{ color: isLegacy ? 'hsl(var(--accent))' : 'hsl(var(--text-dim))' }}>LEGACY ENTRY</span>
             </label>
             <label className="crt-checkbox" style={{ display: 'flex' }}>
-              <span className="crt-checkbox-box" onClick={() => setLogYesterday(!logYesterday)}>
-                {logYesterday ? '×' : ''}
-              </span>
-              <span style={{ color: logYesterday ? 'hsl(var(--accent))' : 'hsl(var(--text-dim))' }}>
-                LOG FOR YESTERDAY
-              </span>
+              <span className="crt-checkbox-box" onClick={() => setLogYesterday(!logYesterday)}>{logYesterday ? '×' : ''}</span>
+              <span style={{ color: logYesterday ? 'hsl(var(--accent))' : 'hsl(var(--text-dim))' }}>LOG FOR YESTERDAY</span>
             </label>
             {logYesterday && (
               <div style={{ color: 'hsl(var(--text-dim))', fontSize: 10, marginTop: 4, paddingLeft: 20 }}>
@@ -332,26 +336,20 @@ const QuickLogOverlay = ({ onSubmit }: QuickLogOverlayProps) => {
             )}
           </div>
 
-          {/* XP PREVIEW */}
-          <div style={{
-            borderTop: '1px solid hsl(var(--accent-dim))',
-            paddingTop: 8,
-          }}>
+          <div style={{ borderTop: '1px solid hsl(var(--accent-dim))', paddingTop: 8 }}>
             <div style={{ color: 'hsl(var(--text-dim))', marginBottom: 6, fontSize: 10, letterSpacing: 1 }}>
               ── XP PREVIEW ────────
             </div>
             <div style={{ color: 'hsl(var(--accent))', fontSize: 10, lineHeight: 1.8 }}>
-              <div>
-                SKILL{'  '}+{skillXp} XP{isLegacy && <span style={{ color: 'hsl(var(--text-dim))', marginLeft: 8 }}>[LEGACY]</span>}
-              </div>
+              <div>SKILL{'  '}+{skillXp} XP{isLegacy && <span style={{ color: 'hsl(var(--text-dim))', marginLeft: 8 }}>[LEGACY]</span>}</div>
               {selectedSkill ? (
-                selectedSkill.stats.length === 2 ? (
+                hasDualStat ? (
                   <>
-                    <div>{selectedSkill.stats[0]}{'  '}+{statXps[0]} XP</div>
-                    <div>{selectedSkill.stats[1]}{'  '}+{statXps[1]} XP</div>
+                    <div>{selectedSkill.statKeys[0].toUpperCase()}{'  '}+{statXps[0]} XP</div>
+                    <div>{selectedSkill.statKeys[1].toUpperCase()}{'  '}+{statXps[1]} XP</div>
                   </>
                 ) : (
-                  <div>{selectedSkill.stats[0]}{'  '}+{statXps[0]} XP</div>
+                  <div>{selectedSkill.statKeys[0].toUpperCase()}{'  '}+{statXps[0]} XP</div>
                 )
               ) : (
                 <div style={{ color: 'hsl(var(--text-dim))' }}>STAT{'  '}+{statTotalXp} XP</div>
@@ -362,10 +360,10 @@ const QuickLogOverlay = ({ onSubmit }: QuickLogOverlayProps) => {
                 {isLegacy ? (
                   <span className="multiplier-tag" style={{ opacity: 0.5 }}>LEGACY</span>
                 ) : mult >= 3 ? (
-                  <span className="multiplier-tag pulse-glow" style={{ borderColor: 'hsl(var(--accent))', color: 'hsl(var(--accent))' }}>LEGENDARY {mult}×</span>
-                ) : (
-                  <span className="multiplier-tag">ON FIRE</span>
-                )}
+                  <span className="multiplier-tag pulse-glow">LEGENDARY {mult}×</span>
+                ) : mult > 1 ? (
+                  <span className="multiplier-tag">{streakTier.replace('_', ' ')} {mult}×</span>
+                ) : null}
               </div>
               <div style={{ marginTop: 4 }}>
                 <span style={{ fontSize: 13, color: 'hsl(var(--accent-bright))' }}>TOTAL: </span>
@@ -378,26 +376,20 @@ const QuickLogOverlay = ({ onSubmit }: QuickLogOverlayProps) => {
         </div>
       </div>
 
-      {/* BUTTONS — full width bottom */}
-      <div style={{
-        borderTop: '1px solid hsl(var(--accent-dim))',
-        paddingTop: 8,
-        marginTop: 12,
-        display: 'flex',
-        gap: 8,
-      }}>
+      {/* BUTTONS */}
+      <div style={{ borderTop: '1px solid hsl(var(--accent-dim))', paddingTop: 8, marginTop: 12, display: 'flex', gap: 8 }}>
         <button
           className="topbar-btn"
           style={{ flex: 1, opacity: !selectedSkill ? 0.4 : 1 }}
-          disabled={!selectedSkill || submitting}
+          disabled={!selectedSkill || logMutation.isPending}
           onClick={handleSubmit}
         >
-          {submitting ? '>> LOGGING...' : '>> SUBMIT LOG'}
+          {logMutation.isPending ? '>> LOGGING...' : '>> SUBMIT LOG'}
         </button>
         <button
           className="topbar-btn"
           style={{ flex: 1, color: 'hsl(var(--text-dim))' }}
-          onClick={handleFullForm}
+          onClick={() => toast({ title: 'FULL FORM — COMING SOON', description: 'Detailed session logging will be available in a future build.' })}
         >
           OPEN FULL FORM
         </button>
