@@ -20,7 +20,6 @@ export default function AddCourseModal({ onClose }: Props) {
   const queryClient = useQueryClient();
   const { data: allSkills } = useSkills(user?.id);
 
-  // Core fields
   const [name, setName]         = useState('');
   const [provider, setProvider] = useState('');
   const [subject, setSubject]   = useState('');
@@ -30,18 +29,19 @@ export default function AddCourseModal({ onClose }: Props) {
   const [isLegacy, setIsLegacy]     = useState(false);
   const [saving, setSaving]         = useState(false);
 
-  // Stats + skills
   const [linkedStats, setLinkedStats]       = useState<StatKey[]>([]);
   const [linkedSkillIds, setLinkedSkillIds] = useState<string[]>([]);
-
-  // Modules
-  const [modules, setModules] = useState<string[]>(['']);
+  const [modules, setModules]               = useState<string[]>(['']);
 
   const toggleStat = (k: StatKey) =>
-    setLinkedStats(prev => prev.includes(k) ? prev.filter(s => s !== k) : [...prev, k]);
+    setLinkedStats(prev =>
+      prev.includes(k) ? prev.filter(s => s !== k) : [...prev, k]
+    );
 
-  const toggleSkill = (id: string) =>
-    setLinkedSkillIds(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
+  const toggleSkillId = (id: string) =>
+    setLinkedSkillIds(prev =>
+      prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
+    );
 
   const updateModule = (i: number, val: string) =>
     setModules(prev => prev.map((m, idx) => idx === i ? val : m));
@@ -51,16 +51,22 @@ export default function AddCourseModal({ onClose }: Props) {
 
   const addModule = () => setModules(prev => [...prev, '']);
 
-  // Skills filtered to selected stats (show all if no stat selected)
+  // Skills filtered to selected stats; if no stat selected show all
   const visibleSkills = linkedStats.length > 0
-    ? (allSkills ?? []).filter(s => s.statKeys.some(k => linkedStats.includes(k as StatKey)))
+    ? (allSkills ?? []).filter(s =>
+        s.statKeys.some(k => linkedStats.includes(k as StatKey))
+      )
     : (allSkills ?? []);
+
+  const selectedSkillNames = (allSkills ?? [])
+    .filter(s => linkedSkillIds.includes(s.id))
+    .map(s => s.name)
+    .join(', ');
 
   const handleSubmit = async () => {
     if (!name.trim() || !user) return;
     setSaving(true);
     try {
-      // 1 — Insert course row
       const { data: course, error: courseErr } = await supabase
         .from('courses')
         .insert({
@@ -83,7 +89,6 @@ export default function AddCourseModal({ onClose }: Props) {
 
       if (courseErr) throw courseErr;
 
-      // 2 — Insert modules into course_sections (skip blanks)
       const validModules = modules
         .map((title, sort_order) => ({ title: title.trim(), sort_order }))
         .filter(m => m.title.length > 0);
@@ -96,11 +101,10 @@ export default function AddCourseModal({ onClose }: Props) {
       }
 
       queryClient.invalidateQueries({ queryKey: ['courses', user.id] });
-      queryClient.invalidateQueries({ queryKey: ['courses-active', user.id] });
 
       toast({
         title: '✓ COURSE ADDED',
-        description: `${name.trim()}${validModules.length > 0 ? ` — ${validModules.length} module${validModules.length > 1 ? 's' : ''}` : ''}`,
+        description: `${name.trim()}${validModules.length > 0 ? ` — ${validModules.length} module${validModules.length !== 1 ? 's' : ''}` : ''}`,
       });
       onClose();
     } catch (err) {
@@ -111,20 +115,13 @@ export default function AddCourseModal({ onClose }: Props) {
   };
 
   return (
-    <div style={{
-      fontSize: 11,
-      display: 'grid',
-      gap: 14,
-      maxHeight: '75vh',
-      overflowY: 'auto',
-      paddingRight: 4,
-    }}>
+    <div style={{ display: 'grid', gap: 13, fontSize: 11 }}>
 
-      {/* ── Name ── */}
+      {/* Name */}
       <div>
-        <label className="crt-field-label">
+        <div className="crt-field-label">
           COURSE NAME <span style={{ color: 'hsl(var(--accent))' }}>*</span>
-        </label>
+        </div>
         <input
           className="crt-input"
           style={{ width: '100%' }}
@@ -136,10 +133,10 @@ export default function AddCourseModal({ onClose }: Props) {
         />
       </div>
 
-      {/* ── Provider + Subject ── */}
+      {/* Provider + Subject */}
       <div style={{ display: 'flex', gap: 10 }}>
         <div style={{ flex: 1 }}>
-          <label className="crt-field-label">PROVIDER</label>
+          <div className="crt-field-label">PROVIDER</div>
           <input
             className="crt-input"
             style={{ width: '100%' }}
@@ -150,7 +147,7 @@ export default function AddCourseModal({ onClose }: Props) {
           />
         </div>
         <div style={{ flex: 1 }}>
-          <label className="crt-field-label">SUBJECT</label>
+          <div className="crt-field-label">SUBJECT</div>
           <input
             className="crt-input"
             style={{ width: '100%' }}
@@ -162,9 +159,9 @@ export default function AddCourseModal({ onClose }: Props) {
         </div>
       </div>
 
-      {/* ── URL ── */}
+      {/* URL */}
       <div>
-        <label className="crt-field-label">URL <span style={{ opacity: 0.5 }}>(optional)</span></label>
+        <div className="crt-field-label">URL <span style={{ opacity: 0.5 }}>(optional)</span></div>
         <input
           className="crt-input"
           style={{ width: '100%' }}
@@ -175,21 +172,23 @@ export default function AddCourseModal({ onClose }: Props) {
         />
       </div>
 
-      {/* ── Linked stats ── */}
+      {/* Linked stats — compact toggle row */}
       <div>
-        <label className="crt-field-label">LINKED STATS</label>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <div className="crt-field-label">LINKED STATS</div>
+        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
           {STAT_KEYS.map(k => {
-            const active = linkedStats.includes(k);
+            const on = linkedStats.includes(k);
             return (
               <button
                 key={k}
                 className="topbar-btn"
                 onClick={() => toggleStat(k)}
                 style={{
-                  border: `1px solid ${active ? 'hsl(var(--accent))' : 'hsl(var(--accent-dim))'}`,
-                  color: active ? 'hsl(var(--accent-bright))' : 'hsl(var(--text-dim))',
-                  boxShadow: active ? '0 0 6px rgba(255,176,0,0.3)' : 'none',
+                  fontSize: 10,
+                  padding: '3px 8px',
+                  border: `1px solid ${on ? 'hsl(var(--accent))' : 'hsl(var(--accent-dim))'}`,
+                  color: on ? 'hsl(var(--accent-bright))' : 'hsl(var(--text-dim))',
+                  boxShadow: on ? '0 0 5px rgba(255,176,0,0.25)' : 'none',
                 }}
               >
                 {STAT_META[k].icon} {STAT_META[k].name}
@@ -199,49 +198,71 @@ export default function AddCourseModal({ onClose }: Props) {
         </div>
       </div>
 
-      {/* ── Linked skills (filtered by stat) ── */}
+      {/* Linked skills — native multi-select styled as CRT */}
       {visibleSkills.length > 0 && (
         <div>
-          <label className="crt-field-label">
+          <div className="crt-field-label">
             LINKED SKILLS
-            <span style={{ opacity: 0.5, marginLeft: 8, fontWeight: 'normal' }}>
-              XP fires to these skills when you log sessions for this course
+            <span style={{ opacity: 0.5, marginLeft: 8, fontWeight: 'normal', textTransform: 'none', letterSpacing: 0 }}>
+              hold Ctrl / Cmd to select multiple
             </span>
-          </label>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {visibleSkills.map(s => {
-              const active = linkedSkillIds.includes(s.id);
-              return (
-                <button
-                  key={s.id}
-                  className="topbar-btn"
-                  onClick={() => toggleSkill(s.id)}
-                  style={{
-                    border: `1px solid ${active ? 'hsl(var(--accent))' : 'hsl(var(--accent-dim))'}`,
-                    color: active ? 'hsl(var(--accent-bright))' : 'hsl(var(--text-dim))',
-                    boxShadow: active ? '0 0 6px rgba(255,176,0,0.3)' : 'none',
-                  }}
-                >
-                  {s.icon} {s.name}
-                </button>
-              );
-            })}
+          </div>
+          <select
+            multiple
+            value={linkedSkillIds}
+            onChange={e => {
+              const selected = Array.from(e.target.selectedOptions).map(o => o.value);
+              setLinkedSkillIds(selected);
+            }}
+            style={{
+              width: '100%',
+              background: 'hsl(var(--bg-primary))',
+              border: '1px solid hsl(var(--accent-dim))',
+              color: 'hsl(var(--accent))',
+              fontFamily: 'IBM Plex Mono, monospace',
+              fontSize: 11,
+              padding: '4px',
+              height: Math.min(visibleSkills.length * 22 + 8, 132),
+              outline: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            {visibleSkills.map(s => (
+              <option
+                key={s.id}
+                value={s.id}
+                style={{
+                  padding: '3px 6px',
+                  background: linkedSkillIds.includes(s.id) ? 'rgba(255,176,0,0.15)' : 'transparent',
+                }}
+              >
+                {s.icon} {s.name}
+              </option>
+            ))}
+          </select>
+          {selectedSkillNames && (
+            <div style={{ color: 'hsl(var(--text-dim))', fontSize: 9, marginTop: 4 }}>
+              SELECTED: {selectedSkillNames}
+            </div>
+          )}
+          <div style={{ color: 'hsl(var(--text-dim))', fontSize: 9, marginTop: 2, opacity: 0.7 }}>
+            XP fires to selected skills when you log sessions for this course.
           </div>
         </div>
       )}
 
-      {/* ── Modules ── */}
+      {/* Modules */}
       <div>
-        <label className="crt-field-label">
+        <div className="crt-field-label">
           MODULES
-          <span style={{ opacity: 0.5, marginLeft: 8, fontWeight: 'normal' }}>
-            optional — add now or later. progress = completed / total
+          <span style={{ opacity: 0.5, marginLeft: 8, fontWeight: 'normal', textTransform: 'none', letterSpacing: 0 }}>
+            optional — progress = completed / total
           </span>
-        </label>
-        <div style={{ display: 'grid', gap: 6 }}>
+        </div>
+        <div style={{ display: 'grid', gap: 5 }}>
           {modules.map((mod, i) => (
-            <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <span style={{ color: 'hsl(var(--text-dim))', fontSize: 9, width: 18, textAlign: 'right', flexShrink: 0 }}>
+            <div key={i} style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+              <span style={{ color: 'hsl(var(--text-dim))', fontSize: 9, width: 16, textAlign: 'right', flexShrink: 0 }}>
                 {i + 1}.
               </span>
               <input
@@ -255,7 +276,7 @@ export default function AddCourseModal({ onClose }: Props) {
               {modules.length > 1 && (
                 <button
                   className="topbar-btn"
-                  style={{ padding: '2px 8px', fontSize: 12, color: 'hsl(var(--text-dim))' }}
+                  style={{ padding: '2px 7px', fontSize: 12, color: 'hsl(var(--text-dim))' }}
                   onClick={() => removeModule(i)}
                 >
                   ×
@@ -266,32 +287,31 @@ export default function AddCourseModal({ onClose }: Props) {
         </div>
         <button
           className="topbar-btn"
-          style={{ marginTop: 8, fontSize: 10, color: 'hsl(var(--text-dim))' }}
+          style={{ marginTop: 6, fontSize: 10, color: 'hsl(var(--text-dim))' }}
           onClick={addModule}
         >
           + ADD MODULE
         </button>
-        <div style={{ color: 'hsl(var(--text-dim))', fontSize: 9, marginTop: 5, opacity: 0.7 }}>
-          Enter in any field adds the next module.
-        </div>
       </div>
 
-      {/* ── Checkboxes ── */}
-      <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+      {/* Checkboxes */}
+      <div style={{ display: 'flex', gap: 20 }}>
         {([
-          [certEarned, setCertEarned, 'CERTIFICATE EARNED'],
-          [isLegacy,   setIsLegacy,   'LEGACY ENTRY'],
-        ] as const).map(([val, setter, label]) => (
+          [certEarned, () => setCertEarned(!certEarned), 'CERTIFICATE EARNED'],
+          [isLegacy,   () => setIsLegacy(!isLegacy),     'LEGACY ENTRY'],
+        ] as [boolean, () => void, string][]).map(([val, toggle, label]) => (
           <div
             key={label}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}
-            onClick={() => setter(!val)}
+            style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer' }}
+            onClick={toggle}
           >
             <span style={{
-              width: 14, height: 14, border: '1px solid hsl(var(--accent-dim))',
+              width: 13, height: 13,
+              border: `1px solid ${val ? 'hsl(var(--accent))' : 'hsl(var(--accent-dim))'}`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: 10, color: 'hsl(var(--accent))',
               background: val ? 'rgba(255,176,0,0.1)' : 'transparent',
+              flexShrink: 0,
             }}>
               {val ? '×' : ''}
             </span>
@@ -304,21 +324,19 @@ export default function AddCourseModal({ onClose }: Props) {
 
       {isLegacy && (
         <div style={{
-          background: 'hsl(var(--bg-secondary))',
+          background: 'rgba(255,176,0,0.04)',
           border: '1px solid hsl(var(--accent-dim))',
-          padding: '8px 12px',
+          padding: '7px 10px',
           fontSize: 10,
           color: 'hsl(var(--text-dim))',
-          lineHeight: 1.5,
         }}>
-          Legacy entries are marked COMPLETE and award reduced XP (70% of live rate).
-          Does not affect streaks.
+          Legacy entries are marked COMPLETE and award reduced XP. Does not affect streaks.
         </div>
       )}
 
-      {/* ── Notes ── */}
+      {/* Notes */}
       <div>
-        <label className="crt-field-label">NOTES <span style={{ opacity: 0.5 }}>(optional)</span></label>
+        <div className="crt-field-label">NOTES <span style={{ opacity: 0.5 }}>(optional)</span></div>
         <input
           className="crt-input"
           style={{ width: '100%' }}
@@ -329,10 +347,10 @@ export default function AddCourseModal({ onClose }: Props) {
         />
       </div>
 
-      {/* ── Actions ── */}
+      {/* Actions */}
       <div style={{
         borderTop: '1px solid hsl(var(--accent-dim))',
-        paddingTop: 12,
+        paddingTop: 11,
         display: 'flex',
         justifyContent: 'flex-end',
         gap: 8,

@@ -18,8 +18,11 @@ import MediaWidget from '@/components/widgets/MediaWidget';
 import QuickLogOverlay from '@/components/overlays/QuickLogOverlay';
 import CharacterSheet from '@/components/overlays/CharacterSheet';
 import SearchOverlay from '@/components/overlays/SearchOverlay';
+import FirstBootWizard from '@/components/wizard/FirstBootWizard';
 import DetailDrawer from '@/components/drawer/DetailDrawer';
 import type { DrawerItem } from '@/components/drawer/DetailDrawer';
+import { useAuth } from '@/contexts/AuthContext';
+import { useOperator } from '@/hooks/useOperator';
 
 type LayoutItem = { i: string; x: number; y: number; w: number; h: number; minW?: number; minH?: number };
 
@@ -44,6 +47,9 @@ const widgetNames: Record<string, string> = {
 };
 
 const Index = () => {
+  const { user } = useAuth();
+  const { data: op, refetch: refetchOp } = useOperator(user?.id);
+
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [theme, setTheme] = useState(() => localStorage.getItem('uplink-theme') || 'AMBER');
   const [showLog, setShowLog] = useState(false);
@@ -162,6 +168,10 @@ const Index = () => {
       default: return null;
     }
   };
+
+  if (!op?.bootstrapComplete) {
+    return <FirstBootWizard onComplete={() => refetchOp()} />;
+  }
 
   return (
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>

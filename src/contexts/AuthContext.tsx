@@ -22,25 +22,25 @@ const AuthContext = createContext<AuthContextType>({
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>({ id: '1ba0dea0-5499-42af-9338-de124b2f124c' } as any);
   const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
-
+  // useEffect(() => {
+  //  // Get initial session
+  //  supabase.auth.getSession().then(({ data: { session } }) => {
+  //    setSession(session);
+  //    setUser(session?.user ?? null);
+  //    setLoading(false);
+  //   });
+//
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
+  //  const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+  //   setSession(session);
+  //    setUser(session?.user ?? null);
+  //    setLoading(false);
+  //  });
+//
+  //  return () => subscription.unsubscribe();
+  //}, []);
 
   return (
     <AuthContext.Provider value={{ user, session, loading }}>

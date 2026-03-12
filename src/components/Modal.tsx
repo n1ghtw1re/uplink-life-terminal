@@ -1,64 +1,117 @@
-import { useEffect } from 'react';
+// ============================================================
+// src/components/Modal.tsx
+// ============================================================
+import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 
 interface ModalProps {
   open: boolean;
   onClose: () => void;
   title: string;
-  children: React.ReactNode;
   width?: number;
-  fullScreen?: boolean;
+  children: React.ReactNode;
   headerExtra?: React.ReactNode;
 }
 
-const Modal = ({ open, onClose, title, children, width = 480, fullScreen = false, headerExtra }: ModalProps) => {
+export default function Modal({ open, onClose, title, width = 520, children, headerExtra }: ModalProps) {
+  const overlayRef = useRef<HTMLDivElement>(null);
+
+  // Close on ESC
   useEffect(() => {
     if (!open) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [open, onClose]);
 
+  // Prevent body scroll while open
+  useEffect(() => {
+    document.body.style.overflow = open ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
+  }, [open]);
+
   if (!open) return null;
 
   return createPortal(
-    <div className="overlay-backdrop" onClick={onClose}>
-      <div
-        className="overlay-content"
-        onClick={e => e.stopPropagation()}
-        style={fullScreen ? {
-          width: 'calc(100vw - 80px)',
-          height: 'calc(100vh - 80px)',
-          padding: 24,
-          overflow: 'auto',
-        } : {
-          width,
-          maxHeight: '80vh',
-          padding: 20,
-          overflow: 'auto',
-        }}
-      >
+    <div
+      ref={overlayRef}
+      onClick={e => { if (e.target === overlayRef.current) onClose(); }}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 9000,
+        background: 'rgba(0,0,0,0.75)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 24,
+      }}
+    >
+      <div style={{
+        width: Math.min(width, window.innerWidth - 48),
+        maxHeight: 'calc(100vh - 96px)',
+        background: 'hsl(var(--bg-secondary))',
+        border: '1px solid hsl(var(--accent))',
+        boxShadow: '0 0 30px rgba(255,176,0,0.2), inset 0 0 20px rgba(0,0,0,0.5)',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+      }}>
+        {/* Header */}
         <div style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          marginBottom: 16,
+          padding: '8px 12px',
           borderBottom: '1px solid hsl(var(--accent-dim))',
-          paddingBottom: 8,
+          flexShrink: 0,
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span className="text-glow" style={{ fontSize: 12, color: 'hsl(var(--accent))' }}>// {title}</span>
-            {headerExtra}
-          </div>
-          <button className="widget-btn" onClick={onClose}>×</button>
+          <span style={{
+            fontFamily: 'IBM Plex Mono, monospace',
+            fontSize: 11,
+            color: 'hsl(var(--accent))',
+            letterSpacing: 1,
+          }}>
+            // {title}
+          </span>
+          {headerExtra && (
+            <span style={{ marginLeft: 12 }}>{headerExtra}</span>
+          )}
+          <button
+            onClick={onClose}
+            style={{
+              background: 'transparent',
+              border: '1px solid hsl(var(--accent-dim))',
+              color: 'hsl(var(--text-dim))',
+              fontFamily: 'IBM Plex Mono, monospace',
+              fontSize: 11,
+              padding: '2px 8px',
+              cursor: 'pointer',
+              lineHeight: 1,
+            }}
+            onMouseEnter={e => {
+              (e.target as HTMLElement).style.borderColor = 'hsl(var(--accent))';
+              (e.target as HTMLElement).style.color = 'hsl(var(--accent))';
+            }}
+            onMouseLeave={e => {
+              (e.target as HTMLElement).style.borderColor = 'hsl(var(--accent-dim))';
+              (e.target as HTMLElement).style.color = 'hsl(var(--text-dim))';
+            }}
+          >
+            ×
+          </button>
         </div>
-        {children}
+
+        {/* Body */}
+        <div style={{
+          padding: '14px 16px',
+          overflowY: 'auto',
+          flex: 1,
+        }}>
+          {children}
+        </div>
       </div>
     </div>,
     document.body
   );
-};
-
-export default Modal;
+}

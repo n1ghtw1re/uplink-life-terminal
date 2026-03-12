@@ -39,7 +39,6 @@ const QuickLogOverlay = ({ onSubmit }: QuickLogOverlayProps) => {
   const { data: op } = useOperator(user?.id);
   const { data: skills } = useSkills(user?.id);
   const queryClient = useQueryClient();
-  console.log('QLC DEBUG', { user: user?.id, skills, op });
 
   const { data: activeCourses } = useQuery({
     queryKey: ['courses-active', user?.id],
@@ -76,6 +75,11 @@ const QuickLogOverlay = ({ onSubmit }: QuickLogOverlayProps) => {
   const [tagCourseId, setTagCourseId] = useState('');
   const [isLegacy, setIsLegacy] = useState(false);
   const [logYesterday, setLogYesterday] = useState(false);
+
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = `${yesterday.getFullYear()}.${String(yesterday.getMonth() + 1).padStart(2, '0')}.${String(yesterday.getDate()).padStart(2, '0')}`;
+
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -133,7 +137,7 @@ const QuickLogOverlay = ({ onSubmit }: QuickLogOverlayProps) => {
   const totalXp = skillXp + statTotalXp + masterXp;
 
   const handleSubmit = async (e: React.MouseEvent<HTMLButtonElement>) => {
-  console.log('SUBMIT', { selectedSkill, user, duration }); // ADD THIS
+  // ADD THIS
   if (!selectedSkill || !user) return;
 
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -150,34 +154,29 @@ const QuickLogOverlay = ({ onSubmit }: QuickLogOverlayProps) => {
         ]
       : [{ stat: selectedSkill.statKeys[0], percent: 100 }];
 
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-
     logMutation.mutate({
-      userId: user.id,
-      skillId: selectedSkill.id,
-      skillName: selectedSkill.name,
-      durationMinutes: duration,
-      statSplit,
-      notes: notes || undefined,
-      isLegacy,
-      loggedAt: logYesterday ? yesterday : undefined,
-    }, {
-      onSuccess: () => {
-        toast({
-          title: '✓ SESSION LOGGED',
-          description: `${selectedSkill.name}  ${duration}min  +${totalXp} XP${isLegacy ? ' [LEGACY]' : ` [${streakTier.replace('_', ' ')} ${mult}×]`}`,
-        });
-      },
-      onError: (err) => {
-        toast({ title: 'ERROR', description: String(err) });
-      },
+  userId: user.id,
+  skillId: selectedSkill.id,
+  skillName: selectedSkill.name,
+  durationMinutes: duration,
+  statSplit,
+  notes: notes || undefined,
+  isLegacy,
+  loggedAt: logYesterday ? yesterday : undefined,
+}, {
+  onSuccess: (session) => {
+    toast({
+      title: '✓ SESSION LOGGED',
+      description: `${selectedSkill.name}  ${duration}min  +${totalXp} XP${isLegacy ? ' [LEGACY]' : ` [${streakTier.replace('_', ' ')} ${mult}×]`}`,
     });
+    onSubmit?.(session.skillXpAwarded + session.masterXpAwarded); // ADD THIS
+  },
+  onError: (err) => {
+    console.error('LOG MUTATION ERROR', err);
+    toast({ title: 'ERROR', description: String(err) });
+  },
+});
   };
-
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = `${yesterday.getFullYear()}.${String(yesterday.getMonth()+1).padStart(2,'0')}.${String(yesterday.getDate()).padStart(2,'0')}`;
 
   return (
     <div style={{ fontSize: 11 }}>
