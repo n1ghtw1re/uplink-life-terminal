@@ -20,7 +20,7 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>({ id: '1ba0dea0-5499-42af-9338-de124b2f124c' } as any);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 

@@ -39,6 +39,7 @@ const QuickLogOverlay = ({ onSubmit }: QuickLogOverlayProps) => {
   const { data: op } = useOperator(user?.id);
   const { data: skills } = useSkills(user?.id);
   const queryClient = useQueryClient();
+  console.log('QLC DEBUG', { user: user?.id, skills, op });
 
   const { data: activeCourses } = useQuery({
     queryKey: ['courses-active', user?.id],
