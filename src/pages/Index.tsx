@@ -18,11 +18,13 @@ import MediaWidget from '@/components/widgets/MediaWidget';
 import QuickLogOverlay from '@/components/overlays/QuickLogOverlay';
 import CharacterSheet from '@/components/overlays/CharacterSheet';
 import SearchOverlay from '@/components/overlays/SearchOverlay';
+import StatDetailOverlay from '@/components/overlays/StatDetailOverlay';
 import FirstBootWizard from '@/components/wizard/FirstBootWizard';
 import DetailDrawer from '@/components/drawer/DetailDrawer';
 import type { DrawerItem } from '@/components/drawer/DetailDrawer';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOperator } from '@/hooks/useOperator';
+import { StatKey } from '@/types';
 
 type LayoutItem = { i: string; x: number; y: number; w: number; h: number; minW?: number; minH?: number };
 
@@ -63,10 +65,11 @@ const Index = () => {
   const [activeWidgets, setActiveWidgets] = useState<string[]>(ALL_WIDGET_IDS);
   const [fullscreenWidget, setFullscreenWidget] = useState<string | null>(null);
   const [gridSize, setGridSize] = useState({ width: 0, height: 0 });
+  const [openStatKey, setOpenStatKey] = useState<StatKey | null>(null);
 
   const sidebarWidth = sidebarExpanded ? 220 : 48;
 
-  const openDrawer = (type: 'skill', id: string) => {
+  const openDrawer = (type: DrawerItem['type'], id: string) => {
     setDrawerItem({ type, id });
     setDrawerOpen(true);
   };
@@ -106,6 +109,7 @@ const Index = () => {
     if (tag === 'INPUT' || tag === 'TEXTAREA') return;
 
     if (e.key === 'Escape') {
+      if (openStatKey) { setOpenStatKey(null); return; }
       if (drawerOpen) { closeDrawer(); return; }
       if (fullscreenWidget) { setFullscreenWidget(null); return; }
       setShowLog(false);
@@ -119,7 +123,7 @@ const Index = () => {
     if (e.key === '/') { e.preventDefault(); setShowSearch(true); }
     if (e.key === '[') setSidebarExpanded(false);
     if (e.key === ']') setSidebarExpanded(true);
-  }, [fullscreenWidget, drawerOpen]);
+  }, [fullscreenWidget, drawerOpen, openStatKey]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKey);
@@ -162,9 +166,19 @@ const Index = () => {
       case 'xp': return <XPWidget {...props} />;
       case 'checkin': return <CheckinWidget {...props} />;
       case 'heatmap': return <HeatmapWidget {...props} />;
-      case 'stats': return <StatOverviewWidget {...props} onStatClick={(statKey: string) => openDrawer('skill', statKey)} />;
-      case 'courses': return <CoursesWidget {...props} />;
-      case 'media': return <MediaWidget {...props} />;
+      case 'stats': return (
+        <StatOverviewWidget
+          {...props}
+          onStatClick={(statKey: string) => setOpenStatKey(statKey as StatKey)}
+        />
+      );
+      case 'courses': return (
+        <CoursesWidget
+          {...props}
+          onCourseClick={(id) => openDrawer('course', id)}
+        />
+      );
+      case 'media': return <MediaWidget {...props} onMediaClick={(id) => openDrawer('media', id)} />;
       default: return null;
     }
   };
@@ -193,6 +207,7 @@ const Index = () => {
           onToggle={() => setSidebarExpanded(!sidebarExpanded)}
           onExpand={() => setSidebarExpanded(true)}
           onOpenCharSheet={() => setShowChar(true)}
+          onOpenStat={(statKey) => setOpenStatKey(statKey)}
         />
 
         <div style={{ flex: 1, overflow: 'hidden', padding: 8, position: 'relative', marginRight: drawerOpen ? 420 : 0, transition: 'margin-right 200ms ease' }}>
@@ -240,7 +255,6 @@ const Index = () => {
             </ReactGridLayout>
           )}
 
-          {/* Fullscreen overlay - inside the grid area, not a portal */}
           {fullscreenWidget && (
             <>
               <div
@@ -255,8 +269,13 @@ const Index = () => {
         </div>
       </div>
 
-
-
+      {/* Stat detail — full screen, above everything */}
+      {openStatKey && (
+        <StatDetailOverlay
+          statKey={openStatKey}
+          onClose={() => setOpenStatKey(null)}
+        />
+      )}
 
       {/* Modals */}
       <Modal

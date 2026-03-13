@@ -47,21 +47,6 @@ const LevelUpAnimation = () => {
     };
   }, []);
 
-  // Shift+L dev trigger
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.shiftKey && e.key === 'L') {
-        triggerLevelUp({
-          level: 7,
-          className: 'ENGINEER',
-          totalXP: 12000,
-          unlocks: ['BLOOD-RED THEME NOW AVAILABLE', '+ SCREEN GLITCH TOGGLE'],
-        });
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, []);
 
   const runSequence = useCallback(async () => {
     // Step 1: Flash

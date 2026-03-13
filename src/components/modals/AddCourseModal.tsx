@@ -94,21 +94,28 @@ export default function AddCourseModal({ onClose }: Props) {
         .filter(m => m.title.length > 0);
 
       if (validModules.length > 0) {
+        const sectionRows = validModules.map(m => ({ course_id: course.id, ...m }));
+        console.log('Inserting course_sections:', sectionRows);
         const { error: secErr } = await supabase
           .from('course_sections')
-          .insert(validModules.map(m => ({ course_id: course.id, ...m })));
+          .insert(sectionRows);
         if (secErr) throw secErr;
       }
 
       queryClient.invalidateQueries({ queryKey: ['courses', user.id] });
+      queryClient.invalidateQueries({ queryKey: ['stats', user.id] });
+      queryClient.invalidateQueries({ queryKey: ['operator', user.id] });
+      queryClient.invalidateQueries({ queryKey: ['xp-recent', user.id] });
 
       toast({
         title: '✓ COURSE ADDED',
         description: `${name.trim()}${validModules.length > 0 ? ` — ${validModules.length} module${validModules.length !== 1 ? 's' : ''}` : ''}`,
       });
       onClose();
-    } catch (err) {
-      toast({ title: 'ERROR', description: String(err) });
+    } catch (err: any) {
+      console.error('AddCourseModal error:', err);
+      const msg = err?.message ?? err?.details ?? err?.hint ?? String(err);
+      toast({ title: 'ERROR', description: msg });
     } finally {
       setSaving(false);
     }

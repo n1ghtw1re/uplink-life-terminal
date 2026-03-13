@@ -1,11 +1,16 @@
 import { useState } from 'react';
-import { stats, arsenalCounts, trackingCounts } from '@/data/mockData';
+import { arsenalCounts, trackingCounts } from '@/data/mockData';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { useStats } from '@/hooks/useStats';
+import { StatKey } from '@/types';
 
 interface SidebarProps {
   expanded: boolean;
   onToggle: () => void;
   onExpand?: () => void;
   onOpenCharSheet?: () => void;
+  onOpenStat?: (statKey: StatKey) => void;
 }
 
 const sectionMap: Record<string, string> = {
@@ -16,27 +21,27 @@ const sectionMap: Record<string, string> = {
   'Settings': 'system',
 };
 
-const Sidebar = ({ expanded, onToggle, onExpand, onOpenCharSheet }: SidebarProps) => {
+const Sidebar = ({ expanded, onToggle, onExpand, onOpenCharSheet, onOpenStat }: SidebarProps) => {
+  const { user } = useAuth();
+  const { data: stats } = useStats(user?.id);
   const [openSection, setOpenSection] = useState<string | null>(null);
 
   const toggleSection = (section: string) => {
     setOpenSection(openSection === section ? null : section);
   };
 
-  const handleCollapsedClick = (label: string) => {
-    if (label === 'Character Sheet') {
-      onOpenCharSheet?.();
-      return;
-    }
-    if (label === 'Dashboard') {
-      onExpand?.();
-      setOpenSection(null);
-      return;
-    }
+  const handleCollapsedClick = (label: string, statKey?: StatKey) => {
+    if (label === 'Character Sheet') { onOpenCharSheet?.(); return; }
+    if (label === 'Dashboard') { onExpand?.(); setOpenSection(null); return; }
+    if (statKey) { onOpenStat?.(statKey); return; }
     const section = sectionMap[label];
-    if (section) {
-      onExpand?.();
-      setOpenSection(section);
+    if (section) { onExpand?.(); setOpenSection(section); }
+  };
+
+  const handleSystemItem = async (name: string) => {
+    if (name === 'LOGOUT') {
+      await supabase.auth.signOut();
+      window.location.reload();
     }
   };
 
@@ -44,7 +49,7 @@ const Sidebar = ({ expanded, onToggle, onExpand, onOpenCharSheet }: SidebarProps
     { icon: '⌂', label: 'Dashboard' },
     { icon: '◈', label: 'Character Sheet' },
     { icon: 'div', label: '' },
-    ...stats.map(s => ({ icon: s.icon, label: s.name })),
+    ...(stats ?? []).map(s => ({ icon: s.icon, label: s.name, statKey: s.key as StatKey })),
     { icon: 'div', label: '' },
     { icon: '📚', label: 'Arsenal' },
     { icon: '◎', label: 'Goals' },
@@ -76,6 +81,7 @@ const Sidebar = ({ expanded, onToggle, onExpand, onOpenCharSheet }: SidebarProps
     { icon: '⚙', name: 'SETTINGS' },
     { icon: '?', name: 'HELP' },
     { icon: '💾', name: 'EXPORT DATA' },
+    { icon: '⏻', name: 'LOGOUT' },
   ];
 
   return (
@@ -118,7 +124,7 @@ const Sidebar = ({ expanded, onToggle, onExpand, onOpenCharSheet }: SidebarProps
               <div
                 key={i}
                 title={item.label}
-                onClick={() => handleCollapsedClick(item.label)}
+                onClick={() => handleCollapsedClick(item.label, (item as any).statKey)}
                 style={{
                   width: 40,
                   height: 40,
@@ -157,8 +163,13 @@ const Sidebar = ({ expanded, onToggle, onExpand, onOpenCharSheet }: SidebarProps
             <span>// STATS</span>
             <span style={{ transition: 'transform 150ms', transform: openSection === 'stats' ? 'rotate(90deg)' : 'none' }}>›</span>
           </div>
-          {openSection === 'stats' && stats.map(s => (
-            <div key={s.key} className={`sidebar-item ${s.dormant ? 'dormant' : ''}`}>
+          {openSection === 'stats' && (stats ?? []).map(s => (
+            <div
+              key={s.key}
+              className={`sidebar-item ${s.dormant ? 'dormant' : ''}`}
+              onClick={() => onOpenStat?.(s.key as StatKey)}
+              style={{ cursor: 'pointer' }}
+            >
               <span>{s.icon} {s.name}</span>
               <span style={{ fontSize: 9 }}>{s.dormant ? 'DORMANT' : `LVL ${s.level}`}</span>
             </div>
@@ -203,7 +214,17 @@ const Sidebar = ({ expanded, onToggle, onExpand, onOpenCharSheet }: SidebarProps
             <span style={{ transition: 'transform 150ms', transform: openSection === 'system' ? 'rotate(90deg)' : 'none' }}>›</span>
           </div>
           {openSection === 'system' && systemItems.map(item => (
-            <div key={item.name} className="sidebar-item">
+            <div
+              key={item.name}
+              className="sidebar-item"
+              onClick={() => handleSystemItem(item.name)}
+              style={{
+                cursor: item.name === 'LOGOUT' ? 'pointer' : undefined,
+                color: item.name === 'LOGOUT' ? 'hsl(0, 80%, 55%)' : undefined,
+              }}
+              onMouseEnter={item.name === 'LOGOUT' ? e => (e.currentTarget.style.color = 'hsl(0, 80%, 70%)') : undefined}
+              onMouseLeave={item.name === 'LOGOUT' ? e => (e.currentTarget.style.color = 'hsl(0, 80%, 55%)') : undefined}
+            >
               <span>{item.icon} {item.name}</span>
             </div>
           ))}

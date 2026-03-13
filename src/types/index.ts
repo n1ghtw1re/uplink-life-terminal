@@ -35,6 +35,7 @@ export type XPSource =
   | 'goal_complete'
   | 'book_complete'
   | 'course_complete'
+  | 'course_section'
   | 'course_lesson'
   | 'course_quiz'
   | 'course_assignment'
@@ -105,6 +106,69 @@ export const STAT_META: Record<StatKey, { icon: string; name: string; domain: st
   ghost: { icon: '░', name: 'GHOST', domain: 'Mindfulness, stillness, inner practice' },
 };
 
+export const STAT_FLAVOR: Record<StatKey, { subtitle: string; description: string }> = {
+  body: {
+    subtitle: 'THE MACHINE THAT CARRIES YOU',
+    description: 'Your physical capability, endurance, and recovery. The body is the only hardware you cannot swap out. Every rep, every mile, every session of discipline leaves a mark in the system.',
+  },
+  wire: {
+    subtitle: 'FLUENT IN THE LANGUAGE OF MACHINES',
+    description: 'Technical skill, digital fluency, and tool mastery. You speak to machines and they answer. The wider your WIRE, the more of the world you can reach through a terminal.',
+  },
+  mind: {
+    subtitle: 'THE ARCHIVE NEVER STOPS GROWING',
+    description: 'Knowledge, learning, and intellectual depth. Every book read, every course completed, every concept understood becomes permanent firmware. MIND compounds.',
+  },
+  cool: {
+    subtitle: 'PRESENCE IS A SKILL',
+    description: 'Career capital, communication, and social intelligence. The world runs on relationships and leverage. COOL is how you move through systems made of people.',
+  },
+  grit: {
+    subtitle: 'SHOWING UP IS THE WHOLE GAME',
+    description: 'Discipline, consistency, and mental resilience. Talent is common. Showing up every day when it does not feel good is rare. GRIT is what separates the operator from the amateur.',
+  },
+  flow: {
+    subtitle: 'MAKING IS PROOF OF EXISTENCE',
+    description: 'Creative output, craft, and artistic practice. The things you make outlast you. FLOW is the stat that turns internal experience into something that exists in the world.',
+  },
+  ghost: {
+    subtitle: 'STILLNESS IS NOT EMPTINESS',
+    description: 'Mindfulness, inner awareness, and reflective practice. In a world optimised for noise, the ability to be still is a radical capability. GHOST is the signal beneath the static.',
+  },
+};
+
+export const STAT_LEVEL_TITLES: Record<StatKey, string[]> = {
+  body:  ['SEDENTARY', 'STIRRING', 'ACTIVE', 'CONDITIONED', 'ATHLETIC', 'ELITE', 'FORMIDABLE', 'APEX', 'UNKILLABLE', 'LEGENDARY'],
+  wire:  ['OFFLINE', 'CURIOUS', 'CONNECTED', 'CAPABLE', 'PROFICIENT', 'SKILLED', 'ADVANCED', 'EXPERT', 'ARCHITECT', 'ROOT ACCESS'],
+  mind:  ['BLANK SLATE', 'CURIOUS', 'LEARNING', 'INFORMED', 'KNOWLEDGEABLE', 'SCHOLARLY', 'INTELLECTUAL', 'DEEP READER', 'ANALYST', 'ORACLE'],
+  cool:  ['UNKNOWN', 'NOTICED', 'PRESENT', 'CONNECTED', 'INFLUENTIAL', 'RESPECTED', 'AUTHORITATIVE', 'NETWORKED', 'MAGNETIC', 'LEGENDARY'],
+  grit:  ['UNDISCIPLINED', 'TRYING', 'CONSISTENT', 'RELIABLE', 'DISCIPLINED', 'IRONCLAD', 'RELENTLESS', 'UNBREAKABLE', 'MONK-LIKE', 'IMMOVABLE'],
+  flow:  ['SILENT', 'DABBLING', 'MAKING', 'CRAFTING', 'SKILLED', 'ARTISAN', 'CREATOR', 'MASTER', 'VISIONARY', 'ICONIC'],
+  ghost: ['SCATTERED', 'AWARE', 'PRESENT', 'CENTRED', 'GROUNDED', 'STILL', 'DEEP', 'TRANSPARENT', 'VOID', 'SIGNAL'],
+};
+
+export const MULTIPLIER_MAP: Record<StreakTier, number> = {
+  STANDARD:   1.0,
+  HOT_STREAK: 1.5,
+  ON_FIRE:    2.0,
+  LEGENDARY:  3.0,
+};
+
+// XP required per stat level (same curve for all stats)
+const STAT_LEVEL_XP = [0, 500, 1200, 2500, 4500, 7500, 12000, 18000, 26000, 36000];
+
+export function getStatLevel(totalXP: number): { level: number; xpInLevel: number; xpForLevel: number } {
+  let level = 1;
+  for (let i = STAT_LEVEL_XP.length - 1; i >= 0; i--) {
+    if (totalXP >= STAT_LEVEL_XP[i]) { level = i + 1; break; }
+  }
+  const xpInLevel  = totalXP - (STAT_LEVEL_XP[level - 1] ?? 0);
+  const xpForLevel = level < STAT_LEVEL_XP.length
+    ? (STAT_LEVEL_XP[level] ?? 0) - (STAT_LEVEL_XP[level - 1] ?? 0)
+    : 99999;
+  return { level, xpInLevel, xpForLevel };
+}
+
 // ─── HELPER FUNCTIONS ────────────────────────────────────────
 
 export function getStreakTier(days: number): StreakTier {
@@ -142,33 +206,6 @@ export function getMasterLevel(totalXP: number): {
     xpForLevel,
   };
 }
-
-// Stat XP thresholds — same curve as master but per-stat
-const STAT_LEVEL_THRESHOLDS = [0, 300, 800, 1600, 2800, 4500, 7000, 10500, 15000, 21000];
-
-export function getStatLevel(totalXP: number): {
-  level: number;
-  xpInLevel: number;
-  xpForLevel: number;
-} {
-  let level = 1;
-  for (let i = STAT_LEVEL_THRESHOLDS.length - 1; i >= 0; i--) {
-    if (totalXP >= STAT_LEVEL_THRESHOLDS[i]) { level = i + 1; break; }
-  }
-  const current = STAT_LEVEL_THRESHOLDS[level - 1];
-  const next = level < 10 ? STAT_LEVEL_THRESHOLDS[level] : STAT_LEVEL_THRESHOLDS[9] + 10000;
-  return { level, xpInLevel: totalXP - current, xpForLevel: next - current };
-}
-
-export const STAT_LEVEL_TITLES: Record<StatKey, string[]> = {
-  body:  ['SEDENTARY','STIRRING','MOVING','ACTIVE','CONDITIONED','TRAINED','ATHLETIC','ELITE','APEX','UNKILLABLE'],
-  wire:  ['OFFLINE','CURIOUS','CONNECTED','CAPABLE','SKILLED','FLUENT','EXPERT','ARCHITECT','WIZARD','GHOST'],
-  mind:  ['BLANK','AWAKENING','AWARE','INFORMED','STUDIED','LEARNED','SCHOLAR','EXPERT','SAGE','ORACLE'],
-  cool:  ['UNKNOWN','NOTICED','PRESENT','CREDIBLE','RESPECTED','INFLUENTIAL','AUTHORITATIVE','ICONIC','LEGENDARY','UNTOUCHABLE'],
-  grit:  ['DRIFTING','TRYING','CONSISTENT','DISCIPLINED','HARDENED','IRONCLAD','RELENTLESS','UNBREAKABLE','TITANIUM','IMMOVABLE'],
-  flow:  ['SILENT','DABBLING','MAKING','CREATING','FLOWING','EXPRESSIVE','MASTERFUL','INSPIRED','VISIONARY','SIGNAL'],
-  ghost: ['ABSENT','STIRRING','PRESENT','AWARE','STILL','CENTRED','DEEP','CLEAR','TRANSPARENT','VOID'],
-};
 
 // ─── INTERFACES ──────────────────────────────────────────────
 

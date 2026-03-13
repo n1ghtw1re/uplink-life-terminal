@@ -5,7 +5,6 @@
 // ============================================================
 
 import { supabase } from '@/integrations/supabase/client';
-import type { TablesInsert } from '@/integrations/supabase/types';
 import {
   StatKey,
   XPSource,
@@ -96,7 +95,7 @@ export async function awardXP(params: {
   }
 
   // Build XP log entries
-  const logEntries: TablesInsert<'xp_log'>[] = [];
+  const logEntries: object[] = [];
 
   if (skillId && skillXP > 0) {
     logEntries.push({
@@ -147,13 +146,22 @@ export async function awardXP(params: {
     if (logError) throw logError;
   }
 
-  // Update skill XP
+  // Update skill XP — direct increment (cumulative, matches getStatLevel)
   if (skillId && skillXP > 0) {
-    const { error } = await supabase.rpc('increment_skill_xp', {
+    const { error: updateErr } = await supabase.rpc('increment_skill_xp', {
       p_skill_id: skillId,
       p_amount:   skillXP,
     });
-    if (error) throw error;
+    // Fallback: direct update if RPC fails or isn't deployed
+    if (updateErr) {
+      const { data: skillRow } = await supabase
+        .from('skills').select('xp').eq('id', skillId).single();
+      const { error: directErr } = await supabase
+        .from('skills')
+        .update({ xp: (skillRow?.xp ?? 0) + skillXP })
+        .eq('id', skillId);
+      if (directErr) throw directErr;
+    }
   }
 
   // Update stat XP rows

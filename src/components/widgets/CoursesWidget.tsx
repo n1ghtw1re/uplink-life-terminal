@@ -1,359 +1,94 @@
 // ============================================================
-// src/components/modals/AddCourseModal.tsx
+// src/components/widgets/CoursesWidget.tsx
 // ============================================================
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { useQueryClient } from '@tanstack/react-query';
-import { useSkills } from '@/hooks/useSkills';
-import { StatKey, STAT_META } from '@/types';
-import { toast } from '@/hooks/use-toast';
+import WidgetWrapper from '../WidgetWrapper';
+import ProgressBar from '../ProgressBar';
+import Modal from '../Modal';
+import AddCourseModal from '../modals/AddCourseModal';
 
-const STAT_KEYS: StatKey[] = ['body', 'wire', 'mind', 'cool', 'grit', 'flow', 'ghost'];
+interface WidgetProps { onClose?: () => void; onFullscreen?: () => void; isFullscreen?: boolean; onCourseClick?: (id: string) => void; }
 
-interface Props {
-  onClose: () => void;
-}
-
-export default function AddCourseModal({ onClose }: Props) {
+const CoursesWidget = ({ onClose, onFullscreen, isFullscreen, onCourseClick }: WidgetProps) => {
   const { user } = useAuth();
-  const queryClient = useQueryClient();
-  const { data: allSkills } = useSkills(user?.id);
+  const [showAdd, setShowAdd] = useState(false);
 
-  // Core fields
-  const [name, setName]         = useState('');
-  const [provider, setProvider] = useState('');
-  const [subject, setSubject]   = useState('');
-  const [url, setUrl]           = useState('');
-  const [notes, setNotes]       = useState('');
-  const [certEarned, setCertEarned] = useState(false);
-  const [isLegacy, setIsLegacy]     = useState(false);
-  const [saving, setSaving]         = useState(false);
-
-  // Stats + skills
-  const [linkedStats, setLinkedStats]       = useState<StatKey[]>([]);
-  const [linkedSkillIds, setLinkedSkillIds] = useState<string[]>([]);
-
-  // Modules
-  const [modules, setModules] = useState<string[]>(['']);
-
-  const toggleStat = (k: StatKey) =>
-    setLinkedStats(prev => prev.includes(k) ? prev.filter(s => s !== k) : [...prev, k]);
-
-  const toggleSkill = (id: string) =>
-    setLinkedSkillIds(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
-
-  const updateModule = (i: number, val: string) =>
-    setModules(prev => prev.map((m, idx) => idx === i ? val : m));
-
-  const removeModule = (i: number) =>
-    setModules(prev => prev.filter((_, idx) => idx !== i));
-
-  const addModule = () => setModules(prev => [...prev, '']);
-
-  // Skills filtered to selected stats (show all if no stat selected)
-  const visibleSkills = linkedStats.length > 0
-    ? (allSkills ?? []).filter(s => s.statKeys.some(k => linkedStats.includes(k as StatKey)))
-    : (allSkills ?? []);
-
-  const handleSubmit = async () => {
-    if (!name.trim() || !user) return;
-    setSaving(true);
-    try {
-      // 1 — Insert course row
-      const { data: course, error: courseErr } = await supabase
+  const { data: courses } = useQuery({
+    queryKey: ['courses', user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
         .from('courses')
-        .insert({
-          user_id:          user.id,
-          name:             name.trim(),
-          provider:         provider.trim() || null,
-          subject:          subject.trim() || null,
-          url:              url.trim()      || null,
-          notes:            notes.trim()    || null,
-          linked_stats:     linkedStats,
-          linked_skill_ids: linkedSkillIds,
-          status:           isLegacy ? 'COMPLETE' : 'ACTIVE',
-          progress:         isLegacy ? 100 : 0,
-          cert_earned:      certEarned,
-          is_legacy:        isLegacy,
-          completed_at:     isLegacy ? new Date().toISOString() : null,
-        })
-        .select()
-        .single();
+        .select('*')
+        .eq('user_id', user!.id)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!user?.id,
+  });
 
-      if (courseErr) throw courseErr;
-
-      // 2 — Insert modules into course_sections (skip blanks)
-      const validModules = modules
-        .map((title, sort_order) => ({ title: title.trim(), sort_order }))
-        .filter(m => m.title.length > 0);
-
-      if (validModules.length > 0) {
-        const { error: secErr } = await supabase
-          .from('course_sections')
-          .insert(validModules.map(m => ({ course_id: course.id, ...m })));
-        if (secErr) throw secErr;
-      }
-
-      queryClient.invalidateQueries({ queryKey: ['courses', user.id] });
-      queryClient.invalidateQueries({ queryKey: ['courses-active', user.id] });
-
-      toast({
-        title: '✓ COURSE ADDED',
-        description: `${name.trim()}${validModules.length > 0 ? ` — ${validModules.length} module${validModules.length > 1 ? 's' : ''}` : ''}`,
-      });
-      onClose();
-    } catch (err) {
-      toast({ title: 'ERROR', description: String(err) });
-    } finally {
-      setSaving(false);
-    }
-  };
+  const active = (courses ?? []).filter(c => c.status !== 'COMPLETE' && c.status !== 'DROPPED');
+  const completed = (courses ?? []).filter(c => c.status === 'COMPLETE');
+  const display = [...active, ...completed].slice(0, 6);
 
   return (
-    <div style={{
-      fontSize: 11,
-      display: 'grid',
-      gap: 14,
-      maxHeight: '75vh',
-      overflowY: 'auto',
-      paddingRight: 4,
-    }}>
-
-      {/* ── Name ── */}
-      <div>
-        <label className="crt-field-label">
-          COURSE NAME <span style={{ color: 'hsl(var(--accent))' }}>*</span>
-        </label>
-        <input
-          className="crt-input"
-          style={{ width: '100%' }}
-          placeholder="e.g. Junior Cybersecurity Analyst"
-          value={name}
-          onChange={e => setName(e.target.value)}
-          autoFocus
-          maxLength={100}
-        />
-      </div>
-
-      {/* ── Provider + Subject ── */}
-      <div style={{ display: 'flex', gap: 10 }}>
-        <div style={{ flex: 1 }}>
-          <label className="crt-field-label">PROVIDER</label>
-          <input
-            className="crt-input"
-            style={{ width: '100%' }}
-            placeholder="HackTheBox, Udemy..."
-            value={provider}
-            onChange={e => setProvider(e.target.value)}
-            maxLength={60}
-          />
-        </div>
-        <div style={{ flex: 1 }}>
-          <label className="crt-field-label">SUBJECT</label>
-          <input
-            className="crt-input"
-            style={{ width: '100%' }}
-            placeholder="Cybersecurity, React..."
-            value={subject}
-            onChange={e => setSubject(e.target.value)}
-            maxLength={60}
-          />
-        </div>
-      </div>
-
-      {/* ── URL ── */}
-      <div>
-        <label className="crt-field-label">URL <span style={{ opacity: 0.5 }}>(optional)</span></label>
-        <input
-          className="crt-input"
-          style={{ width: '100%' }}
-          placeholder="https://..."
-          value={url}
-          onChange={e => setUrl(e.target.value)}
-          maxLength={500}
-        />
-      </div>
-
-      {/* ── Linked stats ── */}
-      <div>
-        <label className="crt-field-label">LINKED STATS</label>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {STAT_KEYS.map(k => {
-            const active = linkedStats.includes(k);
-            return (
-              <button
-                key={k}
-                className="topbar-btn"
-                onClick={() => toggleStat(k)}
-                style={{
-                  border: `1px solid ${active ? 'hsl(var(--accent))' : 'hsl(var(--accent-dim))'}`,
-                  color: active ? 'hsl(var(--accent-bright))' : 'hsl(var(--text-dim))',
-                  boxShadow: active ? '0 0 6px rgba(255,176,0,0.3)' : 'none',
-                }}
-              >
-                {STAT_META[k].icon} {STAT_META[k].name}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* ── Linked skills (filtered by stat) ── */}
-      {visibleSkills.length > 0 && (
-        <div>
-          <label className="crt-field-label">
-            LINKED SKILLS
-            <span style={{ opacity: 0.5, marginLeft: 8, fontWeight: 'normal' }}>
-              XP fires to these skills when you log sessions for this course
-            </span>
-          </label>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {visibleSkills.map(s => {
-              const active = linkedSkillIds.includes(s.id);
-              return (
-                <button
-                  key={s.id}
-                  className="topbar-btn"
-                  onClick={() => toggleSkill(s.id)}
-                  style={{
-                    border: `1px solid ${active ? 'hsl(var(--accent))' : 'hsl(var(--accent-dim))'}`,
-                    color: active ? 'hsl(var(--accent-bright))' : 'hsl(var(--text-dim))',
-                    boxShadow: active ? '0 0 6px rgba(255,176,0,0.3)' : 'none',
-                  }}
-                >
-                  {s.icon} {s.name}
-                </button>
-              );
-            })}
+    <>
+      <WidgetWrapper title="COURSES" onClose={onClose} onFullscreen={onFullscreen} isFullscreen={isFullscreen}>
+        {display.length === 0 && (
+          <div style={{ fontSize: 10, color: 'hsl(var(--text-dim))', marginBottom: 10 }}>
+            No courses yet. Add your first course to start tracking.
           </div>
-        </div>
-      )}
+        )}
 
-      {/* ── Modules ── */}
-      <div>
-        <label className="crt-field-label">
-          MODULES
-          <span style={{ opacity: 0.5, marginLeft: 8, fontWeight: 'normal' }}>
-            optional — add now or later. progress = completed / total
-          </span>
-        </label>
-        <div style={{ display: 'grid', gap: 6 }}>
-          {modules.map((mod, i) => (
-            <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <span style={{ color: 'hsl(var(--text-dim))', fontSize: 9, width: 18, textAlign: 'right', flexShrink: 0 }}>
-                {i + 1}.
-              </span>
-              <input
-                className="crt-input"
-                style={{ flex: 1 }}
-                placeholder={`Module ${i + 1}...`}
-                value={mod}
-                onChange={e => updateModule(i, e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addModule(); } }}
-              />
-              {modules.length > 1 && (
-                <button
-                  className="topbar-btn"
-                  style={{ padding: '2px 8px', fontSize: 12, color: 'hsl(var(--text-dim))' }}
-                  onClick={() => removeModule(i)}
-                >
-                  ×
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-        <button
-          className="topbar-btn"
-          style={{ marginTop: 8, fontSize: 10, color: 'hsl(var(--text-dim))' }}
-          onClick={addModule}
-        >
-          + ADD MODULE
-        </button>
-        <div style={{ color: 'hsl(var(--text-dim))', fontSize: 9, marginTop: 5, opacity: 0.7 }}>
-          Enter in any field adds the next module.
-        </div>
-      </div>
-
-      {/* ── Checkboxes ── */}
-      <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-        {([
-          [certEarned, setCertEarned, 'CERTIFICATE EARNED'],
-          [isLegacy,   setIsLegacy,   'LEGACY ENTRY'],
-        ] as const).map(([val, setter, label]) => (
+        {display.map(c => (
           <div
-            key={label}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}
-            onClick={() => setter(!val)}
+            key={c.id}
+            style={{ marginBottom: 10, cursor: 'pointer' }}
+            onClick={() => onCourseClick?.(c.id)}
+            onMouseEnter={e => (e.currentTarget.style.opacity = '0.85')}
+            onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
           >
-            <span style={{
-              width: 14, height: 14, border: '1px solid hsl(var(--accent-dim))',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 10, color: 'hsl(var(--accent))',
-              background: val ? 'rgba(255,176,0,0.1)' : 'transparent',
-            }}>
-              {val ? '×' : ''}
-            </span>
-            <span style={{ color: val ? 'hsl(var(--accent))' : 'hsl(var(--text-dim))', fontSize: 10 }}>
-              {label}
-            </span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+              <span style={{ color: 'hsl(var(--accent))' }}>&gt; {c.name}</span>
+              <span style={{ fontSize: 9, color: 'hsl(var(--text-dim))' }}>{c.provider}</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3 }}>
+              <ProgressBar value={c.progress ?? 0} max={100} width="120px" height={6} />
+              <span style={{ fontSize: 9, color: 'hsl(var(--text-dim))' }}>{c.progress ?? 0}%</span>
+              {c.linked_stats?.length > 0 && (
+                <span style={{ fontSize: 9, color: 'hsl(var(--text-dim))' }}>
+                  {c.linked_stats.map((s: string) => s.toUpperCase()).join('/')}
+                </span>
+              )}
+              <span style={{
+                fontSize: 9,
+                color: c.status === 'COMPLETE' ? 'hsl(var(--success))' : 'hsl(var(--accent))',
+                marginLeft: 'auto',
+              }}>
+                {c.status}{c.status === 'COMPLETE' ? ' ✓' : ''}
+                {c.is_legacy && <span style={{ color: 'hsl(var(--text-dim))', marginLeft: 4 }}>[L]</span>}
+              </span>
+            </div>
           </div>
         ))}
-      </div>
 
-      {isLegacy && (
-        <div style={{
-          background: 'hsl(var(--bg-secondary))',
-          border: '1px solid hsl(var(--accent-dim))',
-          padding: '8px 12px',
-          fontSize: 10,
-          color: 'hsl(var(--text-dim))',
-          lineHeight: 1.5,
-        }}>
-          Legacy entries are marked COMPLETE and award reduced XP (70% of live rate).
-          Does not affect streaks.
-        </div>
-      )}
-
-      {/* ── Notes ── */}
-      <div>
-        <label className="crt-field-label">NOTES <span style={{ opacity: 0.5 }}>(optional)</span></label>
-        <input
-          className="crt-input"
-          style={{ width: '100%' }}
-          placeholder="any notes..."
-          value={notes}
-          onChange={e => setNotes(e.target.value)}
-          maxLength={300}
-        />
-      </div>
-
-      {/* ── Actions ── */}
-      <div style={{
-        borderTop: '1px solid hsl(var(--accent-dim))',
-        paddingTop: 12,
-        display: 'flex',
-        justifyContent: 'flex-end',
-        gap: 8,
-      }}>
         <button
           className="topbar-btn"
-          style={{ color: 'hsl(var(--text-dim))' }}
-          onClick={onClose}
-          disabled={saving}
+          style={{ width: '100%', fontSize: 10, marginTop: 4 }}
+          onClick={() => setShowAdd(true)}
         >
-          CANCEL
+          + ADD COURSE
         </button>
-        <button
-          className="topbar-btn"
-          onClick={handleSubmit}
-          disabled={!name.trim() || saving}
-          style={{ opacity: !name.trim() ? 0.4 : 1 }}
-        >
-          {saving ? '>> SAVING...' : '>> ADD COURSE'}
-        </button>
-      </div>
-    </div>
+      </WidgetWrapper>
+
+      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="ADD COURSE" width={560}>
+        <AddCourseModal onClose={() => setShowAdd(false)} />
+      </Modal>
+    </>
   );
-}
+};
+
+export default CoursesWidget;
