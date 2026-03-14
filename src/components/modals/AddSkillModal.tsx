@@ -144,7 +144,7 @@ const AddSkillModal = ({ onClose }: AddSkillModalProps) => {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontSize: 10, color: 'hsl(var(--accent))', width: 80 }}>
-              {STAT_META[primaryStat].icon} {STAT_META[primaryStat].name}
+              {STAT_META[secondaryStat as StatKey].icon} {STAT_META[secondaryStat as StatKey].name}
             </span>
             <input
               type="range"
@@ -155,12 +155,12 @@ const AddSkillModal = ({ onClose }: AddSkillModalProps) => {
               style={{ flex: 1 }}
             />
             <span style={{ fontSize: 10, color: 'hsl(var(--accent))', width: 80, textAlign: 'right' }}>
-              {STAT_META[secondaryStat as StatKey].icon} {STAT_META[secondaryStat as StatKey].name}
+              {STAT_META[primaryStat].icon} {STAT_META[primaryStat].name}
             </span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: 'hsl(var(--text-dim))', marginTop: 4 }}>
-            <span>{split}%</span>
             <span>{100 - split}%</span>
+            <span>{split}%</span>
           </div>
           <div style={{ fontSize: 9, color: 'hsl(var(--text-dim))', marginTop: 4 }}>
             Can be overridden per session when logging.

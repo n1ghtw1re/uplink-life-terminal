@@ -42,7 +42,7 @@ const defaultLayout: LayoutItem[] = [
   { i: 'stats', x: 0, y: 4, w: 4, h: 4, minW: 2, minH: 2 },
   { i: 'courses', x: 4, y: 3, w: 4, h: 4, minW: 2, minH: 2 },
   { i: 'media', x: 8, y: 3, w: 4, h: 4, minW: 2, minH: 2 },
-  { i: 'skills', x: 0, y: 8, w: 4, h: 4, minW: 2, minH: 2 },
+  { i: 'skills', x: 4, y: 7, w: 4, h: 4, minW: 2, minH: 2 },
 ];
 
 const widgetNames: Record<string, string> = {
@@ -171,9 +171,33 @@ const Index = () => {
 
   const handleRestore = (id: string) => {
     const def = defaultLayout.find(d => d.i === id) ?? { i: id, x: 0, y: 0, w: 4, h: 4, minW: 2, minH: 2 };
-    const maxY = layout.reduce((max, l) => Math.max(max, l.y + l.h), 0);
-    const newItem = { ...def, i: id, y: maxY, x: 0 };
+    const w = def.w;
+    const h = def.h;
+    const cols = 12;
+
+    // Find first row where there's horizontal space for this widget
+    const findSlot = (current: LayoutItem[]): { x: number; y: number } => {
+      // Build occupied grid map
+      const maxY = current.reduce((max, l) => Math.max(max, l.y + l.h), 0);
+      for (let row = 0; row <= maxY; row++) {
+        for (let col = 0; col <= cols - w; col++) {
+          // Check if this slot is free
+          const fits = !current.some(l =>
+            col < l.x + l.w &&
+            col + w > l.x &&
+            row < l.y + l.h &&
+            row + h > l.y
+          );
+          if (fits) return { x: col, y: row };
+        }
+      }
+      // No gap found — append at bottom
+      return { x: 0, y: maxY };
+    };
+
     setLayout(prev => {
+      const { x, y } = findSlot(prev);
+      const newItem = { ...def, i: id, x, y };
       const next = [...prev, newItem];
       localStorage.setItem('uplink-layout', JSON.stringify(next));
       return next;
@@ -215,7 +239,7 @@ const Index = () => {
         />
       );
       case 'media': return <MediaWidget {...props} onMediaClick={(id) => openDrawer('media', id)} />;
-      case 'skills': return <SkillsWidget {...props} onOpenSkills={() => setShowSkills(true)} />;
+      case 'skills': return <SkillsWidget {...props} onOpenSkills={() => setShowSkills(true)} onSkillClick={(id) => openDrawer('skill', id)} />;
       default: return null;
     }
   };

@@ -1,10 +1,13 @@
 // ============================================================
 // src/components/widgets/SkillsWidget.tsx
 // ============================================================
+import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSkills } from '@/hooks/useSkills';
 import { getStatLevel, STAT_META, StatKey } from '@/types';
 import WidgetWrapper from '../WidgetWrapper';
+import Modal from '../Modal';
+import AddSkillModal from '../modals/AddSkillModal';
 
 interface Props {
   onClose?: () => void;
@@ -17,6 +20,7 @@ interface Props {
 export default function SkillsWidget({ onClose, onFullscreen, isFullscreen, onOpenSkills, onSkillClick }: Props) {
   const { user } = useAuth();
   const { data: skills, isLoading } = useSkills(user?.id);
+  const [showAdd, setShowAdd] = useState(false);
 
   const topSkills = [...(skills ?? [])]
     .sort((a, b) => {
@@ -95,9 +99,19 @@ export default function SkillsWidget({ onClose, onFullscreen, isFullscreen, onOp
         borderTop: '1px solid hsl(var(--accent-dim))',
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
       }}>
-        <span style={{ fontSize: 9, color: 'hsl(var(--text-dim))', fontFamily: "'IBM Plex Mono', monospace" }}>
-          {(skills ?? []).length} skills total
-        </span>
+        <button
+          onClick={() => setShowAdd(true)}
+          style={{
+            background: 'transparent', border: 'none',
+            fontFamily: "'IBM Plex Mono', monospace",
+            fontSize: 9, color: 'hsl(var(--accent-dim))',
+            cursor: 'pointer', letterSpacing: 1,
+          }}
+          onMouseEnter={e => e.currentTarget.style.color = 'hsl(var(--accent))'}
+          onMouseLeave={e => e.currentTarget.style.color = 'hsl(var(--accent-dim))'}
+        >
+          + ADD SKILL
+        </button>
         <button
           onClick={onOpenSkills}
           style={{
@@ -112,6 +126,10 @@ export default function SkillsWidget({ onClose, onFullscreen, isFullscreen, onOp
           VIEW ALL ›
         </button>
       </div>
+
+      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="ADD SKILL" width={520}>
+        <AddSkillModal onClose={() => setShowAdd(false)} />
+      </Modal>
     </WidgetWrapper>
   );
 }
