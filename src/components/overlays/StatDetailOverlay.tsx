@@ -1,7 +1,7 @@
 // ============================================================
 // src/components/overlays/StatDetailOverlay.tsx
 // ============================================================
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useStats } from '@/hooks/useStats';
 import { useSkills } from '@/hooks/useSkills';
@@ -12,9 +12,12 @@ import CourseDetailDrawer from '@/components/drawer/CourseDetailDrawer';
 import SkillDetailDrawer from '@/components/drawer/SkillDetailDrawer';
 import MediaDetailDrawer from '@/components/drawer/MediaDetailDrawer';
 
+const STAT_NAV: StatKey[] = ['body', 'cool', 'flow', 'ghost', 'grit', 'mind', 'wire'];
+
 interface Props {
   statKey: StatKey;
   onClose: () => void;
+  onNavigate?: (key: StatKey) => void;
 }
 
 // ── Shared primitives ─────────────────────────────────────────
@@ -40,21 +43,36 @@ function XPBar({ value, max, height = 6 }: { value: number; max: number; height?
   );
 }
 
-function Divider({ label }: { label: string }) {
+function Divider({ label, collapsed, onToggle, count }: {
+  label: string;
+  collapsed?: boolean;
+  onToggle?: () => void;
+  count?: number;
+}) {
   return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: 8,
-      margin: '20px 0 10px',
-    }}>
+    <div
+      onClick={onToggle}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        margin: '20px 0 10px',
+        cursor: onToggle ? 'pointer' : 'default',
+        userSelect: 'none',
+      }}
+      onMouseEnter={e => { if (onToggle) (e.currentTarget.querySelector('span') as HTMLElement).style.color = 'hsl(var(--accent))'; }}
+      onMouseLeave={e => { if (onToggle) (e.currentTarget.querySelector('span') as HTMLElement).style.color = 'hsl(var(--accent-dim))'; }}
+    >
       <span style={{
         fontFamily: "'IBM Plex Mono', monospace",
-        fontSize: 9,
-        color: 'hsl(var(--accent-dim))',
-        letterSpacing: 2,
-        flexShrink: 0,
-      }}>── {label}</span>
+        fontSize: 9, color: 'hsl(var(--accent-dim))',
+        letterSpacing: 2, flexShrink: 0,
+        transition: 'color 150ms',
+      }}>
+        {onToggle ? (collapsed ? '› ' : '▾ ') : '── '}
+        {label}
+        {count !== undefined && (
+          <span style={{ color: 'hsl(var(--text-dim))', marginLeft: 6 }}>({count})</span>
+        )}
+      </span>
       <div style={{ flex: 1, height: 1, background: 'hsl(var(--accent-dim))', opacity: 0.3 }} />
     </div>
   );
@@ -79,8 +97,23 @@ function Badge({ label, success }: { label: string; success?: boolean }) {
 
 // ── Main component ────────────────────────────────────────────
 
-export default function StatDetailOverlay({ statKey, onClose }: Props) {
+export default function StatDetailOverlay({ statKey, onClose, onNavigate }: Props) {
   const [innerDrawer, setInnerDrawer] = useState<{ type: string; id: string } | null>(null);
+  const [collapsedSkills, setCollapsedSkills]     = useState(false);
+  const [collapsedActivity, setCollapsedActivity] = useState(false);
+  const [collapsedMedia, setCollapsedMedia]       = useState(false);
+  const [collapsedCourses, setCollapsedCourses]   = useState(false);
+  const [mediaTab, setMediaTab] = useState<string>('ALL');
+
+  // Reset section states when navigating to a new stat
+  useEffect(() => {
+    setCollapsedSkills(false);
+    setCollapsedActivity(false);
+    setCollapsedMedia(false);
+    setCollapsedCourses(false);
+    setMediaTab('ALL');
+    setInnerDrawer(null);
+  }, [statKey]);
   const { user } = useAuth();
   const { data: allStats } = useStats(user?.id);
   const { data: allSkills } = useSkills(user?.id);
@@ -447,12 +480,13 @@ export default function StatDetailOverlay({ statKey, onClose }: Props) {
             flex: 1,
             overflowY: 'auto',
             padding: '24px 28px',
+            paddingBottom: onNavigate ? 72 : 24,
           }}
         >
 
           {/* ── Skills ── */}
-          <Divider label="SKILLS" />
-          {skills.length === 0 ? (
+          <Divider label="SKILLS" collapsed={collapsedSkills} onToggle={() => setCollapsedSkills(v => !v)} count={skills.length} />
+          {!collapsedSkills && (skills.length === 0 ? (
             <EmptyState text="No skills added for this domain yet." />
           ) : (
             <div style={{ display: 'grid', gap: 6 }}>
@@ -509,11 +543,11 @@ export default function StatDetailOverlay({ statKey, onClose }: Props) {
                 );
               })}
             </div>
-          )}
+          ))}
 
           {/* ── Recent activity ── */}
-          <Divider label="RECENT ACTIVITY" />
-          {!recentActivity || recentActivity.length === 0 ? (
+          <Divider label="RECENT ACTIVITY" collapsed={collapsedActivity} onToggle={() => setCollapsedActivity(v => !v)} count={recentActivity?.length} />
+          {!collapsedActivity && (!recentActivity || recentActivity.length === 0 ? (
             <EmptyState text="No activity yet." />
           ) : (
             <div style={{ display: 'grid', gap: 3 }}>
@@ -561,14 +595,35 @@ export default function StatDetailOverlay({ statKey, onClose }: Props) {
                 );
               })}
             </div>
-          )}
+          ))}
 
           {/* ── Media ── */}
           {linkedMedia && linkedMedia.length > 0 && (
             <>
-              <Divider label="MEDIA" />
+              <Divider label="MEDIA" collapsed={collapsedMedia} onToggle={() => setCollapsedMedia(v => !v)} count={linkedMedia.length} />
+              {!collapsedMedia && (
+              <>
+                {/* Media type tabs */}
+                <div style={{ display: 'flex', gap: 4, marginBottom: 8, flexWrap: 'wrap' }}>
+                  {['ALL', 'BOOK', 'COMIC', 'FILM', 'DOCUMENTARY', 'TV', 'ALBUM'].map(tab => {
+                    const tabCount = tab === 'ALL' ? linkedMedia.length : linkedMedia.filter(m => m.type.toUpperCase() === tab).length;
+                    if (tab !== 'ALL' && tabCount === 0) return null;
+                    const tabLabel: Record<string, string> = { ALL: 'ALL', BOOK: 'BOOKS', COMIC: 'COMICS', FILM: 'FILMS', DOCUMENTARY: 'DOCS', TV: 'TV', ALBUM: 'ALBUMS' };
+                    return (
+                      <button key={tab} onClick={() => setMediaTab(tab)} style={{
+                        padding: '3px 8px', fontSize: 9, fontFamily: "'IBM Plex Mono', monospace",
+                        border: `1px solid ${mediaTab === tab ? 'hsl(var(--accent))' : 'hsl(var(--accent-dim))'}`,
+                        background: mediaTab === tab ? 'rgba(255,176,0,0.1)' : 'transparent',
+                        color: mediaTab === tab ? 'hsl(var(--accent))' : 'hsl(var(--text-dim))',
+                        cursor: 'pointer', letterSpacing: 1,
+                      }}>
+                        {tabLabel[tab]} {tabCount > 0 && tab !== 'ALL' ? `(${tabCount})` : ''}
+                      </button>
+                    );
+                  })}
+                </div>
               <div style={{ display: 'grid', gap: 5 }}>
-                {linkedMedia.map(m => {
+                {(mediaTab === 'ALL' ? linkedMedia : linkedMedia.filter(m => m.type.toUpperCase() === mediaTab)).map(m => {
                   const pages      = (m.meta as any)?.pages;
                   const pageCurrent = (m.meta as any)?.page_current;
                   const progress   = pages && pageCurrent
@@ -628,14 +683,16 @@ export default function StatDetailOverlay({ statKey, onClose }: Props) {
                   );
                 })}
               </div>
+              </>
+              )}
             </>
           )}
 
           {/* ── Courses ── */}
           {linkedCourses && linkedCourses.length > 0 && (
             <>
-              <Divider label="COURSES" />
-              <div style={{ display: 'grid', gap: 5 }}>
+              <Divider label="COURSES" collapsed={collapsedCourses} onToggle={() => setCollapsedCourses(v => !v)} count={linkedCourses.length} />
+              {!collapsedCourses && <div style={{ display: 'grid', gap: 5 }}>
                 {linkedCourses.map(c => (
                   <div key={c.id}
                     onClick={() => setInnerDrawer({ type: 'course', id: c.id })}
@@ -687,7 +744,7 @@ export default function StatDetailOverlay({ statKey, onClose }: Props) {
                     <Badge label={c.status} success={c.status === 'COMPLETE'} />
                   </div>
                 ))}
-              </div>
+              </div>}
             </>
           )}
 
@@ -756,6 +813,61 @@ export default function StatDetailOverlay({ statKey, onClose }: Props) {
           )}
         </div>
       </div>
+
+      {/* ── Stat nav bar ── */}
+      {onNavigate && (
+        <div style={{
+          position: 'absolute',
+          bottom: 0, left: 0, right: 0,
+          height: 48,
+          background: 'hsl(var(--bg-primary))',
+          borderTop: '1px solid hsl(var(--accent-dim))',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 6,
+          flexShrink: 0,
+          zIndex: 10,
+        }}>
+          {STAT_NAV.map((key) => {
+            const isActive = key === statKey;
+            const icon = STAT_META[key]?.icon ?? key;
+            return (
+              <button
+                key={key}
+                onClick={() => onNavigate(key)}
+                style={{
+                  width: 36, height: 36,
+                  border: `1px solid ${isActive ? 'hsl(var(--accent))' : 'hsl(var(--accent-dim))'}`,
+                  background: isActive ? 'rgba(255,176,0,0.12)' : 'transparent',
+                  color: isActive ? 'hsl(var(--accent))' : 'hsl(var(--text-dim))',
+                  fontFamily: "'IBM Plex Mono', monospace",
+                  fontSize: isActive ? 18 : 14,
+                  cursor: 'pointer',
+                  letterSpacing: 1,
+                  transition: 'all 150ms',
+                  boxShadow: isActive ? '0 0 8px rgba(255,176,0,0.3)' : 'none',
+                }}
+                onMouseEnter={e => {
+                  if (!isActive) {
+                    e.currentTarget.style.borderColor = 'hsl(var(--accent))';
+                    e.currentTarget.style.color = 'hsl(var(--accent))';
+                  }
+                }}
+                onMouseLeave={e => {
+                  if (!isActive) {
+                    e.currentTarget.style.borderColor = 'hsl(var(--accent-dim))';
+                    e.currentTarget.style.color = 'hsl(var(--text-dim))';
+                  }
+                }}
+                title={STAT_META[key]?.name ?? key.toUpperCase()}
+              >
+                {icon}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

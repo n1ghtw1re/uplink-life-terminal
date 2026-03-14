@@ -9,14 +9,14 @@ import WidgetWrapper from '../WidgetWrapper';
 import Modal from '../Modal';
 import AddMediaModal from '../modals/AddMediaModal';
 
-const TABS = ['BOOKS', 'COMICS', 'FILMS', 'TV', 'ALBUMS', 'ALL'];
+const TABS = ['BOOKS', 'COMICS', 'FILMS', 'DOCS', 'TV', 'ALBUMS', 'ALL'];
 
 const TAB_TYPE_MAP: Record<string, string> = {
-  BOOKS: 'book', COMICS: 'comic', FILMS: 'film', TV: 'tv', ALBUMS: 'album',
+  BOOKS: 'book', COMICS: 'comic', FILMS: 'film', DOCS: 'documentary', TV: 'tv', ALBUMS: 'album',
 };
 
 const TAB_MEDIA_TYPE: Record<string, 'book' | 'comic' | 'film' | 'documentary' | 'tv' | 'album'> = {
-  BOOKS: 'book', COMICS: 'comic', FILMS: 'film', TV: 'tv', ALBUMS: 'album', ALL: 'book',
+  BOOKS: 'book', COMICS: 'comic', FILMS: 'film', DOCS: 'documentary', TV: 'tv', ALBUMS: 'album', ALL: 'book',
 };
 
 const IN_PROGRESS = ['READING', 'WATCHING', 'LISTENED', 'LISTENING'];

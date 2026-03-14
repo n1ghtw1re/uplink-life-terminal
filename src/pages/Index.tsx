@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 
-import ReactGridLayout, { getCompactor } from 'react-grid-layout';
+import ReactGridLayout from 'react-grid-layout';
 import type { Layout as RGLLayout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
@@ -15,10 +15,15 @@ import HeatmapWidget from '@/components/widgets/HeatmapWidget';
 import StatOverviewWidget from '@/components/widgets/StatOverviewWidget';
 import CoursesWidget from '@/components/widgets/CoursesWidget';
 import MediaWidget from '@/components/widgets/MediaWidget';
+import SkillsWidget from '@/components/widgets/SkillsWidget';
 import QuickLogOverlay from '@/components/overlays/QuickLogOverlay';
 import CharacterSheet from '@/components/overlays/CharacterSheet';
 import SearchOverlay from '@/components/overlays/SearchOverlay';
 import StatDetailOverlay from '@/components/overlays/StatDetailOverlay';
+import SkillsPage from '@/components/overlays/SkillsPage';
+import LibraryPage from '@/components/overlays/LibraryPage';
+import CoursesPage from '@/components/overlays/CoursesPage';
+import WidgetManager from '@/components/overlays/WidgetManager';
 import FirstBootWizard from '@/components/wizard/FirstBootWizard';
 import DetailDrawer from '@/components/drawer/DetailDrawer';
 import type { DrawerItem } from '@/components/drawer/DetailDrawer';
@@ -28,7 +33,7 @@ import { StatKey } from '@/types';
 
 type LayoutItem = { i: string; x: number; y: number; w: number; h: number; minW?: number; minH?: number };
 
-const ALL_WIDGET_IDS = ['xp', 'checkin', 'heatmap', 'stats', 'courses', 'media'];
+const ALL_WIDGET_IDS = ['xp', 'checkin', 'heatmap', 'stats', 'courses', 'media', 'skills'];
 
 const defaultLayout: LayoutItem[] = [
   { i: 'xp', x: 0, y: 0, w: 4, h: 4, minW: 2, minH: 2 },
@@ -37,6 +42,7 @@ const defaultLayout: LayoutItem[] = [
   { i: 'stats', x: 0, y: 4, w: 4, h: 4, minW: 2, minH: 2 },
   { i: 'courses', x: 4, y: 3, w: 4, h: 4, minW: 2, minH: 2 },
   { i: 'media', x: 8, y: 3, w: 4, h: 4, minW: 2, minH: 2 },
+  { i: 'skills', x: 0, y: 8, w: 4, h: 4, minW: 2, minH: 2 },
 ];
 
 const widgetNames: Record<string, string> = {
@@ -46,6 +52,7 @@ const widgetNames: Record<string, string> = {
   stats: 'STAT OVERVIEW',
   courses: 'COURSES',
   media: 'MEDIA LIBRARY',
+  skills: 'SKILLS',
 };
 
 const Index = () => {
@@ -61,11 +68,25 @@ const Index = () => {
   const [showFlash, setShowFlash] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerItem, setDrawerItem] = useState<DrawerItem | null>(null);
-  const [layout, setLayout] = useState(defaultLayout);
-  const [activeWidgets, setActiveWidgets] = useState<string[]>(ALL_WIDGET_IDS);
+  const [layout, setLayout] = useState<LayoutItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('uplink-layout');
+      return saved ? JSON.parse(saved) : defaultLayout;
+    } catch { return defaultLayout; }
+  });
+  const [activeWidgets, setActiveWidgets] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('uplink-active-widgets');
+      return saved ? JSON.parse(saved) : ALL_WIDGET_IDS;
+    } catch { return ALL_WIDGET_IDS; }
+  });
   const [fullscreenWidget, setFullscreenWidget] = useState<string | null>(null);
   const [gridSize, setGridSize] = useState({ width: 0, height: 0 });
   const [openStatKey, setOpenStatKey] = useState<StatKey | null>(null);
+  const [showSkills, setShowSkills] = useState(false);
+  const [showLibrary, setShowLibrary] = useState(false);
+  const [showCourses, setShowCourses] = useState(false);
+  const [showWidgetManager, setShowWidgetManager] = useState(false);
 
   const sidebarWidth = sidebarExpanded ? 220 : 48;
 
@@ -130,23 +151,38 @@ const Index = () => {
     return () => window.removeEventListener('keydown', handleKey);
   }, [handleKey]);
 
-  const maxRows = 8;
-  const rowHeight = Math.floor((gridSize.height - 16 - 8 * maxRows) / maxRows);
+  const rowHeight = 80; // fixed row height — grid scrolls as needed
 
-  const strictCompactor = useMemo(() => getCompactor(null, false, true), []);
+
 
   const handleClose = (id: string) => {
     if (fullscreenWidget === id) setFullscreenWidget(null);
-    setLayout(prev => prev.filter(item => item.i !== id));
-    setActiveWidgets(prev => prev.filter(w => w !== id));
+    setLayout(prev => {
+      const next = prev.filter(item => item.i !== id);
+      localStorage.setItem('uplink-layout', JSON.stringify(next));
+      return next;
+    });
+    setActiveWidgets(prev => {
+      const next = prev.filter(w => w !== id);
+      localStorage.setItem('uplink-active-widgets', JSON.stringify(next));
+      return next;
+    });
   };
 
   const handleRestore = (id: string) => {
-    const def = defaultLayout.find(d => d.i === id);
-    if (def) {
-      setLayout(prev => [...prev, def]);
-      setActiveWidgets(prev => [...prev, id]);
-    }
+    const def = defaultLayout.find(d => d.i === id) ?? { i: id, x: 0, y: 0, w: 4, h: 4, minW: 2, minH: 2 };
+    const maxY = layout.reduce((max, l) => Math.max(max, l.y + l.h), 0);
+    const newItem = { ...def, i: id, y: maxY, x: 0 };
+    setLayout(prev => {
+      const next = [...prev, newItem];
+      localStorage.setItem('uplink-layout', JSON.stringify(next));
+      return next;
+    });
+    setActiveWidgets(prev => {
+      const next = [...prev, id];
+      localStorage.setItem('uplink-active-widgets', JSON.stringify(next));
+      return next;
+    });
   };
 
   const handleFullscreen = (id: string) => {
@@ -179,6 +215,7 @@ const Index = () => {
         />
       );
       case 'media': return <MediaWidget {...props} onMediaClick={(id) => openDrawer('media', id)} />;
+      case 'skills': return <SkillsWidget {...props} onOpenSkills={() => setShowSkills(true)} />;
       default: return null;
     }
   };
@@ -208,25 +245,27 @@ const Index = () => {
           onExpand={() => setSidebarExpanded(true)}
           onOpenCharSheet={() => setShowChar(true)}
           onOpenStat={(statKey) => setOpenStatKey(statKey)}
+          onOpenSkills={() => setShowSkills(true)}
+          onOpenLibrary={() => setShowLibrary(true)}
+          onOpenCourses={() => setShowCourses(true)}
+          onOpenWidgetManager={() => setShowWidgetManager(true)}
         />
 
-        <div style={{ flex: 1, overflow: 'hidden', padding: 8, position: 'relative', marginRight: drawerOpen ? 420 : 0, transition: 'margin-right 200ms ease' }}>
+        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: 8, position: 'relative', marginRight: drawerOpen ? 420 : 0, transition: 'margin-right 200ms ease', scrollbarWidth: 'thin', scrollbarColor: 'hsl(var(--accent-dim)) hsl(var(--bg-secondary))' }}>
           {gridSize.width > 0 && (
             <ReactGridLayout
               className="layout"
               layout={visibleLayout}
               width={gridSize.width - 16}
-              compactor={strictCompactor}
               gridConfig={{
                 cols: 12,
-                rowHeight: rowHeight > 20 ? rowHeight : 40,
-                maxRows: maxRows,
+                rowHeight: rowHeight,
+                compactType: 'horizontal',
                 margin: [8, 8] as [number, number],
                 containerPadding: [0, 0] as [number, number],
               } as any}
               dragConfig={{
                 enabled: true,
-                bounded: true,
                 handle: ".widget-drag-handle",
                 threshold: 3,
               }}
@@ -235,16 +274,13 @@ const Index = () => {
                 handles: ['se', 'sw'],
               }}
               onLayoutChange={(newLayout: RGLLayout) => {
-                const clamped = newLayout.map(l => {
-                  const h = Math.min(l.h, maxRows);
-                  const y = Math.min(l.y, maxRows - h);
-                  return {
-                    i: l.i, x: l.x, w: l.w,
-                    h, y: Math.max(0, y),
-                    minW: l.minW, minH: l.minH,
-                  };
-                });
-                setLayout(clamped);
+                const next = newLayout.map(l => ({
+                  i: l.i, x: l.x, w: l.w, h: l.h,
+                  y: Math.max(0, l.y),
+                  minW: l.minW, minH: l.minH,
+                }));
+                setLayout(next);
+                localStorage.setItem('uplink-layout', JSON.stringify(next));
               }}
             >
               {visibleLayout.map(item => (
@@ -270,10 +306,28 @@ const Index = () => {
       </div>
 
       {/* Stat detail — full screen, above everything */}
+      {showWidgetManager && (
+        <WidgetManager
+          activeWidgets={activeWidgets}
+          onRestore={handleRestore}
+          onClose={handleClose}
+          onDismiss={() => setShowWidgetManager(false)}
+        />
+      )}
+      {showCourses && (
+        <CoursesPage onClose={() => setShowCourses(false)} />
+      )}
+      {showLibrary && (
+        <LibraryPage onClose={() => setShowLibrary(false)} />
+      )}
+      {showSkills && (
+        <SkillsPage onClose={() => setShowSkills(false)} />
+      )}
       {openStatKey && (
         <StatDetailOverlay
           statKey={openStatKey}
           onClose={() => setOpenStatKey(null)}
+          onNavigate={(key) => setOpenStatKey(key)}
         />
       )}
 

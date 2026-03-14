@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { arsenalCounts, trackingCounts } from '@/data/mockData';
+import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useStats } from '@/hooks/useStats';
@@ -11,19 +11,40 @@ interface SidebarProps {
   onExpand?: () => void;
   onOpenCharSheet?: () => void;
   onOpenStat?: (statKey: StatKey) => void;
+  onOpenSkills?: () => void;
+  onOpenLibrary?: () => void;
+  onOpenCourses?: () => void;
+  onOpenWidgetManager?: () => void;
 }
 
 const sectionMap: Record<string, string> = {
   'BODY': 'stats', 'WIRE': 'stats', 'MIND': 'stats',
   'COOL': 'stats', 'GRIT': 'stats', 'FLOW': 'stats', 'GHOST': 'stats',
-  'Arsenal': 'arsenal',
+  'Arsenal': 'arsenal', 'Tracking': 'tracking', 'System': 'system',
   'Goals': 'tracking', 'Habits': 'tracking',
   'Settings': 'system',
 };
 
-const Sidebar = ({ expanded, onToggle, onExpand, onOpenCharSheet, onOpenStat }: SidebarProps) => {
+const Sidebar = ({ expanded, onToggle, onExpand, onOpenCharSheet, onOpenStat, onOpenSkills, onOpenLibrary, onOpenCourses, onOpenWidgetManager }: SidebarProps) => {
   const { user } = useAuth();
   const { data: stats } = useStats(user?.id);
+
+  const { data: counts } = useQuery({
+    queryKey: ['arsenal-counts', user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const [courses, media, skills] = await Promise.all([
+        supabase.from('courses').select('id', { count: 'exact', head: true }).eq('user_id', user!.id),
+        supabase.from('media').select('id', { count: 'exact', head: true }).eq('user_id', user!.id),
+        supabase.from('skills').select('id', { count: 'exact', head: true }).eq('user_id', user!.id),
+      ]);
+      return {
+        courses: courses.count ?? 0,
+        library: media.count ?? 0,
+        projects: skills.count ?? 0, // placeholder until projects table built
+      };
+    },
+  });
   const [openSection, setOpenSection] = useState<string | null>(null);
 
   const toggleSection = (section: string) => {
@@ -33,6 +54,7 @@ const Sidebar = ({ expanded, onToggle, onExpand, onOpenCharSheet, onOpenStat }: 
   const handleCollapsedClick = (label: string, statKey?: StatKey) => {
     if (label === 'Character Sheet') { onOpenCharSheet?.(); return; }
     if (label === 'Dashboard') { onExpand?.(); setOpenSection(null); return; }
+    if (label === 'Skills') { onOpenSkills?.(); return; }
     if (statKey) { onOpenStat?.(statKey); return; }
     const section = sectionMap[label];
     if (section) { onExpand?.(); setOpenSection(section); }
@@ -49,28 +71,32 @@ const Sidebar = ({ expanded, onToggle, onExpand, onOpenCharSheet, onOpenStat }: 
     { icon: '⌂', label: 'Dashboard' },
     { icon: '◈', label: 'Character Sheet' },
     { icon: 'div', label: '' },
-    ...(stats ?? []).map(s => ({ icon: s.icon, label: s.name, statKey: s.key as StatKey })),
+    // Stats — sorted alpha, each opens stat page
+    ...[...(stats ?? [])].sort((a, b) => a.name.localeCompare(b.name)).map(s => ({ icon: s.icon, label: s.name, statKey: s.key as StatKey })),
     { icon: 'div', label: '' },
-    { icon: '📚', label: 'Arsenal' },
-    { icon: '◎', label: 'Goals' },
-    { icon: '✓', label: 'Habits' },
+    // Skills — opens Skills page
+    { icon: '◫', label: 'Skills' },
     { icon: 'div', label: '' },
-    { icon: '⚙', label: 'Settings' },
+    { icon: '▦', label: 'Arsenal' },
+    { icon: 'div', label: '' },
+    { icon: '◉', label: 'Tracking' },
+    { icon: 'div', label: '' },
+    { icon: '⚙', label: 'System' },
   ];
 
   const arsenalItems = [
-    { icon: '📚', name: 'COURSES', count: arsenalCounts.courses },
-    { icon: '📖', name: 'LIBRARY', count: arsenalCounts.library },
-    { icon: '⚙', name: 'PROJECTS', count: arsenalCounts.projects },
-    { icon: '🏆', name: 'CERTS', count: arsenalCounts.certs },
-    { icon: '🔧', name: 'TOOLS', count: arsenalCounts.tools },
-    { icon: '🤖', name: 'AUGMENTS', count: arsenalCounts.augments },
-    { icon: '🔗', name: 'RESOURCES', count: arsenalCounts.resources },
+    { icon: '▸', name: 'COURSES',   count: counts?.courses },
+    { icon: '▸', name: 'LIBRARY',   count: counts?.library },
+    { icon: '▸', name: 'PROJECTS',  count: undefined },
+    { icon: '▸', name: 'CERTS',     count: undefined },
+    { icon: '▸', name: 'TOOLS',     count: undefined },
+    { icon: '▸', name: 'AUGMENTS',  count: undefined },
+    { icon: '▸', name: 'RESOURCES', count: undefined },
   ];
 
   const trackingItems = [
-    { icon: '◎', name: 'GOALS', count: trackingCounts.goals },
-    { icon: '✓', name: 'HABITS', count: trackingCounts.habits },
+    { icon: '◎', name: 'GOALS',   count: undefined },
+    { icon: '✓', name: 'HABITS',  count: undefined },
     { icon: '📅', name: 'PLANNER' },
     { icon: '📝', name: 'NOTES' },
     { icon: '🖥', name: 'TERMINAL' },
@@ -163,7 +189,7 @@ const Sidebar = ({ expanded, onToggle, onExpand, onOpenCharSheet, onOpenStat }: 
             <span>// STATS</span>
             <span style={{ transition: 'transform 150ms', transform: openSection === 'stats' ? 'rotate(90deg)' : 'none' }}>›</span>
           </div>
-          {openSection === 'stats' && (stats ?? []).map(s => (
+          {openSection === 'stats' && [...(stats ?? [])].sort((a, b) => a.name.localeCompare(b.name)).map(s => (
             <div
               key={s.key}
               className={`sidebar-item ${s.dormant ? 'dormant' : ''}`}
@@ -175,6 +201,18 @@ const Sidebar = ({ expanded, onToggle, onExpand, onOpenCharSheet, onOpenStat }: 
             </div>
           ))}
 
+          {/* SKILLS link */}
+          <div style={{ height: 1, background: 'hsl(var(--accent-dim))', margin: '4px 0' }} />
+          <div
+            className="sidebar-item"
+            onClick={() => onOpenSkills?.()}
+            style={{ cursor: 'pointer', padding: '8px 12px' }}
+          >
+            <span>◫ SKILLS</span>
+            <span style={{ fontSize: 9, color: 'hsl(var(--text-dim))' }}>{(stats ?? []).length}</span>
+          </div>
+          <div style={{ height: 1, background: 'hsl(var(--accent-dim))', margin: '4px 0' }} />
+
           {/* ARSENAL section */}
           <div
             className={`sidebar-section ${openSection === 'arsenal' ? 'active' : ''}`}
@@ -184,9 +222,17 @@ const Sidebar = ({ expanded, onToggle, onExpand, onOpenCharSheet, onOpenStat }: 
             <span style={{ transition: 'transform 150ms', transform: openSection === 'arsenal' ? 'rotate(90deg)' : 'none' }}>›</span>
           </div>
           {openSection === 'arsenal' && arsenalItems.map(item => (
-            <div key={item.name} className="sidebar-item">
+            <div
+              key={item.name}
+              className="sidebar-item"
+              style={{ cursor: (item.name === 'LIBRARY' || item.name === 'COURSES') ? 'pointer' : undefined }}
+              onClick={() => {
+                if (item.name === 'LIBRARY') onOpenLibrary?.();
+                if (item.name === 'COURSES') onOpenCourses?.();
+              }}
+            >
               <span>{item.icon} {item.name}</span>
-              <span style={{ fontSize: 9, color: 'hsl(var(--text-dim))' }}>({item.count})</span>
+              <span style={{ fontSize: 9, color: 'hsl(var(--text-dim))' }}>{item.count !== undefined ? `(${item.count})` : '—'}</span>
             </div>
           ))}
 
@@ -201,7 +247,7 @@ const Sidebar = ({ expanded, onToggle, onExpand, onOpenCharSheet, onOpenStat }: 
           {openSection === 'tracking' && trackingItems.map(item => (
             <div key={item.name} className="sidebar-item">
               <span>{item.icon} {item.name}</span>
-              {'count' in item && <span style={{ fontSize: 9, color: 'hsl(var(--text-dim))' }}>({item.count})</span>}
+              <span style={{ fontSize: 9, color: 'hsl(var(--text-dim))' }}>{item.count !== undefined ? `(${item.count})` : '—'}</span>
             </div>
           ))}
 
@@ -230,7 +276,11 @@ const Sidebar = ({ expanded, onToggle, onExpand, onOpenCharSheet, onOpenStat }: 
           ))}
 
           <div style={{ height: 1, background: 'hsl(var(--accent-dim))', margin: '4px 0' }} />
-          <div className="sidebar-item" style={{ padding: '8px 12px', color: 'hsl(var(--accent-dim))' }}>
+          <div
+            className="sidebar-item"
+            style={{ padding: '8px 12px', cursor: 'pointer' }}
+            onClick={() => onOpenWidgetManager?.()}
+          >
             [ + ADD WIDGET ]
           </div>
           <div className="sidebar-item" style={{ padding: '8px 12px', color: 'hsl(var(--accent-dim))' }}>

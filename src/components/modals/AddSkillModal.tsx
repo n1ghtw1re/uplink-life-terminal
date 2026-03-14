@@ -185,14 +185,29 @@ const AddSkillModal = ({ onClose }: AddSkillModalProps) => {
 
       {/* Buttons */}
       <div style={{ borderTop: '1px solid hsl(var(--accent-dim))', paddingTop: 12, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-        <button className="topbar-btn" style={{ color: 'hsl(var(--text-dim))' }} onClick={onClose}>
+        <button
+          onClick={onClose}
+          style={{
+            padding: '6px 16px', fontFamily: "'IBM Plex Mono', monospace",
+            fontSize: 10, letterSpacing: 1, cursor: 'pointer',
+            background: 'transparent',
+            border: '1px solid hsl(var(--accent-dim))',
+            color: 'hsl(var(--text-dim))',
+          }}
+        >
           CANCEL
         </button>
         <button
-          className="topbar-btn"
           disabled={!name.trim() || saving}
-          style={{ opacity: !name.trim() ? 0.4 : 1 }}
           onClick={handleSubmit}
+          style={{
+            padding: '6px 16px', fontFamily: "'IBM Plex Mono', monospace",
+            fontSize: 10, letterSpacing: 1, cursor: !name.trim() ? 'not-allowed' : 'pointer',
+            background: 'transparent',
+            border: `1px solid ${!name.trim() ? 'hsl(var(--accent-dim))' : 'hsl(var(--accent))'}`,
+            color: !name.trim() ? 'hsl(var(--text-dim))' : 'hsl(var(--accent))',
+            opacity: !name.trim() ? 0.5 : 1,
+          }}
         >
           {saving ? '>> SAVING...' : '>> ADD SKILL'}
         </button>

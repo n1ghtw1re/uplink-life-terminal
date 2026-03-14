@@ -188,6 +188,7 @@ export default function CourseDetailDrawer({ courseId, onClose }: Props) {
 
     queryClient.invalidateQueries({ queryKey: ['course', courseId] });
     queryClient.invalidateQueries({ queryKey: ['courses', user?.id] });
+    queryClient.invalidateQueries({ queryKey: ['courses-all', user?.id] });
   };
 
   // ── Tick lesson complete ──────────────────────────────────
@@ -280,6 +281,8 @@ export default function CourseDetailDrawer({ courseId, onClose }: Props) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['course-sections', courseId] });
+      queryClient.invalidateQueries({ queryKey: ['course', courseId] });
+      queryClient.invalidateQueries({ queryKey: ['courses-all', user?.id] });
     },
   });
 
@@ -320,6 +323,8 @@ export default function CourseDetailDrawer({ courseId, onClose }: Props) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['course-sections', courseId] });
+      queryClient.invalidateQueries({ queryKey: ['course', courseId] });
+      queryClient.invalidateQueries({ queryKey: ['courses-all', user?.id] });
     },
   });
 
