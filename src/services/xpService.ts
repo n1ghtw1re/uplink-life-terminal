@@ -95,7 +95,11 @@ export async function awardXP(params: {
   }
 
   // Build XP log entries
-  const logEntries: object[] = [];
+  const logEntries: {
+    user_id: string; source: string; source_id?: string | null;
+    tier: string; amount: number; base_amount: number;
+    multiplier?: number; stat_key?: string; skill_id?: string; notes?: string | null;
+  }[] = [];
 
   if (skillId && skillXP > 0) {
     logEntries.push({
@@ -164,15 +168,38 @@ export async function awardXP(params: {
     }
   }
 
-  // Update stat XP rows
+  // Update stat XP rows + sync level column
   for (const [stat, amount] of Object.entries(statXPMap)) {
     if (amount && amount > 0) {
+      // Increment XP via RPC
       const { error } = await supabase.rpc('increment_stat_xp', {
         p_user_id:  userId,
         p_stat_key: stat,
         p_amount:   amount,
       });
       if (error) throw error;
+
+      // Read new total XP and sync level column
+      const { data: statRow } = await supabase
+        .from('stats')
+        .select('xp')
+        .eq('user_id', userId)
+        .eq('stat_key', stat)
+        .single();
+
+      if (statRow) {
+        // Inline level calc (mirrors getStatLevel — avoid import in service)
+        const STAT_LEVEL_XP = [0, 500, 1200, 2500, 4500, 7500, 12000, 18000, 26000, 36000];
+        let newLevel = 1;
+        for (let i = STAT_LEVEL_XP.length - 1; i >= 0; i--) {
+          if ((statRow.xp ?? 0) >= STAT_LEVEL_XP[i]) { newLevel = i + 1; break; }
+        }
+        await supabase
+          .from('stats')
+          .update({ level: newLevel })
+          .eq('user_id', userId)
+          .eq('stat_key', stat);
+      }
     }
   }
 

@@ -32,10 +32,11 @@ export function useStats(userId: string | undefined) {
       return (data ?? []).map((row): StatDisplay => {
         const key = row.stat_key as StatKey;
         const meta = STAT_META[key];
-        const { xpInLevel, xpForLevel } = getStatLevel(row.xp ?? 0);
+        const { level: computedLevel, xpInLevel, xpForLevel } = getStatLevel(row.xp ?? 0);
         const titles = STAT_LEVEL_TITLES[key];
         const streakTier = getStreakTier(row.streak ?? 0);
-        const level = row.level ?? 1;
+        // Use computed level from cumulative XP — DB level column may lag behind
+        const level = computedLevel;
 
         return {
           key,
