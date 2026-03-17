@@ -8,11 +8,9 @@ interface TopBarProps {
   onOpenCheckin: () => void;
   onOpenCharSheet: () => void;
   onOpenSearch: () => void;
-  theme: string;
-  onThemeChange: (t: string) => void;
 }
 
-const TopBar = ({ onOpenLog, onOpenCheckin, onOpenCharSheet, onOpenSearch, theme, onThemeChange }: TopBarProps) => {
+const TopBar = ({ onOpenLog, onOpenCheckin, onOpenCharSheet, onOpenSearch }: TopBarProps) => {
   const [time, setTime] = useState(new Date());
   const { user } = useAuth();
   const { data: op, isLoading } = useOperator(user?.id);
@@ -84,18 +82,6 @@ const TopBar = ({ onOpenLog, onOpenCheckin, onOpenCharSheet, onOpenSearch, theme
         </button>
       </div>
       <span style={{ color: 'hsl(var(--text-dim))', opacity: 0.5 }}>│</span>
-
-      <div style={{ display: 'flex', gap: 4 }}>
-        {['AMBER', 'GRN', 'DOS'].map(t => (
-          <button
-            key={t}
-            className={`theme-pill ${theme === t ? 'active' : ''}`}
-            onClick={() => onThemeChange(t)}
-          >{t}</button>
-        ))}
-        <button className="theme-pill locked" disabled>🔒 BLOOD</button>
-        <button className="theme-pill locked" disabled>🔒 ICE</button>
-      </div>
 
       <div style={{ marginLeft: 'auto' }}>
         <span className="cursor-blink text-glow" />

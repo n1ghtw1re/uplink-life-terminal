@@ -30,6 +30,7 @@ import type { DrawerItem } from '@/components/drawer/DetailDrawer';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOperator } from '@/hooks/useOperator';
 import { StatKey } from '@/types';
+import { applyThemeClass, normalizeTheme, type ThemeCode } from '@/lib/themes';
 
 type LayoutItem = { i: string; x: number; y: number; w: number; h: number; minW?: number; minH?: number };
 
@@ -60,7 +61,7 @@ const Index = () => {
   const { data: op, refetch: refetchOp } = useOperator(user?.id);
 
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
-  const [theme, setTheme] = useState(() => localStorage.getItem('uplink-theme') || 'AMBER');
+  const [theme, setTheme] = useState<ThemeCode>(() => normalizeTheme(localStorage.getItem('uplink-theme')));
   const [showLog, setShowLog] = useState(false);
   const [showChar, setShowChar] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -113,16 +114,14 @@ const Index = () => {
 
   useEffect(() => {
     const root = document.documentElement;
-    root.classList.remove('theme-green', 'theme-dos');
-    if (theme === 'GRN') root.classList.add('theme-green');
-    if (theme === 'DOS') root.classList.add('theme-dos');
+    applyThemeClass(root, theme);
     localStorage.setItem('uplink-theme', theme);
   }, [theme]);
 
   const handleThemeChange = (t: string) => {
     setShowFlash(true);
     setTimeout(() => setShowFlash(false), 150);
-    setTheme(t);
+    setTheme(normalizeTheme(t));
   };
 
   const handleKey = useCallback((e: KeyboardEvent) => {
@@ -258,8 +257,6 @@ const Index = () => {
         onOpenCheckin={() => setShowCheckin(true)}
         onOpenCharSheet={() => setShowChar(true)}
         onOpenSearch={() => setShowSearch(true)}
-        theme={theme}
-        onThemeChange={handleThemeChange}
       />
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
@@ -267,6 +264,8 @@ const Index = () => {
           expanded={sidebarExpanded}
           onToggle={() => setSidebarExpanded(!sidebarExpanded)}
           onExpand={() => setSidebarExpanded(true)}
+          theme={theme}
+          onThemeChange={handleThemeChange}
           onOpenCharSheet={() => setShowChar(true)}
           onOpenStat={(statKey) => setOpenStatKey(statKey)}
           onOpenSkills={() => setShowSkills(true)}

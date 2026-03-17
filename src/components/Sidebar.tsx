@@ -1,14 +1,17 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useStats } from '@/hooks/useStats';
 import { StatKey } from '@/types';
+import { THEME_OPTIONS, type ThemeCode } from '@/lib/themes';
 
 interface SidebarProps {
   expanded: boolean;
   onToggle: () => void;
   onExpand?: () => void;
+  theme: ThemeCode;
+  onThemeChange: (t: ThemeCode) => void;
   onOpenCharSheet?: () => void;
   onOpenStat?: (statKey: StatKey) => void;
   onOpenSkills?: () => void;
@@ -25,7 +28,7 @@ const sectionMap: Record<string, string> = {
   'Settings': 'system',
 };
 
-const Sidebar = ({ expanded, onToggle, onExpand, onOpenCharSheet, onOpenStat, onOpenSkills, onOpenLibrary, onOpenCourses, onOpenWidgetManager }: SidebarProps) => {
+const Sidebar = ({ expanded, onToggle, onExpand, theme, onThemeChange, onOpenCharSheet, onOpenStat, onOpenSkills, onOpenLibrary, onOpenCourses, onOpenWidgetManager }: SidebarProps) => {
   const { user } = useAuth();
   const { data: stats } = useStats(user?.id);
 
@@ -110,11 +113,16 @@ const Sidebar = ({ expanded, onToggle, onExpand, onOpenCharSheet, onOpenStat, on
     { icon: '⏻', name: 'LOGOUT' },
   ];
 
+  const sortedThemeOptions = useMemo<ThemeCode[]>(
+    () => ([...THEME_OPTIONS].sort((a, b) => a.localeCompare(b)) as ThemeCode[]),
+    []
+  );
+
   return (
     <div style={{
       width: expanded ? 220 : 48,
       transition: 'width 150ms ease',
-      background: 'hsl(30 100% 3%)',
+      background: 'hsl(var(--bg-primary))',
       borderRight: '1px solid hsl(var(--accent-dim))',
       height: '100%',
       flexShrink: 0,
@@ -285,6 +293,19 @@ const Sidebar = ({ expanded, onToggle, onExpand, onOpenCharSheet, onOpenStat, on
           </div>
           <div className="sidebar-item" style={{ padding: '8px 12px', color: 'hsl(var(--accent-dim))' }}>
             [ LAYOUTS ]
+          </div>
+          <div style={{ padding: '0 12px 8px' }}>
+            <div className="crt-select-wrapper" style={{ width: '100%' }}>
+              <select
+                className="crt-select"
+                value={theme}
+                onChange={(e) => onThemeChange(e.target.value as ThemeCode)}
+              >
+                {sortedThemeOptions.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
       )}

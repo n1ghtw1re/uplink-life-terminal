@@ -67,9 +67,9 @@ const DetailDrawer = ({ open, item, onClose, onOpenLog }: DetailDrawerProps) => 
           right: 0,
           bottom: 0,
           width: 420,
-          background: '#0f0800',
+          background: 'hsl(var(--bg-primary))',
           borderLeft: '1px solid hsl(var(--accent-dim))',
-          boxShadow: '-4px 0 24px rgba(255, 176, 0, 0.08)',
+          boxShadow: '0 0 18px hsl(var(--accent-glow) / 0.12)',
           zIndex: 500,
           display: 'flex',
           flexDirection: 'column',
@@ -87,7 +87,7 @@ const DetailDrawer = ({ open, item, onClose, onOpenLog }: DetailDrawerProps) => 
           alignItems: 'center',
           justifyContent: 'space-between',
           padding: '0 16px',
-          borderBottom: '1px solid rgba(153,104,0,0.4)',
+          borderBottom: '1px solid hsl(var(--accent-dim) / 0.6)',
           flexShrink: 0,
         }}>
           <span style={{

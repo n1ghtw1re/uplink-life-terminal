@@ -1,0 +1,345 @@
+.theme-green {
+    --bg-primary: 120 100% 2%;
+    --bg-secondary: 120 100% 4%;
+    --bg-tertiary: 120 100% 6%;
+    --accent: 120 100% 50%;
+    --accent-dim: 120 100% 25%;
+    --accent-bright: 120 100% 70%;
+    --accent-glow: 120 100% 50%;
+    --text-primary: 120 100% 50%;
+    --text-dim: 120 100% 25%;
+    --text-bright: 120 100% 70%;
+  }
+
+  .theme-dos {
+    --bg-primary: 240 100% 3%;
+    --bg-secondary: 240 100% 6%;
+    --bg-tertiary: 240 100% 10%;
+    --accent: 0 0% 85%;
+    --accent-dim: 0 0% 45%;
+    --accent-bright: 0 0% 100%;
+    --accent-glow: 0 0% 85%;
+    --text-primary: 0 0% 85%;
+    --text-dim: 0 0% 45%;
+    --text-bright: 0 0% 100%;
+  }
+
+  .theme-light {
+    --bg-primary: 42 45% 92%;
+    --bg-secondary: 42 38% 88%;
+    --bg-tertiary: 42 30% 84%;
+    --accent: 145 78% 18%;
+    --accent-dim: 145 45% 30%;
+    --accent-bright: 145 88% 12%;
+    --accent-glow: 145 70% 22%;
+    --text-primary: 145 78% 18%;
+    --text-dim: 145 28% 32%;
+    --text-bright: 145 88% 12%;
+  }
+
+  .theme-blood {
+    --bg-primary: 0 38% 5%;
+    --bg-secondary: 0 42% 8%;
+    --bg-tertiary: 0 45% 12%;
+    --accent: 355 92% 56%;
+    --accent-dim: 355 66% 34%;
+    --accent-bright: 0 0% 96%;
+    --accent-glow: 355 92% 56%;
+    --text-primary: 0 0% 96%;
+    --text-dim: 355 42% 74%;
+    --text-bright: 0 0% 100%;
+  }
+
+  .theme-ice {
+    --bg-primary: 210 58% 8%;
+    --bg-secondary: 210 48% 12%;
+    --bg-tertiary: 210 42% 16%;
+    --accent: 194 100% 72%;
+    --accent-dim: 198 48% 52%;
+    --accent-bright: 0 0% 97%;
+    --accent-glow: 194 100% 72%;
+    --text-primary: 198 88% 92%;
+    --text-dim: 199 38% 72%;
+    --text-bright: 0 0% 100%;
+  }
+
+  .theme-cyber2077 {
+    --bg-primary: 0 0% 0%;
+    --bg-secondary: 0 0% 10%;
+    --bg-tertiary: 0 0% 14%;
+    --accent: 50 100% 50%;
+    --accent-dim: 0 0% 23%;
+    --accent-bright: 0 100% 50%;
+    --accent-glow: 50 100% 50%;
+    --text-primary: 50 100% 50%;
+    --text-dim: 0 0% 70%;
+    --text-bright: 0 0% 100%;
+  }
+
+  .theme-pastel-dream {
+    --bg-primary: 39 100% 94%;
+    --bg-secondary: 337 100% 86%;
+    --bg-tertiary: 182 52% 77%;
+    --accent: 272 100% 85%;
+    --accent-dim: 272 62% 72%;
+    --accent-bright: 0 0% 100%;
+    --accent-glow: 337 100% 86%;
+    --text-primary: 272 52% 30%;
+    --text-dim: 272 30% 45%;
+    --text-bright: 0 0% 100%;
+  }
+
+  .theme-kawaii-kitty {
+    --bg-primary: 0 0% 100%;
+    --bg-secondary: 59 100% 80%;
+    --bg-tertiary: 123 100% 80%;
+    --accent: 330 100% 71%;
+    --accent-dim: 330 72% 58%;
+    --accent-bright: 0 0% 100%;
+    --accent-glow: 330 100% 71%;
+    --text-primary: 330 58% 36%;
+    --text-dim: 330 35% 50%;
+    --text-bright: 0 0% 100%;
+    --radius: 10px;
+  }
+
+  .theme-mochi-magic {
+    --bg-primary: 40 100% 95%;
+    --bg-secondary: 23 100% 85%;
+    --bg-tertiary: 205 100% 81%;
+    --accent: 272 100% 85%;
+    --accent-dim: 272 58% 72%;
+    --accent-bright: 0 0% 100%;
+    --accent-glow: 272 100% 85%;
+    --text-primary: 272 42% 34%;
+    --text-dim: 272 22% 48%;
+    --text-bright: 0 0% 100%;
+    --radius: 10px;
+  }
+
+  .theme-pixel-pop {
+    --bg-primary: 0 0% 100%;
+    --bg-secondary: 57 100% 49%;
+    --bg-tertiary: 180 100% 50%;
+    --accent: 330 100% 71%;
+    --accent-dim: 330 70% 54%;
+    --accent-bright: 0 0% 100%;
+    --accent-glow: 180 100% 50%;
+    --text-primary: 330 70% 30%;
+    --text-dim: 330 36% 48%;
+    --text-bright: 0 0% 100%;
+  }
+
+  .theme-sweet-candy {
+    --bg-primary: 60 100% 90%;
+    --bg-secondary: 320 100% 86%;
+    --bg-tertiary: 196 100% 81%;
+    --accent: 271 100% 95%;
+    --accent-dim: 271 45% 78%;
+    --accent-bright: 0 0% 100%;
+    --accent-glow: 320 100% 86%;
+    --text-primary: 271 32% 36%;
+    --text-dim: 271 18% 48%;
+    --text-bright: 0 0% 100%;
+    --radius: 10px;
+  }
+
+  .theme-chibi-chill {
+    --bg-primary: 40 100% 95%;
+    --bg-secondary: 181 74% 78%;
+    --bg-tertiary: 350 100% 86%;
+    --accent: 265 54% 78%;
+    --accent-dim: 265 30% 62%;
+    --accent-bright: 0 0% 100%;
+    --accent-glow: 181 74% 78%;
+    --text-primary: 265 34% 32%;
+    --text-dim: 265 18% 46%;
+    --text-bright: 0 0% 100%;
+    --radius: 10px;
+  }
+
+  .theme-rainbow-bubbles {
+    --bg-primary: 0 0% 100%;
+    --bg-secondary: 198 100% 50%;
+    --bg-tertiary: 267 100% 65%;
+    --accent: 357 100% 67%;
+    --accent-dim: 39 100% 50%;
+    --accent-bright: 0 0% 100%;
+    --accent-glow: 267 100% 65%;
+    --text-primary: 267 42% 28%;
+    --text-dim: 267 20% 45%;
+    --text-bright: 0 0% 100%;
+    --radius: 12px;
+  }
+
+  .theme-rainbow-bubbles,
+  .theme-rainbow-bubbles body,
+  .theme-rainbow-bubbles #root {
+    background: linear-gradient(135deg, #ff5a5f 0%, #ffb400 35%, #00cfff 68%, #a34eff 100%);
+  }
+
+  .theme-neon {
+    --bg-primary: 270 100% 10%;
+    --bg-secondary: 270 88% 14%;
+    --bg-tertiary: 270 75% 18%;
+    --accent: 300 100% 50%;
+    --accent-dim: 300 60% 35%;
+    --accent-bright: 180 100% 50%;
+    --accent-glow: 180 100% 50%;
+    --text-primary: 300 100% 78%;
+    --text-dim: 270 28% 62%;
+    --text-bright: 180 100% 82%;
+  }
+
+  .theme-void {
+    --bg-primary: 0 0% 0%;
+    --bg-secondary: 0 0% 13%;
+    --bg-tertiary: 0 0% 18%;
+    --accent: 277 86% 36%;
+    --accent-dim: 0 0% 24%;
+    --accent-bright: 205 100% 62%;
+    --accent-glow: 205 100% 62%;
+    --text-primary: 0 0% 90%;
+    --text-dim: 0 0% 62%;
+    --text-bright: 205 100% 78%;
+  }
+
+  .theme-plasma {
+    --bg-primary: 0 0% 4%;
+    --bg-secondary: 273 100% 18%;
+    --bg-tertiary: 273 100% 24%;
+    --accent: 184 100% 50%;
+    --accent-dim: 273 72% 42%;
+    --accent-bright: 0 0% 100%;
+    --accent-glow: 184 100% 50%;
+    --text-primary: 184 100% 84%;
+    --text-dim: 273 28% 66%;
+    --text-bright: 0 0% 100%;
+  }
+
+  .theme-ember {
+    --bg-primary: 0 0% 17%;
+    --bg-secondary: 0 100% 27%;
+    --bg-tertiary: 16 100% 33%;
+    --accent: 16 100% 50%;
+    --accent-dim: 0 100% 27%;
+    --accent-bright: 51 100% 50%;
+    --accent-glow: 16 100% 50%;
+    --text-primary: 51 100% 74%;
+    --text-dim: 16 48% 58%;
+    --text-bright: 0 0% 100%;
+  }
+
+  .theme-glitch {
+    --bg-primary: 0 0% 0%;
+    --bg-secondary: 0 0% 8%;
+    --bg-tertiary: 0 0% 12%;
+    --accent: 180 100% 50%;
+    --accent-dim: 57 100% 50%;
+    --accent-bright: 300 100% 50%;
+    --accent-glow: 300 100% 50%;
+    --text-primary: 0 0% 96%;
+    --text-dim: 0 0% 68%;
+    --text-bright: 0 0% 100%;
+  }
+
+  .theme-synth {
+    --bg-primary: 0 0% 7%;
+    --bg-secondary: 272 80% 20%;
+    --bg-tertiary: 210 79% 30%;
+    --accent: 272 100% 59%;
+    --accent-dim: 210 79% 40%;
+    --accent-bright: 330 100% 71%;
+    --accent-glow: 330 100% 71%;
+    --text-primary: 272 82% 84%;
+    --text-dim: 210 36% 66%;
+    --text-bright: 330 100% 82%;
+  }
+
+  .theme-glitch .text-glow,
+  .theme-glitch .text-glow-bright {
+    text-shadow: -1px 0 0 rgba(255, 0, 255, 0.6), 1px 0 0 rgba(0, 255, 255, 0.7), 0 0 12px rgba(255, 255, 0, 0.25);
+  }
+
+  .theme-synth .text-glow,
+  .theme-synth .text-glow-bright {
+    text-shadow: 0 0 8px rgba(155, 48, 255, 0.75), 0 0 18px rgba(255, 105, 180, 0.5);
+  }
+
+  .theme-atari {
+    --bg-primary: 0 0% 10%;
+    --bg-secondary: 0 0% 13%;
+    --bg-tertiary: 0 0% 17%;
+    --accent: 180 100% 35%;
+    --accent-dim: 180 62% 24%;
+    --accent-bright: 24 100% 50%;
+    --accent-glow: 180 100% 35%;
+    --text-primary: 180 100% 35%;
+    --text-dim: 0 0% 62%;
+    --text-bright: 120 100% 70%;
+  }
+
+  .theme-amiga {
+    --bg-primary: 210 95% 35%;
+    --bg-secondary: 210 85% 31%;
+    --bg-tertiary: 210 75% 27%;
+    --accent: 32 100% 50%;
+    --accent-dim: 32 78% 38%;
+    --accent-bright: 0 0% 100%;
+    --accent-glow: 32 100% 50%;
+    --text-primary: 0 0% 100%;
+    --text-dim: 0 0% 86%;
+    --text-bright: 0 0% 100%;
+  }
+
+  .theme-amiga .crt-scanlines::after {
+    display: none;
+  }
+
+  .theme-amiga .crt-flicker {
+    animation: none;
+  }
+
+  .theme-c64 {
+    --bg-primary: 240 100% 27%;
+    --bg-secondary: 240 78% 33%;
+    --bg-tertiary: 240 62% 40%;
+    --accent: 180 100% 50%;
+    --accent-dim: 180 55% 34%;
+    --accent-bright: 0 0% 86%;
+    --accent-glow: 180 100% 50%;
+    --text-primary: 0 0% 90%;
+    --text-dim: 0 0% 78%;
+    --text-bright: 180 100% 50%;
+  }
+
+  .theme-mac {
+    --bg-primary: 0 0% 96%;
+    --bg-secondary: 0 0% 90%;
+    --bg-tertiary: 0 0% 84%;
+    --accent: 0 0% 8%;
+    --accent-dim: 0 0% 40%;
+    --accent-bright: 0 0% 100%;
+    --accent-glow: 0 0% 62%;
+    --text-primary: 0 0% 8%;
+    --text-dim: 0 0% 35%;
+    --text-bright: 0 0% 0%;
+  }
+
+  .theme-light .crt-scanlines::after,
+  .theme-mac .crt-scanlines::after {
+    display: none;
+  }
+
+  .theme-sinclair {
+    --bg-primary: 0 0% 0%;
+    --bg-secondary: 0 0% 8%;
+    --bg-tertiary: 0 0% 14%;
+    --accent: 120 100% 50%;
+    --accent-dim: 0 0% 27%;
+    --accent-bright: 300 100% 50%;
+    --accent-glow: 300 100% 50%;
+    --text-primary: 120 100% 50%;
+    --text-dim: 0 0% 58%;
+    --text-bright: 300 100% 50%;
+  }

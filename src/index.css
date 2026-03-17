@@ -43,31 +43,6 @@
     --radius: 0px;
   }
 
-  .theme-green {
-    --bg-primary: 120 100% 2%;
-    --bg-secondary: 120 100% 4%;
-    --bg-tertiary: 120 100% 6%;
-    --accent: 120 100% 50%;
-    --accent-dim: 120 100% 25%;
-    --accent-bright: 120 100% 70%;
-    --accent-glow: 120 100% 50%;
-    --text-primary: 120 100% 50%;
-    --text-dim: 120 100% 25%;
-    --text-bright: 120 100% 70%;
-  }
-
-  .theme-dos {
-    --bg-primary: 240 100% 3%;
-    --bg-secondary: 240 100% 6%;
-    --bg-tertiary: 240 100% 10%;
-    --accent: 0 0% 85%;
-    --accent-dim: 0 0% 45%;
-    --accent-bright: 0 0% 100%;
-    --accent-glow: 0 0% 85%;
-    --text-primary: 0 0% 85%;
-    --text-dim: 0 0% 45%;
-    --text-bright: 0 0% 100%;
-  }
 }
 
 @layer base {
@@ -107,21 +82,9 @@
     rgba(0, 0, 0, 0.08) 2px,
     rgba(0, 0, 0, 0.08) 4px
   );
+  display: none;
   pointer-events: none;
   z-index: 9999;
-}
-
-.crt-vignette::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background: radial-gradient(
-    ellipse at center,
-    transparent 60%,
-    rgba(0, 0, 0, 0.7) 100%
-  );
-  pointer-events: none;
-  z-index: 9998;
 }
 
 @keyframes flicker {
@@ -132,7 +95,7 @@
 }
 
 .crt-flicker {
-  animation: flicker 8s infinite;
+  animation: none;
 }
 
 /* Text glow */

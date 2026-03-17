@@ -203,7 +203,7 @@ const QuickLogOverlay = ({ onSubmit }: QuickLogOverlayProps) => {
                 setHighlightIdx(0);
                 if (!e.target.value) setSelectedSkill(null);
               }}
-              onFocus={() => setShowDropdown(true)}
+              onFocus={() => { if (query.length > 0) setShowDropdown(true); }}
               onKeyDown={handleInputKeyDown}
             />
             {showDropdown && filtered.length > 0 && (

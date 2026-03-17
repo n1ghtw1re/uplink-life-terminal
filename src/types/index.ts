@@ -214,7 +214,7 @@ export interface Operator {
   callsign: string;
   displayName: string | null;
   customClassName: string | null;
-  theme: 'amber' | 'green' | 'dos' | 'blood' | 'ice';
+  theme: 'amber' | 'green' | 'dos' | 'light' | 'blood' | 'ice' | 'cyber2077' | 'pasteldream' | 'kawaiikitty' | 'mochimagic' | 'pixelpop' | 'sweetcandy' | 'chibichill' | 'rainbowbubbles' | 'neon' | 'void' | 'plasma' | 'ember' | 'glitch' | 'synth' | 'atari' | 'amiga' | 'c64' | 'mac' | 'sinclair';
   currentLayout: string;
   bootstrapComplete: boolean;
   createdAt: string;
