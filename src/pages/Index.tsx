@@ -16,6 +16,7 @@ import StatOverviewWidget from '@/components/widgets/StatOverviewWidget';
 import CoursesWidget from '@/components/widgets/CoursesWidget';
 import MediaWidget from '@/components/widgets/MediaWidget';
 import SkillsWidget from '@/components/widgets/SkillsWidget';
+import ClockWidget from '@/components/widgets/ClockWidget';
 import QuickLogOverlay from '@/components/overlays/QuickLogOverlay';
 import CharacterSheet from '@/components/overlays/CharacterSheet';
 import SearchOverlay from '@/components/overlays/SearchOverlay';
@@ -34,7 +35,8 @@ import { applyThemeClass, normalizeTheme, type ThemeCode } from '@/lib/themes';
 
 type LayoutItem = { i: string; x: number; y: number; w: number; h: number; minW?: number; minH?: number };
 
-const ALL_WIDGET_IDS = ['xp', 'checkin', 'heatmap', 'stats', 'courses', 'media', 'skills'];
+const ALL_WIDGET_IDS = ['xp', 'checkin', 'heatmap', 'stats', 'courses', 'media', 'skills', 'clock'];
+const DEFAULT_ACTIVE_WIDGET_IDS = ['xp', 'checkin', 'heatmap', 'stats', 'courses', 'media', 'skills'];
 
 const defaultLayout: LayoutItem[] = [
   { i: 'xp', x: 0, y: 0, w: 4, h: 4, minW: 2, minH: 2 },
@@ -44,6 +46,7 @@ const defaultLayout: LayoutItem[] = [
   { i: 'courses', x: 4, y: 3, w: 4, h: 4, minW: 2, minH: 2 },
   { i: 'media', x: 8, y: 3, w: 4, h: 4, minW: 2, minH: 2 },
   { i: 'skills', x: 4, y: 7, w: 4, h: 4, minW: 2, minH: 2 },
+  { i: 'clock', x: 8, y: 7, w: 4, h: 4, minW: 2, minH: 2 },
 ];
 
 const widgetNames: Record<string, string> = {
@@ -54,6 +57,7 @@ const widgetNames: Record<string, string> = {
   courses: 'COURSES',
   media: 'MEDIA LIBRARY',
   skills: 'SKILLS',
+  clock: 'CLOCK',
 };
 
 const Index = () => {
@@ -78,8 +82,8 @@ const Index = () => {
   const [activeWidgets, setActiveWidgets] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem('uplink-active-widgets');
-      return saved ? JSON.parse(saved) : ALL_WIDGET_IDS;
-    } catch { return ALL_WIDGET_IDS; }
+      return saved ? JSON.parse(saved) : DEFAULT_ACTIVE_WIDGET_IDS;
+    } catch { return DEFAULT_ACTIVE_WIDGET_IDS; }
   });
   const [fullscreenWidget, setFullscreenWidget] = useState<string | null>(null);
   const [gridSize, setGridSize] = useState({ width: 0, height: 0 });
@@ -212,6 +216,11 @@ const Index = () => {
     setFullscreenWidget(prev => prev === id ? null : id);
   };
 
+  const handleOpenWidgetById = (id: string) => {
+    if (activeWidgets.includes(id)) return;
+    handleRestore(id);
+  };
+
   const visibleLayout = layout.filter(item => activeWidgets.includes(item.i));
   const closedWidgets = ALL_WIDGET_IDS.filter(id => !activeWidgets.includes(id));
 
@@ -239,6 +248,7 @@ const Index = () => {
       );
       case 'media': return <MediaWidget {...props} onMediaClick={(id) => openDrawer('media', id)} />;
       case 'skills': return <SkillsWidget {...props} onOpenSkills={() => setShowSkills(true)} onSkillClick={(id) => openDrawer('skill', id)} />;
+      case 'clock': return <ClockWidget {...props} />;
       default: return null;
     }
   };
@@ -272,6 +282,7 @@ const Index = () => {
           onOpenLibrary={() => setShowLibrary(true)}
           onOpenCourses={() => setShowCourses(true)}
           onOpenWidgetManager={() => setShowWidgetManager(true)}
+          onOpenClockWidget={() => handleOpenWidgetById('clock')}
         />
 
         <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: 8, position: 'relative', marginRight: drawerOpen ? 420 : 0, transition: 'margin-right 200ms ease', scrollbarWidth: 'thin', scrollbarColor: 'hsl(var(--accent-dim)) hsl(var(--bg-secondary))' }}>

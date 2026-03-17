@@ -17,7 +17,7 @@ export interface WidgetDef {
   name: string;
   description: string;
   icon: string;
-  category: 'CORE' | 'ARSENAL' | 'TRACKING' | 'FUTURE';
+  category: 'CORE' | 'ARSENAL' | 'UTILITY' | 'TRACKING' | 'FUTURE';
 }
 
 export const WIDGET_REGISTRY: WidgetDef[] = [
@@ -28,6 +28,7 @@ export const WIDGET_REGISTRY: WidgetDef[] = [
   { id: 'stats',   name: 'STAT OVERVIEW',     icon: '◈', category: 'CORE',    description: 'All 7 stats at a glance — level, XP bar, streak, class' },
   { id: 'courses', name: 'COURSES',           icon: '▸', category: 'ARSENAL', description: 'Active and queued courses with progress bars' },
   { id: 'media',   name: 'MEDIA LIBRARY',     icon: '◆', category: 'ARSENAL', description: 'Books, films, TV, albums — tabbed by type, reading progress' },
+  { id: 'clock',   name: 'CLOCK',             icon: '◷', category: 'UTILITY', description: 'Timer, stopwatch, and pomodoro focus cycles in one tool' },
   { id: 'skills',  name: 'SKILLS',             icon: '◫', category: 'CORE',    description: 'Top skills by level — XP bars, stat icons, quick access' },
   // Future widgets (greyed out, not yet available)
   { id: 'goals',    name: 'GOALS',            icon: '◎', category: 'FUTURE',  description: 'Life, mid, and sprint goals — coming soon' },
@@ -36,10 +37,11 @@ export const WIDGET_REGISTRY: WidgetDef[] = [
   { id: 'terminal', name: 'TERMINAL',         icon: '$', category: 'FUTURE',  description: 'Command-line interface for UPLINK — coming soon' },
 ];
 
-const CATEGORIES = ['CORE', 'ARSENAL', 'TRACKING', 'FUTURE'] as const;
+const CATEGORIES = ['CORE', 'ARSENAL', 'UTILITY', 'TRACKING', 'FUTURE'] as const;
 const CATEGORY_LABELS: Record<string, string> = {
   CORE: '// CORE',
   ARSENAL: '// ARSENAL',
+  UTILITY: '// Utility',
   TRACKING: '// TRACKING',
   FUTURE: '// COMING SOON',
 };

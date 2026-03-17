@@ -18,17 +18,19 @@ interface SidebarProps {
   onOpenLibrary?: () => void;
   onOpenCourses?: () => void;
   onOpenWidgetManager?: () => void;
+  onOpenClockWidget?: () => void;
 }
 
 const sectionMap: Record<string, string> = {
   'BODY': 'stats', 'WIRE': 'stats', 'MIND': 'stats',
   'COOL': 'stats', 'GRIT': 'stats', 'FLOW': 'stats', 'GHOST': 'stats',
   'Arsenal': 'arsenal', 'Tracking': 'tracking', 'System': 'system',
+  'Utility': 'utility',
   'Goals': 'tracking', 'Habits': 'tracking',
   'Settings': 'system',
 };
 
-const Sidebar = ({ expanded, onToggle, onExpand, theme, onThemeChange, onOpenCharSheet, onOpenStat, onOpenSkills, onOpenLibrary, onOpenCourses, onOpenWidgetManager }: SidebarProps) => {
+const Sidebar = ({ expanded, onToggle, onExpand, theme, onThemeChange, onOpenCharSheet, onOpenStat, onOpenSkills, onOpenLibrary, onOpenCourses, onOpenWidgetManager, onOpenClockWidget }: SidebarProps) => {
   const { user } = useAuth();
   const { data: stats } = useStats(user?.id);
 
@@ -85,6 +87,8 @@ const Sidebar = ({ expanded, onToggle, onExpand, theme, onThemeChange, onOpenCha
     { icon: '◉', label: 'Tracking' },
     { icon: 'div', label: '' },
     { icon: '⚙', label: 'System' },
+    { icon: 'div', label: '' },
+    { icon: '◷', label: 'Utility' },
   ];
 
   const arsenalItems = [
@@ -111,6 +115,10 @@ const Sidebar = ({ expanded, onToggle, onExpand, theme, onThemeChange, onOpenCha
     { icon: '?', name: 'HELP' },
     { icon: '💾', name: 'EXPORT DATA' },
     { icon: '⏻', name: 'LOGOUT' },
+  ];
+
+  const utilityItems = [
+    { icon: '◷', name: 'CLOCK' },
   ];
 
   const sortedThemeOptions = useMemo<ThemeCode[]>(
@@ -280,6 +288,28 @@ const Sidebar = ({ expanded, onToggle, onExpand, theme, onThemeChange, onOpenCha
               onMouseLeave={item.name === 'LOGOUT' ? e => (e.currentTarget.style.color = 'hsl(0, 80%, 55%)') : undefined}
             >
               <span>{item.icon} {item.name}</span>
+            </div>
+          ))}
+
+          {/* Utility section */}
+          <div
+            className={`sidebar-section ${openSection === 'utility' ? 'active' : ''}`}
+            onClick={() => toggleSection('utility')}
+          >
+            <span>// Utility</span>
+            <span style={{ transition: 'transform 150ms', transform: openSection === 'utility' ? 'rotate(90deg)' : 'none' }}>›</span>
+          </div>
+          {openSection === 'utility' && utilityItems.map(item => (
+            <div
+              key={item.name}
+              className="sidebar-item"
+              onClick={() => {
+                if (item.name === 'CLOCK') onOpenClockWidget?.();
+              }}
+              style={{ cursor: 'pointer' }}
+            >
+              <span>{item.icon} {item.name}</span>
+              <span style={{ fontSize: 9, color: 'hsl(var(--text-dim))' }}>WIDGET</span>
             </div>
           ))}
 
