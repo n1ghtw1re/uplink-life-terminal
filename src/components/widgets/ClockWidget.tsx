@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import WidgetWrapper from '../WidgetWrapper';
 
 interface WidgetProps {
   onClose?: () => void;
   onFullscreen?: () => void;
   isFullscreen?: boolean;
+  isFocused?: boolean;
 }
 
 type ClockTab = 'timer' | 'stopwatch' | 'pomodoro';
@@ -18,7 +19,8 @@ const formatTime = (seconds: number) => {
   return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 };
 
-const ClockWidget = ({ onClose, onFullscreen, isFullscreen }: WidgetProps) => {
+const ClockWidget = ({ onClose, onFullscreen, isFullscreen, isFocused }: WidgetProps) => {
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const [tab, setTab] = useState<ClockTab>('timer');
 
   const [timerDurationMin, setTimerDurationMin] = useState(15);
@@ -46,6 +48,12 @@ const ClockWidget = ({ onClose, onFullscreen, isFullscreen }: WidgetProps) => {
     }, 1000);
     return () => window.clearInterval(id);
   }, [timerRunning]);
+
+  useEffect(() => {
+    if (isFocused) {
+      containerRef.current?.focus();
+    }
+  }, [isFocused]);
 
   useEffect(() => {
     if (!stopwatchRunning) return;
@@ -86,7 +94,8 @@ const ClockWidget = ({ onClose, onFullscreen, isFullscreen }: WidgetProps) => {
 
   return (
     <WidgetWrapper title="CLOCK" onClose={onClose} onFullscreen={onFullscreen} isFullscreen={isFullscreen}>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+      <div ref={containerRef} tabIndex={0} style={{ outline: 'none' }}>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
         <button className={`topbar-btn ${tab === 'timer' ? 'active' : ''}`} onClick={() => setTab('timer')}>
           TIMER
         </button>
@@ -190,6 +199,7 @@ const ClockWidget = ({ onClose, onFullscreen, isFullscreen }: WidgetProps) => {
           </div>
         </div>
       )}
+      </div>
     </WidgetWrapper>
   );
 };

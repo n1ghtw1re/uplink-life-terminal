@@ -19,6 +19,8 @@ interface SidebarProps {
   onOpenCourses?: () => void;
   onOpenWidgetManager?: () => void;
   onOpenClockWidget?: () => void;
+  onOpenCalculatorWidget?: () => void;
+  onOpenUnitConverterWidget?: () => void;
 }
 
 const sectionMap: Record<string, string> = {
@@ -30,7 +32,7 @@ const sectionMap: Record<string, string> = {
   'Settings': 'system',
 };
 
-const Sidebar = ({ expanded, onToggle, onExpand, theme, onThemeChange, onOpenCharSheet, onOpenStat, onOpenSkills, onOpenLibrary, onOpenCourses, onOpenWidgetManager, onOpenClockWidget }: SidebarProps) => {
+const Sidebar = ({ expanded, onToggle, onExpand, theme, onThemeChange, onOpenCharSheet, onOpenStat, onOpenSkills, onOpenLibrary, onOpenCourses, onOpenWidgetManager, onOpenClockWidget, onOpenCalculatorWidget, onOpenUnitConverterWidget }: SidebarProps) => {
   const { user } = useAuth();
   const { data: stats } = useStats(user?.id);
 
@@ -60,6 +62,12 @@ const Sidebar = ({ expanded, onToggle, onExpand, theme, onThemeChange, onOpenCha
     if (label === 'Character Sheet') { onOpenCharSheet?.(); return; }
     if (label === 'Dashboard') { onExpand?.(); setOpenSection(null); return; }
     if (label === 'Skills') { onOpenSkills?.(); return; }
+    if (label === 'Utility') {
+      onExpand?.();
+      setOpenSection('utility');
+      onOpenUnitConverterWidget?.();
+      return;
+    }
     if (statKey) { onOpenStat?.(statKey); return; }
     const section = sectionMap[label];
     if (section) { onExpand?.(); setOpenSection(section); }
@@ -118,7 +126,9 @@ const Sidebar = ({ expanded, onToggle, onExpand, theme, onThemeChange, onOpenCha
   ];
 
   const utilityItems = [
-    { icon: '◷', name: 'CLOCK' },
+    { icon: '◷', name: 'CLOCK', action: () => onOpenClockWidget?.() },
+    { icon: '⌨', name: 'CALCULATOR', action: () => onOpenCalculatorWidget?.() },
+    { icon: '⇄', name: 'UNIT CONVERTER', action: () => onOpenUnitConverterWidget?.() },
   ];
 
   const sortedThemeOptions = useMemo<ThemeCode[]>(
@@ -294,7 +304,11 @@ const Sidebar = ({ expanded, onToggle, onExpand, theme, onThemeChange, onOpenCha
           {/* Utility section */}
           <div
             className={`sidebar-section ${openSection === 'utility' ? 'active' : ''}`}
-            onClick={() => toggleSection('utility')}
+            onClick={() => {
+              const wasOpen = openSection === 'utility';
+              toggleSection('utility');
+              if (!wasOpen) onOpenUnitConverterWidget?.();
+            }}
           >
             <span>// Utility</span>
             <span style={{ transition: 'transform 150ms', transform: openSection === 'utility' ? 'rotate(90deg)' : 'none' }}>›</span>
@@ -303,9 +317,7 @@ const Sidebar = ({ expanded, onToggle, onExpand, theme, onThemeChange, onOpenCha
             <div
               key={item.name}
               className="sidebar-item"
-              onClick={() => {
-                if (item.name === 'CLOCK') onOpenClockWidget?.();
-              }}
+              onClick={() => item.action?.()}
               style={{ cursor: 'pointer' }}
             >
               <span>{item.icon} {item.name}</span>

@@ -17,6 +17,8 @@ import CoursesWidget from '@/components/widgets/CoursesWidget';
 import MediaWidget from '@/components/widgets/MediaWidget';
 import SkillsWidget from '@/components/widgets/SkillsWidget';
 import ClockWidget from '@/components/widgets/ClockWidget';
+import CalculatorWidget from '@/components/widgets/CalculatorWidget';
+import UnitConverterWidget from '@/components/widgets/UnitConverterWidget';
 import QuickLogOverlay from '@/components/overlays/QuickLogOverlay';
 import CharacterSheet from '@/components/overlays/CharacterSheet';
 import SearchOverlay from '@/components/overlays/SearchOverlay';
@@ -35,7 +37,7 @@ import { applyThemeClass, normalizeTheme, type ThemeCode } from '@/lib/themes';
 
 type LayoutItem = { i: string; x: number; y: number; w: number; h: number; minW?: number; minH?: number };
 
-const ALL_WIDGET_IDS = ['xp', 'checkin', 'heatmap', 'stats', 'courses', 'media', 'skills', 'clock'];
+const ALL_WIDGET_IDS = ['xp', 'checkin', 'heatmap', 'stats', 'courses', 'media', 'skills', 'clock', 'calculator', 'unitConverter'];
 const DEFAULT_ACTIVE_WIDGET_IDS = ['xp', 'checkin', 'heatmap', 'stats', 'courses', 'media', 'skills'];
 
 const defaultLayout: LayoutItem[] = [
@@ -47,6 +49,8 @@ const defaultLayout: LayoutItem[] = [
   { i: 'media', x: 8, y: 3, w: 4, h: 4, minW: 2, minH: 2 },
   { i: 'skills', x: 4, y: 7, w: 4, h: 4, minW: 2, minH: 2 },
   { i: 'clock', x: 8, y: 7, w: 4, h: 4, minW: 2, minH: 2 },
+  { i: 'calculator', x: 0, y: 9, w: 4, h: 4, minW: 2, minH: 2 },
+  { i: 'unitConverter', x: 4, y: 9, w: 4, h: 4, minW: 2, minH: 2 },
 ];
 
 const widgetNames: Record<string, string> = {
@@ -58,11 +62,13 @@ const widgetNames: Record<string, string> = {
   media: 'MEDIA LIBRARY',
   skills: 'SKILLS',
   clock: 'CLOCK',
+  calculator: 'CALCULATOR',
+  unitConverter: 'UNIT CONVERTER',
 };
 
 const Index = () => {
   const { user } = useAuth();
-  const { data: op, refetch: refetchOp } = useOperator(user?.id);
+  const { data: op, isLoading: opLoading, refetch: refetchOp } = useOperator(user?.id);
 
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [theme, setTheme] = useState<ThemeCode>(() => normalizeTheme(localStorage.getItem('uplink-theme')));
@@ -86,6 +92,7 @@ const Index = () => {
     } catch { return DEFAULT_ACTIVE_WIDGET_IDS; }
   });
   const [fullscreenWidget, setFullscreenWidget] = useState<string | null>(null);
+  const [focusedWidget, setFocusedWidget] = useState<string | null>(null);
   const [gridSize, setGridSize] = useState({ width: 0, height: 0 });
   const [openStatKey, setOpenStatKey] = useState<StatKey | null>(null);
   const [showSkills, setShowSkills] = useState(false);
@@ -160,6 +167,7 @@ const Index = () => {
 
   const handleClose = (id: string) => {
     if (fullscreenWidget === id) setFullscreenWidget(null);
+    setFocusedWidget(prev => (prev === id ? null : prev));
     setLayout(prev => {
       const next = prev.filter(item => item.i !== id);
       localStorage.setItem('uplink-layout', JSON.stringify(next));
@@ -217,6 +225,16 @@ const Index = () => {
   };
 
   const handleOpenWidgetById = (id: string) => {
+    setFocusedWidget(id);
+
+    // Ensure widget is scrolled into view if already present
+    setTimeout(() => {
+      const el = document.querySelector(`[data-widget-id=\"${id}\"]`);
+      if (el instanceof HTMLElement) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+      }
+    }, 50);
+
     if (activeWidgets.includes(id)) return;
     handleRestore(id);
   };
@@ -229,6 +247,7 @@ const Index = () => {
       onClose: () => handleClose(id),
       onFullscreen: () => handleFullscreen(id),
       isFullscreen: isFs,
+      isFocused: focusedWidget === id,
     };
     switch (id) {
       case 'xp': return <XPWidget {...props} />;
@@ -249,11 +268,18 @@ const Index = () => {
       case 'media': return <MediaWidget {...props} onMediaClick={(id) => openDrawer('media', id)} />;
       case 'skills': return <SkillsWidget {...props} onOpenSkills={() => setShowSkills(true)} onSkillClick={(id) => openDrawer('skill', id)} />;
       case 'clock': return <ClockWidget {...props} />;
+      case 'calculator': return <CalculatorWidget {...props} />;
+      case 'unitConverter': return <UnitConverterWidget {...props} />;
       default: return null;
     }
   };
 
-  if (!op?.bootstrapComplete) {
+  if (!op && opLoading) {
+    // Still loading operator profile; avoid showing first-boot wizard briefly.
+    return null;
+  }
+
+  if (op && !op.bootstrapComplete) {
     return <FirstBootWizard onComplete={() => refetchOp()} />;
   }
 
@@ -283,6 +309,8 @@ const Index = () => {
           onOpenCourses={() => setShowCourses(true)}
           onOpenWidgetManager={() => setShowWidgetManager(true)}
           onOpenClockWidget={() => handleOpenWidgetById('clock')}
+          onOpenCalculatorWidget={() => handleOpenWidgetById('calculator')}
+          onOpenUnitConverterWidget={() => handleOpenWidgetById('unitConverter')}
         />
 
         <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: 8, position: 'relative', marginRight: drawerOpen ? 420 : 0, transition: 'margin-right 200ms ease', scrollbarWidth: 'thin', scrollbarColor: 'hsl(var(--accent-dim)) hsl(var(--bg-secondary))' }}>
@@ -318,7 +346,7 @@ const Index = () => {
               }}
             >
               {visibleLayout.map(item => (
-                <div key={item.i}>
+                <div key={item.i} data-widget-id={item.i}>
                   {renderWidget(item.i, false)}
                 </div>
               ))}

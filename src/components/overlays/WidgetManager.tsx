@@ -28,8 +28,10 @@ export const WIDGET_REGISTRY: WidgetDef[] = [
   { id: 'stats',   name: 'STAT OVERVIEW',     icon: '◈', category: 'CORE',    description: 'All 7 stats at a glance — level, XP bar, streak, class' },
   { id: 'courses', name: 'COURSES',           icon: '▸', category: 'ARSENAL', description: 'Active and queued courses with progress bars' },
   { id: 'media',   name: 'MEDIA LIBRARY',     icon: '◆', category: 'ARSENAL', description: 'Books, films, TV, albums — tabbed by type, reading progress' },
-  { id: 'clock',   name: 'CLOCK',             icon: '◷', category: 'UTILITY', description: 'Timer, stopwatch, and pomodoro focus cycles in one tool' },
-  { id: 'skills',  name: 'SKILLS',             icon: '◫', category: 'CORE',    description: 'Top skills by level — XP bars, stat icons, quick access' },
+  { id: 'clock',         name: 'CLOCK',          icon: '◷', category: 'UTILITY', description: 'Timer, stopwatch, and pomodoro focus cycles in one tool' },
+  { id: 'calculator',    name: 'CALCULATOR',     icon: '⌨', category: 'UTILITY', description: 'Basic calculator with memory and expression support' },
+  { id: 'unitConverter', name: 'UNIT CONVERTER', icon: '⇄', category: 'UTILITY', description: 'Convert between length/mass/volume/time/temperature units' },
+  { id: 'skills',        name: 'SKILLS',         icon: '◫', category: 'CORE',    description: 'Top skills by level — XP bars, stat icons, quick access' },
   // Future widgets (greyed out, not yet available)
   { id: 'goals',    name: 'GOALS',            icon: '◎', category: 'FUTURE',  description: 'Life, mid, and sprint goals — coming soon' },
   { id: 'habits',   name: 'HABIT TRACKER',    icon: '✓', category: 'FUTURE',  description: 'Daily habit streaks and completion — coming soon' },
