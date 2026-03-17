@@ -294,6 +294,13 @@ const Sidebar = ({ expanded, onToggle, onExpand, theme, onThemeChange, onOpenCha
           <div className="sidebar-item" style={{ padding: '8px 12px', color: 'hsl(var(--accent-dim))' }}>
             [ LAYOUTS ]
           </div>
+          <div style={{ height: 1, background: 'hsl(var(--accent-dim))', margin: '4px 0' }} />
+          <div
+            className="sidebar-section"
+            style={{ pointerEvents: 'none', cursor: 'default' }}
+          >
+            <span>// THEMES</span>
+          </div>
           <div style={{ padding: '0 12px 8px' }}>
             <div className="crt-select-wrapper" style={{ width: '100%' }}>
               <select
