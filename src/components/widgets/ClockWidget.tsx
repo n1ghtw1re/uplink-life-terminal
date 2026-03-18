@@ -26,6 +26,8 @@ const ClockWidget = ({ onClose, onFullscreen, isFullscreen, isFocused }: WidgetP
   const [timerDurationMin, setTimerDurationMin] = useState(15);
   const [timerSecondsLeft, setTimerSecondsLeft] = useState(15 * 60);
   const [timerRunning, setTimerRunning] = useState(false);
+  const [timerNotify, setTimerNotify] = useState(true);
+  const [timerGlitch, setTimerGlitch] = useState(true);
 
   const [stopwatchSeconds, setStopwatchSeconds] = useState(0);
   const [stopwatchRunning, setStopwatchRunning] = useState(false);
@@ -34,6 +36,34 @@ const ClockWidget = ({ onClose, onFullscreen, isFullscreen, isFocused }: WidgetP
   const [pomodoroRunning, setPomodoroRunning] = useState(false);
   const [pomodoroPhase, setPomodoroPhase] = useState<PomodoroPhase>('WORK');
   const [pomodoroCycles, setPomodoroCycles] = useState(0);
+  const [pomodoroNotify, setPomodoroNotify] = useState(true);
+  const [pomodoroGlitch, setPomodoroGlitch] = useState(true);
+
+  const [notification, setNotification] = useState<string | null>(null);
+  const [glitchActive, setGlitchActive] = useState(false);
+  const glitchTimeoutRef = useRef<number | null>(null);
+
+  const triggerNotification = (message: string, popup: boolean, glitch: boolean) => {
+    setNotification(popup ? message : null);
+    setGlitchActive(glitch);
+
+    if (!popup && !glitch) return;
+
+    if (glitchTimeoutRef.current) {
+      window.clearTimeout(glitchTimeoutRef.current);
+    }
+    glitchTimeoutRef.current = window.setTimeout(() => {
+      setNotification(null);
+      setGlitchActive(false);
+      glitchTimeoutRef.current = null;
+    }, 1600);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (glitchTimeoutRef.current) window.clearTimeout(glitchTimeoutRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (!timerRunning) return;
@@ -41,13 +71,16 @@ const ClockWidget = ({ onClose, onFullscreen, isFullscreen, isFocused }: WidgetP
       setTimerSecondsLeft((prev) => {
         if (prev <= 1) {
           setTimerRunning(false);
+          if (timerNotify || timerGlitch) {
+            triggerNotification('Timer complete', timerNotify, timerGlitch);
+          }
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
     return () => window.clearInterval(id);
-  }, [timerRunning]);
+  }, [timerRunning, timerNotify, timerGlitch]);
 
   useEffect(() => {
     if (isFocused) {
@@ -71,13 +104,19 @@ const ClockWidget = ({ onClose, onFullscreen, isFullscreen, isFocused }: WidgetP
           const nextPhase: PomodoroPhase = pomodoroPhase === 'WORK' ? 'BREAK' : 'WORK';
           if (pomodoroPhase === 'WORK') setPomodoroCycles((c) => c + 1);
           setPomodoroPhase(nextPhase);
+
+          if (pomodoroNotify || pomodoroGlitch) {
+            const message = nextPhase === 'BREAK' ? 'Break time!' : 'Back to work!';
+            triggerNotification(message, pomodoroNotify, pomodoroGlitch);
+          }
+
           return nextPhase === 'WORK' ? 25 * 60 : 5 * 60;
         }
         return prev - 1;
       });
     }, 1000);
     return () => window.clearInterval(id);
-  }, [pomodoroRunning, pomodoroPhase]);
+  }, [pomodoroRunning, pomodoroPhase, pomodoroNotify, pomodoroGlitch]);
 
   const timerProgress = useMemo(() => {
     const total = Math.max(1, timerDurationMin * 60);
@@ -92,20 +131,96 @@ const ClockWidget = ({ onClose, onFullscreen, isFullscreen, isFocused }: WidgetP
     setTimerRunning(false);
   };
 
+  const renderNotification = () => {
+    if (!notification && !glitchActive) return null;
+    return (
+      <div
+        className={`glitch-overlay${glitchActive ? ' glitch-active' : ''}`}
+        onClick={() => {
+          setNotification(null);
+          setGlitchActive(false);
+          if (glitchTimeoutRef.current) {
+            window.clearTimeout(glitchTimeoutRef.current);
+            glitchTimeoutRef.current = null;
+          }
+        }}
+      >
+        <div className="glitch-box">
+          {notification && (
+            <>
+              <div className="glitch-text" aria-live="polite">
+                {notification}
+              </div>
+              <div style={{ marginTop: 12, fontSize: 10, color: 'hsl(var(--text-dim))' }}>
+                (click anywhere to dismiss)
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <WidgetWrapper title="CLOCK" onClose={onClose} onFullscreen={onFullscreen} isFullscreen={isFullscreen}>
-      <div ref={containerRef} tabIndex={0} style={{ outline: 'none' }}>
+      <div ref={containerRef} tabIndex={0} style={{ outline: 'none', position: 'relative' }}>
+        {renderNotification()}
+        <style>{`
+          .glitch-overlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: hsl(var(--bg-primary) / 0.85);
+            z-index: 5;
+            cursor: pointer;
+          }
+
+          .glitch-box {
+            padding: 18px 20px;
+            border: 1px solid hsl(var(--accent));
+            background: hsl(var(--bg-secondary) / 0.9);
+            border-radius: 10px;
+            text-align: center;
+            min-width: 260px;
+            max-width: 320px;
+            box-shadow: 0 0 18px rgba(0,0,0,0.5);
+          }
+
+          .glitch-text {
+            font-family: 'VT323', monospace;
+            font-size: 22px;
+            letter-spacing: 0.08em;
+            color: hsl(var(--accent-bright));
+            text-shadow: 0 0 10px hsl(var(--accent-bright) / 0.8);
+          }
+
+          .glitch-overlay.glitch-active .glitch-box {
+            animation: glitch-anim 0.45s ease-in-out infinite;
+          }
+
+          @keyframes glitch-anim {
+            0% { transform: translate(0,0); }
+            20% { transform: translate(-2px, 2px); }
+            40% { transform: translate(2px, -2px); }
+            60% { transform: translate(-1px, 1px); }
+            80% { transform: translate(1px, -1px); }
+            100% { transform: translate(0,0); }
+          }
+        `}</style>
+
         <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-        <button className={`topbar-btn ${tab === 'timer' ? 'active' : ''}`} onClick={() => setTab('timer')}>
-          TIMER
-        </button>
-        <button className={`topbar-btn ${tab === 'stopwatch' ? 'active' : ''}`} onClick={() => setTab('stopwatch')}>
-          STOPWATCH
-        </button>
-        <button className={`topbar-btn ${tab === 'pomodoro' ? 'active' : ''}`} onClick={() => setTab('pomodoro')}>
-          POMODORO
-        </button>
-      </div>
+          <button className={`topbar-btn ${tab === 'timer' ? 'active' : ''}`} onClick={() => setTab('timer')}>
+            TIMER
+          </button>
+          <button className={`topbar-btn ${tab === 'stopwatch' ? 'active' : ''}`} onClick={() => setTab('stopwatch')}>
+            STOPWATCH
+          </button>
+          <button className={`topbar-btn ${tab === 'pomodoro' ? 'active' : ''}`} onClick={() => setTab('pomodoro')}>
+            POMODORO
+          </button>
+        </div>
 
       {tab === 'timer' && (
         <div>
@@ -141,6 +256,16 @@ const ClockWidget = ({ onClose, onFullscreen, isFullscreen, isFocused }: WidgetP
             <button className="topbar-btn" onClick={() => { setTimerRunning(false); setTimerSecondsLeft(timerDurationMin * 60); }}>
               RESET
             </button>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 10, alignItems: 'center' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: 'hsl(var(--text-dim))' }}>
+              <input type="checkbox" checked={timerNotify} onChange={(e) => setTimerNotify(e.target.checked)} />
+              Notify
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: 'hsl(var(--text-dim))' }}>
+              <input type="checkbox" checked={timerGlitch} onChange={(e) => setTimerGlitch(e.target.checked)} />
+              Glitch
+            </label>
           </div>
           <div style={{ fontSize: 10, marginTop: 8, color: 'hsl(var(--text-dim))' }}>
             Track workouts, tasks, or sessions with simple start/stop timing.
@@ -193,6 +318,16 @@ const ClockWidget = ({ onClose, onFullscreen, isFullscreen, isFocused }: WidgetP
             >
               RESET
             </button>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 10, alignItems: 'center' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: 'hsl(var(--text-dim))' }}>
+              <input type="checkbox" checked={pomodoroNotify} onChange={(e) => setPomodoroNotify(e.target.checked)} />
+              Notify
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: 'hsl(var(--text-dim))' }}>
+              <input type="checkbox" checked={pomodoroGlitch} onChange={(e) => setPomodoroGlitch(e.target.checked)} />
+              Glitch
+            </label>
           </div>
           <div style={{ fontSize: 10, marginTop: 8, color: 'hsl(var(--text-dim))' }}>
             Structured work/rest cycles for focus and discipline. Work 25:00, break 05:00.

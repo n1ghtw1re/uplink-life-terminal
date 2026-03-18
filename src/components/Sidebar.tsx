@@ -18,6 +18,7 @@ interface SidebarProps {
   onOpenLibrary?: () => void;
   onOpenCourses?: () => void;
   onOpenWidgetManager?: () => void;
+  onOpenSocials?: () => void;
   onOpenClockWidget?: () => void;
   onOpenCalculatorWidget?: () => void;
   onOpenUnitConverterWidget?: () => void;
@@ -32,7 +33,7 @@ const sectionMap: Record<string, string> = {
   'Settings': 'system',
 };
 
-const Sidebar = ({ expanded, onToggle, onExpand, theme, onThemeChange, onOpenCharSheet, onOpenStat, onOpenSkills, onOpenLibrary, onOpenCourses, onOpenWidgetManager, onOpenClockWidget, onOpenCalculatorWidget, onOpenUnitConverterWidget }: SidebarProps) => {
+const Sidebar = ({ expanded, onToggle, onExpand, theme, onThemeChange, onOpenCharSheet, onOpenStat, onOpenSkills, onOpenLibrary, onOpenCourses, onOpenWidgetManager, onOpenSocials, onOpenClockWidget, onOpenCalculatorWidget, onOpenUnitConverterWidget }: SidebarProps) => {
   const { user } = useAuth();
   const { data: stats } = useStats(user?.id);
 
@@ -62,6 +63,7 @@ const Sidebar = ({ expanded, onToggle, onExpand, theme, onThemeChange, onOpenCha
     if (label === 'Character Sheet') { onOpenCharSheet?.(); return; }
     if (label === 'Dashboard') { onExpand?.(); setOpenSection(null); return; }
     if (label === 'Skills') { onOpenSkills?.(); return; }
+    if (label === 'SOCIALS') { onOpenSocials?.(); return; }
     if (label === 'Utility') {
       onExpand?.();
       setOpenSection('utility');
@@ -141,7 +143,7 @@ const Sidebar = ({ expanded, onToggle, onExpand, theme, onThemeChange, onOpenCha
       width: expanded ? 220 : 48,
       transition: 'width 150ms ease',
       background: 'hsl(var(--bg-primary))',
-      borderRight: '1px solid hsl(var(--accent-dim))',
+      borderRight: '1px solid hsl(var(--accent))',
       height: '100%',
       flexShrink: 0,
       display: 'flex',
@@ -271,7 +273,14 @@ const Sidebar = ({ expanded, onToggle, onExpand, theme, onThemeChange, onOpenCha
             <span style={{ transition: 'transform 150ms', transform: openSection === 'tracking' ? 'rotate(90deg)' : 'none' }}>›</span>
           </div>
           {openSection === 'tracking' && trackingItems.map(item => (
-            <div key={item.name} className="sidebar-item">
+            <div
+              key={item.name}
+              className="sidebar-item"
+              style={{ cursor: item.name === 'SOCIALS' ? 'pointer' : undefined }}
+              onClick={() => {
+                if (item.name === 'SOCIALS') onOpenSocials?.();
+              }}
+            >
               <span>{item.icon} {item.name}</span>
               <span style={{ fontSize: 9, color: 'hsl(var(--text-dim))' }}>{item.count !== undefined ? `(${item.count})` : '—'}</span>
             </div>

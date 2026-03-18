@@ -26,6 +26,7 @@ import StatDetailOverlay from '@/components/overlays/StatDetailOverlay';
 import SkillsPage from '@/components/overlays/SkillsPage';
 import LibraryPage from '@/components/overlays/LibraryPage';
 import CoursesPage from '@/components/overlays/CoursesPage';
+import SocialsOverlay from '@/components/overlays/SocialsOverlay';
 import WidgetManager from '@/components/overlays/WidgetManager';
 import FirstBootWizard from '@/components/wizard/FirstBootWizard';
 import DetailDrawer from '@/components/drawer/DetailDrawer';
@@ -75,6 +76,7 @@ const Index = () => {
   const [showLog, setShowLog] = useState(false);
   const [showChar, setShowChar] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [showSocials, setShowSocials] = useState(false);
   const [showCheckin, setShowCheckin] = useState(false);
   const [showFlash, setShowFlash] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -308,7 +310,7 @@ const Index = () => {
           onOpenLibrary={() => setShowLibrary(true)}
           onOpenCourses={() => setShowCourses(true)}
           onOpenWidgetManager={() => setShowWidgetManager(true)}
-          onOpenClockWidget={() => handleOpenWidgetById('clock')}
+        onOpenSocials={() => setShowSocials(true)}
           onOpenCalculatorWidget={() => handleOpenWidgetById('calculator')}
           onOpenUnitConverterWidget={() => handleOpenWidgetById('unitConverter')}
         />
@@ -384,6 +386,9 @@ const Index = () => {
       )}
       {showSkills && (
         <SkillsPage onClose={() => setShowSkills(false)} />
+      )}
+      {showSocials && (
+        <SocialsOverlay onClose={() => setShowSocials(false)} />
       )}
       {openStatKey && (
         <StatDetailOverlay

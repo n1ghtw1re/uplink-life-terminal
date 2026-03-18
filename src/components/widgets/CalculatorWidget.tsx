@@ -233,9 +233,6 @@ const CalculatorWidget = ({ onClose, onFullscreen, isFullscreen, isFocused }: Wi
           ))}
         </div>
 
-        <div style={{ fontSize: 10, color: 'hsl(var(--text-dim))' }}>
-          Basic calculator with memory store/recall. Works with all themes.
-        </div>
       </div>
     </WidgetWrapper>
   );
