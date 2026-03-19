@@ -1,287 +1,217 @@
 // ============================================================
-// UPLINK — XP ENGINE
 // src/services/xpService.ts
-// All XP flows through here. Do not bypass this.
+// Simplified 3-track XP: mainXP, toolXP, augmentXP
+// 10 XP per minute, split 50/25/25 for mainXP
 // ============================================================
 
-import { supabase } from '@/integrations/supabase/client';
-import {
-  StatKey,
-  XPSource,
-  XPPreview,
-  getStreakTier,
-  STREAK_MULTIPLIERS,
-  getMasterLevel,
-} from '@/types';
+import { getDB } from '@/lib/db';
 
-// ─── XP RATES ────────────────────────────────────────────────
-// These are the tuning knobs. Adjust here, affects everything.
+export const XP_PER_MINUTE = 10;
+export const LEGACY_RATE   = 0.5;
+export const SKILL_SHARE   = 0.50;
+export const STAT_SHARE    = 0.25;
+export const MASTER_SHARE  = 0.25;
 
-const XP_RATES = {
-  SKILL_MULTIPLIER:         1.0,   // 100% of base → skill
-  STAT_MULTIPLIER:          0.6,   // 60% of base → stat(s)
-  MASTER_MULTIPLIER:        0.3,   // 30% of base → master level
-  CLASS_AFFINITY_PRIMARY:   0.10,  // +10% if skill stat = primary class
-  CLASS_AFFINITY_SECONDARY: 0.05,  // +5% if skill stat = secondary class
-  LEGACY_RATE:              0.50,  // Legacy entries earn 50% of live rate
+const THRESHOLDS = [0, 500, 1200, 2500, 4500, 7500, 12000, 18000, 26000, 36000, 48000, 62000, 78000, 96000, 116000];
+
+export function getLevelFromXP(xp: number) {
+  let level = 1;
+  for (let i = THRESHOLDS.length - 1; i >= 0; i--) {
+    if (xp >= THRESHOLDS[i]) { level = i + 1; break; }
+  }
+  const xpInLevel  = xp - (THRESHOLDS[level - 1] ?? 0);
+  const xpForLevel = level < THRESHOLDS.length
+    ? (THRESHOLDS[level] ?? 0) - (THRESHOLDS[level - 1] ?? 0)
+    : 50000;
+  return { level, xpInLevel, xpForLevel };
+}
+
+const levelCase = (col: string) => `
+  CASE
+    WHEN ${col} >= 116000 THEN 15 WHEN ${col} >= 96000 THEN 14
+    WHEN ${col} >= 78000  THEN 13 WHEN ${col} >= 62000 THEN 12
+    WHEN ${col} >= 48000  THEN 11 WHEN ${col} >= 36000 THEN 10
+    WHEN ${col} >= 26000  THEN 9  WHEN ${col} >= 18000 THEN 8
+    WHEN ${col} >= 12000  THEN 7  WHEN ${col} >= 7500  THEN 6
+    WHEN ${col} >= 4500   THEN 5  WHEN ${col} >= 2500  THEN 4
+    WHEN ${col} >= 1200   THEN 3  WHEN ${col} >= 500   THEN 2
+    ELSE 1
+  END`;
+
+export function previewXP(params: {
+  durationMinutes: number;
+  statSplit: { stat: string; percent: number }[];
+  toolIds: string[];
+  augmentIds: string[];
+  isLegacy?: boolean;
+}) {
+  const { durationMinutes, statSplit, toolIds, augmentIds, isLegacy = false } = params;
+  const factor  = isLegacy ? LEGACY_RATE : 1.0;
+  const base    = durationMinutes * XP_PER_MINUTE * factor;
+  const skillXP = Math.floor(base * SKILL_SHARE);
+  const statBase= Math.floor(base * STAT_SHARE);
+  const masterXP= Math.floor(base * MASTER_SHARE);
+  const statXP  = statSplit.map(s => ({ stat: s.stat, amount: Math.floor(statBase * s.percent / 100) }));
+  const perTool = toolIds.length > 0 ? Math.floor(base / toolIds.length) : 0;
+  const perAug  = augmentIds.length > 0 ? Math.floor(base / augmentIds.length) : 0;
+  return { skillXP, statXP, masterXP, perToolXP: perTool, totalToolXP: perTool * toolIds.length, perAugmentXP: perAug, totalAugmentXP: perAug * augmentIds.length };
+}
+
+const uid = () => crypto.randomUUID();
+
+export async function awardSessionXP(params: {
+  sessionId: string;
+  skillId: string;
+  durationMinutes: number;
+  statSplit: { stat: string; percent: number }[];
+  toolIds: string[];
+  augmentIds: string[];
+  isLegacy?: boolean;
+}) {
+  const db = await getDB();
+  const { sessionId, skillId, durationMinutes, statSplit, toolIds, augmentIds, isLegacy = false } = params;
+  const factor   = isLegacy ? LEGACY_RATE : 1.0;
+  const base     = durationMinutes * XP_PER_MINUTE * factor;
+  const skillXP  = Math.floor(base * SKILL_SHARE);
+  const statBase = Math.floor(base * STAT_SHARE);
+  const masterXP = Math.floor(base * MASTER_SHARE);
+  const statXPMap = statSplit.map(s => ({ stat: s.stat, amount: Math.floor(statBase * s.percent / 100) }));
+  const perTool   = toolIds.length > 0 ? Math.floor(base / toolIds.length) : 0;
+  const perAug    = augmentIds.length > 0 ? Math.floor(base / augmentIds.length) : 0;
+  const now       = new Date().toISOString();
+
+  // Skill
+  await db.exec(`UPDATE skills SET xp = xp + ${skillXP}, level = ${levelCase('xp + ' + skillXP)} WHERE id = '${skillId}';`);
+
+  // Stats
+  for (const { stat, amount } of statXPMap) {
+    if (amount > 0) await db.exec(`UPDATE stats SET xp = xp + ${amount}, level = ${levelCase('xp + ' + amount)}, dormant = 0 WHERE stat_key = '${stat}';`);
+  }
+
+  // Master
+  if (masterXP > 0) await db.exec(`UPDATE master_progress SET total_xp = total_xp + ${masterXP}, level = ${levelCase('total_xp + ' + masterXP)} WHERE id = 1;`);
+
+  // Tools
+  for (const toolId of toolIds) {
+    if (perTool > 0) {
+      await db.exec(`
+        UPDATE tools SET xp = xp + ${perTool}, level = ${levelCase('xp + ' + perTool)} WHERE id = '${toolId}';
+        UPDATE tool_progress SET total_xp = total_xp + ${perTool}, level = ${levelCase('total_xp + ' + perTool)} WHERE id = 1;
+      `);
+    }
+  }
+
+  // Augments
+  for (const augId of augmentIds) {
+    if (perAug > 0) {
+      await db.exec(`
+        UPDATE augments SET xp = xp + ${perAug}, level = ${levelCase('xp + ' + perAug)} WHERE id = '${augId}';
+        UPDATE augment_progress SET total_xp = total_xp + ${perAug}, level = ${levelCase('total_xp + ' + perAug)} WHERE id = 1;
+      `);
+    }
+  }
+
+  // XP log
+  const logEntries = [
+    `('${uid()}', 'session', '${sessionId}', 'skill',  '${skillId}', ${skillXP}, '${now}')`,
+    `('${uid()}', 'session', '${sessionId}', 'master', 'master',     ${masterXP}, '${now}')`,
+    ...statXPMap.filter(s => s.amount > 0).map(s => `('${uid()}', 'session', '${sessionId}', 'stat', '${s.stat}', ${s.amount}, '${now}')`),
+    ...toolIds.filter(() => perTool > 0).map(id => `('${uid()}', 'session', '${sessionId}', 'tool', '${id}', ${perTool}, '${now}')`),
+    ...augmentIds.filter(() => perAug > 0).map(id => `('${uid()}', 'session', '${sessionId}', 'augment', '${id}', ${perAug}, '${now}')`),
+  ];
+
+  if (logEntries.length > 0) {
+    await db.exec(`INSERT INTO xp_log (id, source, source_id, tier, entity_id, amount, logged_at) VALUES ${logEntries.join(',')};`);
+  }
+
+  return { skillXP, statXPMap, masterXP, perToolXP: perTool, perAugmentXP: perAug };
+}
+
+export async function awardBonusXP(params: {
+  source: string; sourceId: string; skillId?: string;
+  statKey?: string; amount: number; notes?: string;
+}) {
+  const db  = await getDB();
+  const { source, sourceId, skillId, statKey, amount, notes } = params;
+  const now = new Date().toISOString();
+  const tier = skillId ? 'skill' : statKey ? 'stat' : 'master';
+  const entityId = skillId ?? statKey ?? 'master';
+
+  if (skillId) await db.exec(`UPDATE skills SET xp = xp + ${amount} WHERE id = '${skillId}';`);
+  if (statKey) await db.exec(`UPDATE stats  SET xp = xp + ${amount} WHERE stat_key = '${statKey}';`);
+  await db.exec(`UPDATE master_progress SET total_xp = total_xp + ${amount} WHERE id = 1;`);
+  await db.exec(`
+    INSERT INTO xp_log (id, source, source_id, tier, entity_id, amount, notes, logged_at)
+    VALUES ('${uid()}', '${source}', '${sourceId}', '${tier}', '${entityId}', ${amount}, ${notes ? `'${notes.replace(/'/g, "''")}'` : 'NULL'}, '${now}');
+  `);
+}
+
+// ── Compatibility shims ───────────────────────────────────────
+// Keep old components compiling during migration.
+// These will be removed once CourseDetailDrawer, MediaDetailDrawer,
+// AddMediaModal and sessionService are rebuilt for the new system.
+
+export const XP_VALUES = {
+  COURSE_LESSON:    15,
+  COURSE_QUIZ_PASS: 30,
+  COURSE_ASSIGNMENT: 75,
+  COURSE_SECTION:   50,
+  COURSE_COMPLETE:  100,
+  BOOK_COMPLETE:    75,
+  COMIC_COMPLETE:   50,
+  FILM_WATCHED:     25,
+  DOCUMENTARY_WATCHED: 35,
+  TV_SERIES_COMPLETE: 60,
+  ALBUM_LISTENED:   20,
+  CERT_EARNED:      200,
+  PROJECT_MILESTONE: 50,
+  PROJECT_COMPLETE: 150,
+  RESOURCE_READ:    10,
+  TOOL_ADDED:       15,
+  WEEKLY_CHALLENGE: 100,
 };
 
-// ─── AWARD XP ────────────────────────────────────────────────
-// The single entry point for all XP events.
-// Every badge, session, checkin, completion — goes through here.
-
+// Legacy awardXP shim — used by CourseDetailDrawer, MediaDetailDrawer etc.
+// Routes flat bonus XP through the DB directly without going through awardSessionXP
 export async function awardXP(params: {
-  userId: string;
-  source: XPSource;
+  userId?: string;
+  source: string;
   sourceId?: string;
   baseAmount: number;
   skillId?: string;
-  statKeys?: StatKey[];
-  statSplit?: { stat: StatKey; percent: number }[];
+  statKeys?: string[];
+  statSplit?: { stat: string; percent: number }[];
   isLegacy?: boolean;
   notes?: string;
-}): Promise<{
-  skillXP: number;
-  statXP: Partial<Record<StatKey, number>>;
-  masterXP: number;
-  multiplier: number;
-}> {
-  const {
-    userId,
-    source,
-    sourceId,
-    skillId,
-    statKeys = [],
-    statSplit = [],
-    isLegacy = false,
-    notes,
-  } = params;
+}): Promise<{ skillXP: number; statXP: Record<string, number>; masterXP: number; multiplier: number }> {
+  const db = await getDB();
+  const { source, sourceId = '', baseAmount, skillId, statKeys = [], statSplit = [], notes } = params;
+  const id  = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const notesSQL = notes ? `'${notes.replace(/'/g, "''")}'` : 'NULL';
 
-  let { baseAmount } = params;
-
-  // Apply legacy rate reduction
-  if (isLegacy) {
-    baseAmount = Math.floor(baseAmount * XP_RATES.LEGACY_RATE);
+  if (skillId) {
+    await db.exec(`UPDATE skills SET xp = xp + ${baseAmount} WHERE id = '${skillId}';`);
+    await db.exec(`INSERT INTO xp_log (id, source, source_id, tier, entity_id, amount, notes, logged_at) VALUES ('${id}s', '${source}', '${sourceId}', 'skill', '${skillId}', ${baseAmount}, ${notesSQL}, '${now}');`);
   }
 
-  // Get current streak for multiplier
-  const { data: progress } = await supabase
-    .from('master_progress')
-    .select('streak, shields')
-    .eq('user_id', userId)
-    .single();
-
-  const streak = progress?.streak ?? 0;
-  const streakTier = getStreakTier(streak);
-  const multiplier = STREAK_MULTIPLIERS[streakTier];
-
-  // Calculate XP at each tier
-  const skillXP  = Math.floor(baseAmount * XP_RATES.SKILL_MULTIPLIER  * multiplier);
-  const statBase = Math.floor(baseAmount * XP_RATES.STAT_MULTIPLIER   * multiplier);
-  const masterXP = Math.floor(baseAmount * XP_RATES.MASTER_MULTIPLIER * multiplier);
-
-  // Distribute stat XP by split or evenly
-  const statXPMap: Partial<Record<StatKey, number>> = {};
-
-  if (statSplit.length > 0) {
-    for (const { stat, percent } of statSplit) {
-      statXPMap[stat] = Math.floor(statBase * (percent / 100));
-    }
-  } else if (statKeys.length > 0) {
-    const perStat = Math.floor(statBase / statKeys.length);
-    for (const stat of statKeys) {
-      statXPMap[stat] = perStat;
+  const statXP: Record<string, number> = {};
+  const split = statSplit.length > 0 ? statSplit : statKeys.map(s => ({ stat: s, percent: Math.floor(100 / Math.max(statKeys.length, 1)) }));
+  for (const entry of split) {
+    const stat   = entry.stat;
+    const amount = Math.floor(baseAmount * 0.6 * ((entry.percent ?? 100) / 100));
+    if (amount > 0) {
+      statXP[stat] = amount;
+      await db.exec(`UPDATE stats SET xp = xp + ${amount}, dormant = 0 WHERE stat_key = '${stat}';`);
+      await db.exec(`INSERT INTO xp_log (id, source, source_id, tier, entity_id, amount, notes, logged_at) VALUES ('${id}t${stat}', '${source}', '${sourceId}', 'stat', '${stat}', ${amount}, ${notesSQL}, '${now}');`);
     }
   }
 
-  // Build XP log entries
-  const logEntries: {
-    user_id: string; source: string; source_id?: string | null;
-    tier: string; amount: number; base_amount: number;
-    multiplier?: number; stat_key?: string; skill_id?: string; notes?: string | null;
-  }[] = [];
-
-  if (skillId && skillXP > 0) {
-    logEntries.push({
-      user_id:     userId,
-      source,
-      source_id:   sourceId ?? null,
-      tier:        'skill',
-      amount:      skillXP,
-      base_amount: baseAmount,
-      multiplier,
-      skill_id:    skillId,
-      notes:       notes ?? null,
-    });
-  }
-
-  for (const [stat, amount] of Object.entries(statXPMap)) {
-    if (amount && amount > 0) {
-      logEntries.push({
-        user_id:     userId,
-        source,
-        source_id:   sourceId ?? null,
-        tier:        'stat',
-        amount,
-        base_amount: baseAmount,
-        multiplier,
-        stat_key:    stat,
-        notes:       notes ?? null,
-      });
-    }
-  }
-
+  const masterXP = Math.floor(baseAmount * 0.3);
   if (masterXP > 0) {
-    logEntries.push({
-      user_id:     userId,
-      source,
-      source_id:   sourceId ?? null,
-      tier:        'master',
-      amount:      masterXP,
-      base_amount: baseAmount,
-      multiplier,
-      notes:       notes ?? null,
-    });
+    await db.exec(`UPDATE master_progress SET total_xp = total_xp + ${masterXP} WHERE id = 1;`);
+    await db.exec(`INSERT INTO xp_log (id, source, source_id, tier, entity_id, amount, notes, logged_at) VALUES ('${id}m', '${source}', '${sourceId}', 'master', 'master', ${masterXP}, ${notesSQL}, '${now}');`);
   }
 
-  // Write to immutable XP ledger
-  if (logEntries.length > 0) {
-    const { error: logError } = await supabase.from('xp_log').insert(logEntries);
-    if (logError) throw logError;
-  }
-
-  // Update skill XP — direct increment (cumulative, matches getStatLevel)
-  if (skillId && skillXP > 0) {
-    const { error: updateErr } = await supabase.rpc('increment_skill_xp', {
-      p_skill_id: skillId,
-      p_amount:   skillXP,
-    });
-    // Fallback: direct update if RPC fails or isn't deployed
-    if (updateErr) {
-      const { data: skillRow } = await supabase
-        .from('skills').select('xp').eq('id', skillId).single();
-      const { error: directErr } = await supabase
-        .from('skills')
-        .update({ xp: (skillRow?.xp ?? 0) + skillXP })
-        .eq('id', skillId);
-      if (directErr) throw directErr;
-    }
-  }
-
-  // Update stat XP rows + sync level column
-  for (const [stat, amount] of Object.entries(statXPMap)) {
-    if (amount && amount > 0) {
-      // Increment XP via RPC
-      const { error } = await supabase.rpc('increment_stat_xp', {
-        p_user_id:  userId,
-        p_stat_key: stat,
-        p_amount:   amount,
-      });
-      if (error) throw error;
-
-      // Read new total XP and sync level column
-      const { data: statRow } = await supabase
-        .from('stats')
-        .select('xp')
-        .eq('user_id', userId)
-        .eq('stat_key', stat)
-        .single();
-
-      if (statRow) {
-        // Inline level calc (mirrors getStatLevel — avoid import in service)
-        const STAT_LEVEL_XP = [0, 500, 1200, 2500, 4500, 7500, 12000, 18000, 26000, 36000];
-        let newLevel = 1;
-        for (let i = STAT_LEVEL_XP.length - 1; i >= 0; i--) {
-          if ((statRow.xp ?? 0) >= STAT_LEVEL_XP[i]) { newLevel = i + 1; break; }
-        }
-        await supabase
-          .from('stats')
-          .update({ level: newLevel })
-          .eq('user_id', userId)
-          .eq('stat_key', stat);
-      }
-    }
-  }
-
-  // Update master XP
-  if (masterXP > 0) {
-    const { error } = await supabase.rpc('increment_master_xp', {
-      p_user_id: userId,
-      p_amount:  masterXP,
-    });
-    if (error) throw error;
-  }
-
-  return { skillXP, statXP: statXPMap, masterXP, multiplier };
+  return { skillXP: baseAmount, statXP, masterXP, multiplier: 1.0 };
 }
-
-// ─── PREVIEW XP ──────────────────────────────────────────────
-// Client-side calculation for the live XP preview in Quick Log.
-// No DB calls — pure math. Keep in sync with awardXP rates above.
-
-export function calculateXPPreview(params: {
-  baseAmount: number;
-  streak: number;
-  statSplit: { stat: StatKey; percent: number }[];
-  isLegacy?: boolean;
-}): XPPreview {
-  const { baseAmount, streak, statSplit, isLegacy = false } = params;
-
-  const effectiveBase = isLegacy
-    ? Math.floor(baseAmount * XP_RATES.LEGACY_RATE)
-    : baseAmount;
-
-  const streakTier  = getStreakTier(streak);
-  const multiplier  = STREAK_MULTIPLIERS[streakTier];
-
-  const skillXP  = Math.floor(effectiveBase * XP_RATES.SKILL_MULTIPLIER  * multiplier);
-  const statBase = Math.floor(effectiveBase * XP_RATES.STAT_MULTIPLIER   * multiplier);
-  const masterXP = Math.floor(effectiveBase * XP_RATES.MASTER_MULTIPLIER * multiplier);
-
-  const statXP = statSplit.map(({ stat, percent }) => ({
-    stat,
-    amount: Math.floor(statBase * (percent / 100)),
-  }));
-
-  return {
-    skillXP,
-    statXP,
-    masterXP,
-    multiplier,
-    multiplierTier: streakTier,
-    total: skillXP + masterXP,
-  };
-}
-
-// ─── BASE XP AMOUNTS ─────────────────────────────────────────
-// Reference values used by other services when calling awardXP.
-
-export const XP_VALUES = {
-  SESSION_PER_HOUR:      100,   // base per hour of session time
-  CHECKIN:                20,   // daily check-in per stat checked
-  HABIT_STREAK_7:         50,
-  HABIT_STREAK_30:       150,
-  HABIT_STREAK_100:      500,
-  HABIT_STREAK_365:     2000,
-  GOAL_SPRINT:           100,
-  GOAL_MID:              300,
-  GOAL_LIFE:            1000,
-  BOOK_COMPLETE:          75,
-  COMIC_COMPLETE:         50,
-  FILM_WATCHED:           25,
-  DOCUMENTARY_WATCHED:    35,
-  TV_SEASON:              15,
-  TV_SERIES_COMPLETE:     60,
-  ALBUM_LISTENED:         20,
-  COURSE_LESSON:          15,
-  COURSE_QUIZ_PASS:       30,
-  COURSE_ASSIGNMENT:      75,
-  COURSE_SECTION:         50,
-  COURSE_COMPLETE:       100,
-  CERT_EARNED:           200,
-  PROJECT_MILESTONE:      50,
-  PROJECT_COMPLETE:      150,
-  RESOURCE_READ:          10,
-  TOOL_ADDED:             15,
-  WEEKLY_CHALLENGE:      100,
-} as const;

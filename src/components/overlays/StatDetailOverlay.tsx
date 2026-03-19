@@ -371,7 +371,7 @@ export default function StatDetailOverlay({ statKey, onClose, onNavigate }: Prop
                   </span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                  <XPBar value={stat.xp} max={stat.xpToNext} height={10} />
+                  <XPBar value={stat.xpInLevel} max={stat.xpForLevel} height={10} />
                   <span style={{
                     fontFamily: "'IBM Plex Mono', monospace",
                     fontSize: 10,
@@ -379,7 +379,7 @@ export default function StatDetailOverlay({ statKey, onClose, onNavigate }: Prop
                     flexShrink: 0,
                     whiteSpace: 'nowrap',
                   }}>
-                    {stat.xp.toLocaleString()} / {stat.xpToNext.toLocaleString()}
+                    {stat.xpInLevel.toLocaleString()} / {stat.xpForLevel.toLocaleString()}
                   </span>
                 </div>
                 <div style={{

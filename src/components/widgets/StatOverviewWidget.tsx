@@ -73,7 +73,7 @@ const StatOverviewWidget = ({ onClose, onFullscreen, isFullscreen, onStatClick }
             ) : (
               <>
                 <span style={{ width: 36, fontSize: 10, color: 'hsl(var(--accent))' }}>LVL {s.level}</span>
-                <ProgressBar value={s.xp} max={s.xpToNext} width="100px" height={6} />
+                <ProgressBar value={s.xpInLevel} max={s.xpForLevel} width="100px" height={6} />
                 <span style={{ fontSize: 9, color: 'hsl(var(--text-dim))' }}>STK: {s.streak}d</span>
               </>
             )}
@@ -108,7 +108,7 @@ const StatOverviewWidget = ({ onClose, onFullscreen, isFullscreen, onStatClick }
         </div>
       </WidgetWrapper>
 
-      <Modal open={showAddSkill} onClose={() => setShowAddSkill(false)} title="ADD SKILL" width={520}>
+      <Modal open={showAddSkill} onClose={() => setShowAddSkill(false)} title="ADD SKILL" width={680}>
         <AddSkillModal onClose={() => setShowAddSkill(false)} />
       </Modal>
     </>

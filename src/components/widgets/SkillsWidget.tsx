@@ -23,6 +23,7 @@ export default function SkillsWidget({ onClose, onFullscreen, isFullscreen, onOp
   const [showAdd, setShowAdd] = useState(false);
 
   const topSkills = [...(skills ?? [])]
+    .filter(s => (s as any).active !== false)
     .sort((a, b) => {
       const la = getStatLevel(a.xp).level;
       const lb = getStatLevel(b.xp).level;
@@ -127,7 +128,7 @@ export default function SkillsWidget({ onClose, onFullscreen, isFullscreen, onOp
         </button>
       </div>
 
-      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="ADD SKILL" width={520}>
+      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="ADD SKILL" width={680}>
         <AddSkillModal onClose={() => setShowAdd(false)} />
       </Modal>
     </WidgetWrapper>

@@ -1,6 +1,8 @@
+// src/hooks/useStats.ts
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
-import { StatKey, STAT_META, STAT_LEVEL_TITLES, getStatLevel, getStreakTier } from '@/types';
+import { getDB } from '@/lib/db';
+import { getLevelFromXP } from '@/services/xpService';
+import { STAT_META, STAT_LEVEL_TITLES, StatKey } from '@/types';
 
 export interface StatDisplay {
   key: StatKey;
@@ -9,49 +11,39 @@ export interface StatDisplay {
   level: number;
   levelTitle: string;
   xp: number;
-  xpToNext: number;
+  xpInLevel: number;
+  xpForLevel: number;
   streak: number;
-  multiplier: number;
   dormant: boolean;
 }
 
-const MULTIPLIER_MAP: Record<string, number> = {
-  STANDARD: 1.0, HOT_STREAK: 1.5, ON_FIRE: 2.0, LEGENDARY: 3.0,
-};
-
-export function useStats(userId: string | undefined) {
+export function useStats(_userId?: string) {
   return useQuery({
-    queryKey: ['stats', userId],
+    queryKey: ['stats'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('stats')
-        .select('*')
-        .eq('user_id', userId!);
-      if (error) throw error;
+      const db = await getDB();
+      const result = await db.query<{
+        stat_key: string; xp: number; level: number; streak: number; dormant: boolean;
+      }>(`SELECT stat_key, xp, level, streak, dormant FROM stats ORDER BY stat_key;`);
 
-      return (data ?? []).map((row): StatDisplay => {
-        const key = row.stat_key as StatKey;
-        const meta = STAT_META[key];
-        const { level: computedLevel, xpInLevel, xpForLevel } = getStatLevel(row.xp ?? 0);
-        const titles = STAT_LEVEL_TITLES[key];
-        const streakTier = getStreakTier(row.streak ?? 0);
-        // Use computed level from cumulative XP — DB level column may lag behind
-        const level = computedLevel;
-
+      return result.rows.map((row): StatDisplay => {
+        const key   = row.stat_key as StatKey;
+        const meta  = STAT_META[key];
+        const { level, xpInLevel, xpForLevel } = getLevelFromXP(row.xp ?? 0);
+        const titles = STAT_LEVEL_TITLES[key] ?? [];
         return {
           key,
-          name: meta?.name ?? key,
-          icon: meta?.icon ?? '?',
+          name:       meta?.name ?? key.toUpperCase(),
+          icon:       meta?.icon ?? '?',
           level,
-          levelTitle: titles?.[level - 1] ?? `LVL ${level}`,
-          xp: xpInLevel,
-          xpToNext: xpForLevel,
-          streak: row.streak ?? 0,
-          multiplier: MULTIPLIER_MAP[streakTier] ?? 1.0,
-          dormant: row.dormant ?? false,
+          levelTitle: titles[level - 1] ?? `LVL ${level}`,
+          xp:         row.xp ?? 0,
+          xpInLevel,
+          xpForLevel,
+          streak:     row.streak ?? 0,
+          dormant:    row.dormant ?? false,
         };
       });
     },
-    enabled: !!userId,
   });
 }

@@ -3,6 +3,7 @@
 // Full-page skills browser — tabbed by stat, sortable, drawer
 // ============================================================
 import { useState, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSkills, SkillOption } from '@/hooks/useSkills';
 import { STAT_META, StatKey, getStatLevel } from '@/types';
@@ -21,12 +22,13 @@ const STAT_TABS: { key: StatKey; label: string }[] = [
   { key: 'wire',  label: 'WIRE' },
 ];
 
-type SortKey = 'level' | 'name' | 'xp';
+type SortKey = 'level' | 'name' | 'xp' | 'active';
 
 const SORT_OPTIONS: { key: SortKey; label: string }[] = [
-  { key: 'level', label: 'LEVEL' },
-  { key: 'name',  label: 'A–Z' },
-  { key: 'xp',    label: 'XP' },
+  { key: 'active', label: 'ACTIVE' },
+  { key: 'level',  label: 'LEVEL' },
+  { key: 'name',   label: 'A–Z' },
+  { key: 'xp',     label: 'XP' },
 ];
 
 // ── Styles ────────────────────────────────────────────────────
@@ -59,12 +61,15 @@ function XPBar({ value, max }: { value: number; max: number }) {
 function SkillRow({
   skill,
   onClick,
+  onToggleActive,
 }: {
   skill: SkillOption;
   onClick: () => void;
+  onToggleActive?: (id: string, active: boolean) => void;
 }) {
   const { xpInLevel, xpForLevel, level } = getStatLevel(skill.xp);
   const statIcons = skill.statKeys.map(k => STAT_META[k]?.icon ?? k).join(' ');
+  const isActive  = (skill as any).active !== false;
 
   return (
     <div
@@ -73,19 +78,34 @@ function SkillRow({
         display: 'flex', alignItems: 'center', gap: 14,
         padding: '10px 16px',
         background: bgS,
-        border: `1px solid rgba(153,104,0,0.4)`,
+        border: `1px solid ${isActive ? 'rgba(153,104,0,0.4)' : 'rgba(153,104,0,0.15)'}`,
         cursor: 'pointer',
         transition: 'border-color 150ms, background 150ms',
+        opacity: isActive ? 1 : 0.45,
       }}
       onMouseEnter={e => {
         e.currentTarget.style.borderColor = adim;
         e.currentTarget.style.background = 'rgba(255,176,0,0.04)';
       }}
       onMouseLeave={e => {
-        e.currentTarget.style.borderColor = 'rgba(153,104,0,0.4)';
+        e.currentTarget.style.borderColor = isActive ? 'rgba(153,104,0,0.4)' : 'rgba(153,104,0,0.15)';
         e.currentTarget.style.background = bgS;
       }}
     >
+      {/* Active checkbox */}
+      {onToggleActive && (
+        <div
+          onClick={e => { e.stopPropagation(); onToggleActive(skill.id, !isActive); }}
+          title={isActive ? 'Click to deactivate' : 'Click to activate'}
+          style={{
+            width: 14, height: 14, flexShrink: 0,
+            border: `1px solid ${isActive ? 'hsl(var(--accent))' : 'hsl(var(--accent-dim))'}`,
+            background: isActive ? 'rgba(255,176,0,0.2)' : 'transparent',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 8, color: 'hsl(var(--accent))', cursor: 'pointer',
+          }}
+        >{isActive ? '×' : ''}</div>
+      )}
       {/* Name */}
       <span style={{
         fontFamily: mono, fontSize: 12, color: acc,
@@ -131,6 +151,7 @@ interface Props {
 }
 
 export default function SkillsPage({ onClose }: Props) {
+  const queryClient = useQueryClient();
   const { user } = useAuth();
   const { data: skills, isLoading } = useSkills(user?.id);
 
@@ -151,6 +172,13 @@ export default function SkillsPage({ onClose }: Props) {
       : (skills ?? []).filter(s => s.statKeys.includes(activeTab));
 
     return [...base].sort((a, b) => {
+      // Always sort active before inactive as secondary sort
+      if (sortKey === 'active') {
+        const aActive = (a as any).active !== false;
+        const bActive = (b as any).active !== false;
+        if (aActive !== bActive) return aActive ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      }
       if (sortKey === 'name')  return a.name.localeCompare(b.name);
       if (sortKey === 'xp')    return b.xp - a.xp;
       if (sortKey === 'level') {
@@ -192,9 +220,6 @@ export default function SkillsPage({ onClose }: Props) {
           {SORT_OPTIONS.map(s => (
             <button key={s.key} onClick={() => setSortKey(s.key)} style={{
               padding: '3px 8px', fontSize: 9,
-              border: `1px solid ${sortKey === s.key ? acc : adim}`,
-              background: sortKey === s.key ? 'rgba(255,176,0,0.1)' : 'transparent',
-              color: sortKey === s.key ? acc : dim,
               fontFamily: mono, cursor: 'pointer', letterSpacing: 1,
               transition: 'all 150ms',
             }}>{s.label}</button>
@@ -309,9 +334,13 @@ export default function SkillsPage({ onClose }: Props) {
                 <SkillRow
                   key={skill.id}
                   skill={skill}
-                  onClick={() => setSelectedSkillId(
-                    selectedSkillId === skill.id ? null : skill.id
-                  )}
+                  onClick={() => setSelectedSkillId(selectedSkillId === skill.id ? null : skill.id)}
+                  onToggleActive={async (id, active) => {
+                    const { getDB } = await import('@/lib/db');
+                    const db = await getDB();
+                    await db.exec(`UPDATE skills SET active = ${active} WHERE id = '${id}';`);
+                    queryClient.invalidateQueries({ queryKey: ['skills'] });
+                  }}
                 />
               ))}
             </div>
@@ -370,7 +399,7 @@ export default function SkillsPage({ onClose }: Props) {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }} onClick={() => setShowAddSkill(false)}>
           <div onClick={e => e.stopPropagation()} style={{
-            width: 520, maxHeight: '85vh', overflowY: 'auto',
+            width: 680, maxWidth: 'calc(100vw - 40px)', maxHeight: '90vh', overflowY: 'auto',
             background: bgP,
             border: `1px solid ${adim}`,
             boxShadow: '0 0 40px rgba(255,176,0,0.1)',

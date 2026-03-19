@@ -1,69 +1,79 @@
-// ============================================================
 // src/services/checkinService.ts
-// ============================================================
-import { supabase } from '@/integrations/supabase/client';
-import { StatKey } from '@/types';
+import { getDB } from '@/lib/db';
+import { awardBonusXP } from './xpService';
 
-export async function getTodayCheckin(userId: string) {
+export async function getTodayCheckin() {
+  const db   = await getDB();
   const today = new Date().toISOString().slice(0, 10);
-  const { data } = await supabase
-    .from('checkins')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('date', today)
-    .maybeSingle();
-  return data;
+  const res  = await db.query(
+    `SELECT * FROM checkins WHERE checked_date = $1 LIMIT 1;`, [today]
+  );
+  return res.rows[0] ?? null;
 }
 
-export async function getHabits(userId: string) {
-  const { data, error } = await supabase
-    .from('habits')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('active', true)
-    .order('created_at');
-  if (error) throw error;
-  return data ?? [];
+export async function getHabits() {
+  const db  = await getDB();
+  const res = await db.query(
+    `SELECT * FROM habits WHERE active = true ORDER BY name;`
+  );
+  return res.rows;
 }
 
-export async function getHabitLogsToday(userId: string) {
+export async function getHabitLogsToday() {
+  const db    = await getDB();
   const today = new Date().toISOString().slice(0, 10);
-  const { data } = await supabase
-    .from('habit_logs')
-    .select('habit_id')
-    .eq('user_id', userId)
-    .eq('date', today)
-    .eq('completed', true);
-  return (data ?? []).map(r => r.habit_id);
+  const res   = await db.query(
+    `SELECT * FROM habit_logs WHERE logged_date = $1;`, [today]
+  );
+  return res.rows;
 }
 
 export async function submitCheckin(params: {
-  userId: string;
-  statsChecked: StatKey[];
-  habitsChecked: string[];
+  statsChecked: string[];
+  habitIds: string[];
   notes?: string;
 }) {
+  const db    = await getDB();
   const today = new Date().toISOString().slice(0, 10);
+  const id    = crypto.randomUUID();
 
-  const { error } = await supabase
-    .from('checkins')
-    .insert({
-      user_id: params.userId,
-      date: today,
-      stats_checked: params.statsChecked,
-      habits_checked: params.habitsChecked,
-      notes: params.notes ?? null,
-    });
-  if (error) throw error;
+  // Insert checkin
+  await db.query(
+    `INSERT INTO checkins (id, checked_date, stats_checked, notes)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (checked_date) DO UPDATE
+     SET stats_checked = $3, notes = $4;`,
+    [id, today, JSON.stringify(params.statsChecked), params.notes ?? null]
+  );
 
-  if (params.habitsChecked.length > 0) {
-    await supabase.from('habit_logs').insert(
-      params.habitsChecked.map(habitId => ({
-        user_id: params.userId,
-        habit_id: habitId,
-        date: today,
-        completed: true,
-      }))
+  // Update streak
+  await db.exec(`
+    UPDATE master_progress
+    SET streak = streak + 1,
+        last_checkin = '${today}'
+    WHERE id = 1;
+  `);
+
+  // Log habit completions + award GRIT XP
+  for (const habitId of params.habitIds) {
+    const hid = crypto.randomUUID();
+    await db.query(
+      `INSERT INTO habit_logs (id, habit_id, logged_date, completed)
+       VALUES ($1, $2, $3, true)
+       ON CONFLICT DO NOTHING;`,
+      [hid, habitId, today]
     );
+    // Update habit streak
+    await db.exec(
+      `UPDATE habits SET streak = streak + 1 WHERE id = '${habitId}';`
+    );
+    // Award 10 GRIT XP per habit completion
+    await awardBonusXP({
+      source: 'habit', sourceId: habitId,
+      statKey: 'grit', amount: 10,
+      notes: 'Habit completion',
+    });
   }
+
+  return { success: true };
 }

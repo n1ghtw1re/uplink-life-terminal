@@ -5,70 +5,54 @@ import { useState, useEffect, useRef } from 'react';
 import { Toaster } from '@/components/ui/toaster';
 import { Toaster as Sonner } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { useAuth } from '@/contexts/AuthContext';
+import { useApp } from '@/contexts/AppContext';
 import Index from './pages/Index';
 import XPFloatLayer from '@/components/effects/XPFloatLayer';
 import LevelUpAnimation from '@/components/effects/LevelUpAnimation';
 import BootSequence from '@/components/effects/BootSequence';
-import LoginScreen from '@/components/auth/LoginScreen';
 
-// State machine:
-// INIT    → wait for auth to resolve, show nothing
-// BOOTING → play boot animation (only on fresh page load, not post-login)
-// LOGIN   → show login screen
-// READY   → show dashboard
-
-type Stage = 'INIT' | 'BOOTING' | 'LOGIN' | 'READY';
+type Stage = 'INIT' | 'BOOTING' | 'READY';
 
 function AppInner() {
-  const { user, loading: authLoading } = useAuth();
-  const [stage, setStage] = useState<Stage>('INIT');
-  const hasBootedRef = useRef(false); // only play boot once per page load
+  const { ready } = useApp();
+  const [stage, setStage]   = useState<Stage>('INIT');
+  const bootedRef = useRef(false);
 
-  // On mount: decide whether to play boot or go straight to app
   useEffect(() => {
-    if (authLoading) return; // wait for auth to resolve
-
-    if (hasBootedRef.current) return; // already handled
-    hasBootedRef.current = true;
-
-    if (user) {
-      // Returning user with valid session — play boot then go to app
-      setStage('BOOTING');
+    if (!ready || bootedRef.current) return;
+    bootedRef.current = true;
+    // Only play boot sequence once per browser session
+    const hasBooted = sessionStorage.getItem('uplink-booted');
+    if (hasBooted) {
+      setStage('READY');
     } else {
-      // No session — play boot then show login
       setStage('BOOTING');
     }
-  }, [authLoading, user]);
+  }, [ready]);
 
-  const handleBootComplete = () => {
-    setStage(user ? 'READY' : 'LOGIN');
-  };
+  // Safety fallback — if boot sequence never calls onComplete, go READY after 8s
+  useEffect(() => {
+    if (stage !== 'BOOTING') return;
+    const t = setTimeout(() => setStage('READY'), 8000);
+    return () => clearTimeout(t);
+  }, [stage]);
 
   return (
     <>
-      {/* Blank dark screen while auth resolves — no flash */}
       {stage === 'INIT' && (
         <div style={{ position: 'fixed', inset: 0, background: '#0d0800' }} />
       )}
-
       {stage === 'BOOTING' && (
-        <BootSequence
-          isShort={false}
-          onComplete={handleBootComplete}
-        />
+        <BootSequence isShort={false} onComplete={() => {
+          sessionStorage.setItem('uplink-booted', '1');
+          setStage('READY');
+        }} />
       )}
-
-      {stage === 'LOGIN' && (
-        <LoginScreen onAuthenticated={() => setStage('READY')} />
-      )}
-
       {stage === 'READY' && (
         <div id="app-root">
           <Index />
         </div>
       )}
-
       <XPFloatLayer />
       <LevelUpAnimation />
     </>
