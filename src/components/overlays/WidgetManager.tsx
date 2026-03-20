@@ -29,7 +29,8 @@ export const WIDGET_REGISTRY: WidgetDef[] = [
   { id: 'courses', name: 'COURSES',           icon: '▸', category: 'ARSENAL', description: 'Active and queued courses with progress bars' },
   { id: 'media',   name: 'MEDIA LIBRARY',     icon: '◆', category: 'ARSENAL', description: 'Books, films, TV, albums — tabbed by type, reading progress' },
   { id: 'skills',  name: 'SKILLS',             icon: '◫', category: 'CORE',    description: 'Top skills by level — XP bars, stat icons, quick access' },
-  { id: 'tools',   name: 'TOOLS',              icon: '⚙', category: 'ARSENAL', description: 'Active tools by level — toolXP progress, filter by type' },
+  { id: 'tools',    name: 'TOOLS',    icon: '⚙', category: 'ARSENAL', description: 'Active tools by level — toolXP progress, filter by type' },
+  { id: 'augments', name: 'AUGMENTS', icon: '⬡', category: 'ARSENAL', description: 'AI augments with augmentXP progress — filter by cluster and usage' },
   // Future widgets (greyed out, not yet available)
   { id: 'goals',    name: 'GOALS',            icon: '◎', category: 'FUTURE',  description: 'Life, mid, and sprint goals — coming soon' },
   { id: 'habits',   name: 'HABIT TRACKER',    icon: '✓', category: 'FUTURE',  description: 'Daily habit streaks and completion — coming soon' },

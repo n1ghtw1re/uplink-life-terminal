@@ -6,192 +6,49 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { StatKey, STAT_META } from '@/types';
-import type { Json } from '@/integrations/supabase/types';
+
 import { toast } from '@/hooks/use-toast';
 import { awardXP } from '@/services/xpService';
-import { useSkills } from '@/hooks/useSkills';
-
-// ── Reusable searchable skill tag input ─────────────────────
-interface Skill { id: string; name: string; }
-
-function SkillTagInput({
-  skills,
-  selectedIds,
-  onChange,
-}: {
-  skills: Skill[];
-  selectedIds: string[];
-  onChange: (ids: string[]) => void;
-}) {
-  const [search, setSearch] = useState('');
-  const [open, setOpen] = useState(false);
-
-  const filtered = skills.filter(s =>
-    s.name.toLowerCase().includes(search.toLowerCase()) &&
-    !selectedIds.includes(s.id)
-  );
-
-  const add = (id: string) => {
-    onChange([...selectedIds, id]);
-    setSearch('');
-    setOpen(false);
-  };
-
-  const remove = (id: string) => onChange(selectedIds.filter(x => x !== id));
-
-  const selectedSkills = skills.filter(s => selectedIds.includes(s.id));
-
-  return (
-    <div>
-      <div className="crt-field-label">
-        FEEDS SKILL
-        <span style={{ opacity: 0.5, marginLeft: 8, fontWeight: 'normal', textTransform: 'none', letterSpacing: 0 }}>
-          optional
-        </span>
-      </div>
-
-      {/* Selected tags */}
-      {selectedSkills.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
-          {selectedSkills.map(s => (
-            <span
-              key={s.id}
-              style={{
-                background: 'rgba(255,176,0,0.12)',
-                border: '1px solid hsl(var(--accent-dim))',
-                color: 'hsl(var(--accent))',
-                fontFamily: 'IBM Plex Mono, monospace',
-                fontSize: 10,
-                padding: '2px 8px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                cursor: 'default',
-              }}
-            >
-              {s.name}
-              <span
-                onClick={() => remove(s.id)}
-                style={{ cursor: 'pointer', opacity: 0.6, fontSize: 12, lineHeight: 1 }}
-                onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
-                onMouseLeave={e => (e.currentTarget.style.opacity = '0.6')}
-              >×</span>
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* Search input */}
-      <div style={{ position: 'relative' }}>
-        <input
-          className="crt-input"
-          style={{ width: '100%' }}
-          placeholder="type to search skills..."
-          value={search}
-          onChange={e => { setSearch(e.target.value); setOpen(true); }}
-          onFocus={() => setOpen(true)}
-          onBlur={() => setTimeout(() => setOpen(false), 150)}
-        />
-
-        {/* Dropdown */}
-        {open && filtered.length > 0 && (
-          <div style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            right: 0,
-            background: 'hsl(var(--bg-secondary))',
-            border: '1px solid hsl(var(--accent-dim))',
-            borderTop: 'none',
-            zIndex: 50,
-            maxHeight: 160,
-            overflowY: 'auto',
-          }}>
-            {filtered.map(s => (
-              <div
-                key={s.id}
-                onMouseDown={() => add(s.id)}
-                style={{
-                  padding: '5px 10px',
-                  fontFamily: 'IBM Plex Mono, monospace',
-                  fontSize: 11,
-                  color: 'hsl(var(--accent))',
-                  cursor: 'pointer',
-                }}
-                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,176,0,0.1)')}
-                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-              >
-                {s.name}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {open && search.length > 0 && filtered.length === 0 && (
-          <div style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            right: 0,
-            background: 'hsl(var(--bg-secondary))',
-            border: '1px solid hsl(var(--accent-dim))',
-            borderTop: 'none',
-            padding: '6px 10px',
-            fontFamily: 'IBM Plex Mono, monospace',
-            fontSize: 10,
-            color: 'hsl(var(--text-dim))',
-            zIndex: 50,
-          }}>
-            no matches
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-const STAT_KEYS: StatKey[] = ['body', 'wire', 'mind', 'cool', 'grit', 'flow', 'ghost'];
 
 const MEDIA_TYPES = [
-  { key: 'book',          label: 'BOOK',         icon: '📖' },
-  { key: 'comic',         label: 'COMIC',        icon: '📚' },
-  { key: 'film',          label: 'FILM',         icon: '🎬' },
-  { key: 'documentary',   label: 'DOC',          icon: '🎥' },
-  { key: 'tv',            label: 'TV SERIES',    icon: '📺' },
-  { key: 'album',         label: 'ALBUM',        icon: '🎵' },
-] as const;
+  { key: 'book',         label: 'BOOK',         icon: '📖' },
+  { key: 'comic',        label: 'COMIC',        icon: '📚' },
+  { key: 'film',         label: 'FILM',         icon: '🎬' },
+  { key: 'game',         label: 'GAME',         icon: '🎮' },
+  { key: 'documentary',  label: 'DOCUMENTARY',  icon: '🎥' },
+  { key: 'tv',           label: 'TV SERIES',    icon: '📺' },
+  { key: 'album',        label: 'ALBUM',        icon: '🎵' },
+];
 
 type MediaType = typeof MEDIA_TYPES[number]['key'];
 
-const STATUS_OPTIONS: Record<MediaType, string[]> = {
+const STATUS_OPTIONS: Record<string, string[]> = {
   book:        ['READING', 'QUEUED', 'FINISHED', 'DROPPED'],
   comic:       ['READING', 'QUEUED', 'FINISHED', 'DROPPED'],
   film:        ['WATCHING', 'QUEUED', 'FINISHED'],
+  game:        ['PLAYING', 'QUEUED', 'FINISHED', 'DROPPED'],
   documentary: ['WATCHING', 'QUEUED', 'FINISHED'],
   tv:          ['WATCHING', 'QUEUED', 'FINISHED', 'DROPPED'],
   album:       ['LISTENING', 'QUEUED', 'FINISHED'],
 };
 
-
-
-
-
-
-
-// XP awarded on completion per type (for preview)
-const XP_ON_COMPLETE: Record<MediaType, number> = {
-  book: 75, comic: 50, film: 25, documentary: 35, tv: 60, album: 20,
+const XP_ON_COMPLETE: Record<string, number> = {
+  book: 100, comic: 50, film: 40, documentary: 50, tv: 75, album: 30, game: 60,
 };
 
-interface Props {
+const STAT_KEYS: StatKey[] = ['body', 'wire', 'mind', 'cool', 'grit', 'flow', 'ghost'];
+
+interface AddMediaModalProps {
   onClose: () => void;
-  defaultType?: MediaType;
+  defaultType?: string;
 }
+
+type Props = AddMediaModalProps;
+
 
 export default function AddMediaModal({ onClose, defaultType = 'book' }: Props) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const { data: allSkills } = useSkills(user?.id);
 
   const [type, setType]         = useState<MediaType>(defaultType);
   const [title, setTitle]       = useState('');
@@ -199,7 +56,7 @@ export default function AddMediaModal({ onClose, defaultType = 'book' }: Props) 
   const [year, setYear]         = useState('');
   const [status, setStatus]     = useState<string>(STATUS_OPTIONS[defaultType][0]);
   const [linkedStat, setLinkedStat] = useState<StatKey | ''>('mind');
-  const [linkedSkillIds, setLinkedSkillIds] = useState<string[]>([]);
+
   const [rating, setRating]     = useState<number>(0);
   const [notes, setNotes]       = useState('');
   const [isLegacy, setIsLegacy] = useState(false);
@@ -221,101 +78,61 @@ export default function AddMediaModal({ onClose, defaultType = 'book' }: Props) 
     setStatus(STATUS_OPTIONS[t][0]);
   };
 
-  const buildMeta = (): Record<string, unknown> => {
-    switch (type) {
-      case 'book':
-        return {
-          pages: pages ? parseInt(pages) : null,
-          page_current: pageCurrent ? parseInt(pageCurrent) : null,
-        };
-      case 'comic':
-        return {
-          issues: issues ? parseInt(issues) : null,
-          comic_type: comicType,
-        };
-      case 'film':
-        return {};
-      case 'documentary':
-        return { platform: platform || null };
-      case 'tv':
-        return {
-          seasons: seasons ? parseInt(seasons) : null,
-          episodes: episodes ? parseInt(episodes) : null,
-          platform: platform || null,
-        };
-      case 'album':
-        return {};
-      default:
-        return {};
-    }
-  };
+;
 
   // Creator label varies by type
   const creatorLabel: Record<MediaType, string> = {
     book: 'AUTHOR', comic: 'AUTHOR / ARTIST', film: 'DIRECTOR',
-    documentary: 'DIRECTOR', tv: 'CREATOR / STUDIO', album: 'ARTIST',
+    documentary: 'DIRECTOR', tv: 'CREATOR / STUDIO', album: 'ARTIST', game: 'DEVELOPER / STUDIO',
   };
 
   const isComplete = status === 'FINISHED';
 
   const handleSubmit = async () => {
-    if (!title.trim() || !user) return;
+    if (!title.trim()) return;
     setSaving(true);
     try {
       const { error } = await supabase
         .from('media')
         .insert({
-          user_id:          user.id,
           type,
-          title:            title.trim(),
-          creator:          creator.trim() || null,
-          year:             year ? parseInt(year) : null,
+          title:        title.trim(),
+          creator:      creator.trim() || null,
+          year:         year ? parseInt(year) : null,
           status,
-          linked_stat:      linkedStat || null,
-          linked_skill_ids: linkedSkillIds,
-          rating:           rating || null,
-          notes:            notes.trim() || null,
-          is_legacy:        isLegacy,
-          completed_at:     status === 'FINISHED' ? new Date().toISOString() : null,
-          meta:             buildMeta() as Record<string, Json>,
+          linked_stat:  linkedStat || null,
+          rating:       rating || null,
+          notes:        notes.trim() || null,
+          is_legacy:    isLegacy,
+          completed_at: status === 'FINISHED' ? new Date().toISOString() : null,
+          pages:         type === 'book' ? (pages ? parseInt(pages) : null) : null,
+          page_current:  type === 'book' ? (pageCurrent ? parseInt(pageCurrent) : null) : null,
+          issue_count:   type === 'comic' ? (issues ? parseInt(issues) : null) : null,
+          seasons:       (type === 'tv' || type === 'game') ? (seasons ? parseInt(seasons) : null) : null,
+          current_season: null,
+          runtime:       null,
+          platform:      (type === 'documentary' || type === 'tv' || type === 'game') ? (platform || null) : null,
         });
 
       if (error) throw error;
 
-      // Award XP if finished
+      // Award bonus XP to stat + master only on completion
+      // Legacy items get 50% of the bonus
       if (status === 'FINISHED' && linkedStat) {
-        const baseXP = XP_ON_COMPLETE[type];
-        const sourceMap: Record<MediaType, string> = {
-          book:         'book_complete',
-          comic:        'comic_complete',
-          film:         'film_watched',
-          documentary:  'documentary_watched',
-          tv:           'tv_series',
-          album:        'album_listened',
-        };
-        // Fire XP for each linked skill (or just the stat if no skills linked)
-        const skillsToFire = linkedSkillIds.length > 0
-          ? linkedSkillIds
-          : [null];
-        for (const skillId of skillsToFire) {
-          await awardXP({
-            userId:    user.id,
-            source:    sourceMap[type] as Parameters<typeof awardXP>[0]['source'],
-            baseAmount: baseXP,
-            skillId:   skillId ?? undefined,
-            statKeys:  [linkedStat as StatKey],
-            statSplit: [{ stat: linkedStat as StatKey, percent: 100 }],
-            isLegacy,
-            notes: `${type}: ${title.trim()}`,
-          });
-        }
-        // Refresh widgets
-        queryClient.invalidateQueries({ queryKey: ['stats', user.id] });
-        queryClient.invalidateQueries({ queryKey: ['operator', user.id] });
-        queryClient.invalidateQueries({ queryKey: ['xp-recent', user.id] });
+        const baseXP  = Math.floor(XP_ON_COMPLETE[type] * (isLegacy ? 0.5 : 1.0));
+        const { awardBonusXP } = await import('@/services/xpService');
+        await awardBonusXP({
+          source:   `${type}_complete`,
+          sourceId: title.trim(),
+          statKey:  linkedStat as string,
+          amount:   baseXP,
+          notes:    `${title.trim()} — ${type} complete`,
+        });
       }
 
-      queryClient.invalidateQueries({ queryKey: ['media', user.id] });
+      queryClient.invalidateQueries({ queryKey: ['media'] });
+      queryClient.invalidateQueries({ queryKey: ['stats'] });
+      queryClient.invalidateQueries({ queryKey: ['operator'] });
 
       toast({
         title: `✓ ${MEDIA_TYPES.find(m => m.key === type)?.label} ADDED`,
@@ -520,6 +337,23 @@ export default function AddMediaModal({ onClose, defaultType = 'book' }: Props) 
 
 
 
+      {type === 'game' && (
+        <div style={{ display: 'flex', gap: 10 }}>
+          <div style={{ flex: 1 }}>
+            <div className="crt-field-label">PLATFORM</div>
+            <input className="crt-input" style={{ width: '100%' }}
+              placeholder="PC, PS5, Switch..."
+              value={platform} onChange={e => setPlatform(e.target.value)} maxLength={60} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div className="crt-field-label">SEASONS / DLC</div>
+            <input className="crt-input" style={{ width: '100%' }}
+              placeholder="Number of seasons/DLC"
+              value={seasons} onChange={e => setSeasons(e.target.value.replace(/\D/g, ''))} />
+          </div>
+        </div>
+      )}
+
       {/* ── Status ── */}
       <div style={{ display: 'flex', gap: 10 }}>
         <div style={{ flex: 1 }}>
@@ -545,7 +379,6 @@ export default function AddMediaModal({ onClose, defaultType = 'book' }: Props) 
             value={linkedStat}
             onChange={e => {
               setLinkedStat(e.target.value as StatKey);
-              setLinkedSkillIds([]); // reset skills when stat changes
             }}
           >
             <option value="">— none —</option>
@@ -558,20 +391,7 @@ export default function AddMediaModal({ onClose, defaultType = 'book' }: Props) 
         </div>
       </div>
 
-      {/* ── Linked skills (optional) — searchable tag input ── */}
-      {linkedStat && (() => {
-        const visibleSkills = (allSkills ?? []).filter(s =>
-          s.statKeys.some(k => k === linkedStat)
-        );
-        if (visibleSkills.length === 0) return null;
-        return (
-          <SkillTagInput
-            skills={visibleSkills}
-            selectedIds={linkedSkillIds}
-            onChange={setLinkedSkillIds}
-          />
-        );
-      })()}
+
 
       {/* ── Rating (stars) — only on complete/watched ── */}
       {isComplete && (

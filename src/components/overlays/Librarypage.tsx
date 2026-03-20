@@ -12,7 +12,7 @@ import AddMediaModal from '@/components/modals/AddMediaModal';
 
 // ── Types ─────────────────────────────────────────────────────
 
-type MediaType   = 'book' | 'comic' | 'film' | 'documentary' | 'tv' | 'album';
+type MediaType   = 'book' | 'comic' | 'film' | 'documentary' | 'tv' | 'album' | 'game';
 type MediaStatus = 'READING' | 'WATCHING' | 'LISTENING' | 'QUEUED' | 'FINISHED' | 'DROPPED';
 
 interface MediaItem {
@@ -40,6 +40,7 @@ const TABS: { key: MediaType | 'ALL'; label: string }[] = [
   { key: 'documentary',  label: 'DOCS' },
   { key: 'tv',           label: 'TV' },
   { key: 'album',        label: 'ALBUMS' },
+  { key: 'game',         label: 'GAMES' },
 ];
 
 type SortKey = 'title' | 'status' | 'rating' | 'recent';
@@ -210,13 +211,11 @@ export default function LibraryPage({ onClose }: Props) {
   const [showAdd, setShowAdd]         = useState(false);
 
   const { data: items, isLoading } = useQuery({
-    queryKey: ['media-library', user?.id],
-    enabled: !!user?.id,
+    queryKey: ['media-library'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('media')
         .select('*')
-        .eq('user_id', user!.id)
         .order('title');
       if (error) throw error;
       return data as MediaItem[];

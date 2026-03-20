@@ -9,14 +9,14 @@ import WidgetWrapper from '../WidgetWrapper';
 import Modal from '../Modal';
 import AddMediaModal from '../modals/AddMediaModal';
 
-const TABS = ['BOOKS', 'COMICS', 'FILMS', 'DOCS', 'TV', 'ALBUMS', 'ALL'];
+const TABS = ['BOOKS', 'COMICS', 'FILMS', 'DOCS', 'TV', 'ALBUMS', 'GAMES', 'ALL'];
 
 const TAB_TYPE_MAP: Record<string, string> = {
-  BOOKS: 'book', COMICS: 'comic', FILMS: 'film', DOCS: 'documentary', TV: 'tv', ALBUMS: 'album',
+  BOOKS: 'book', COMICS: 'comic', FILMS: 'film', DOCS: 'documentary', TV: 'tv', ALBUMS: 'album', GAMES: 'game',
 };
 
-const TAB_MEDIA_TYPE: Record<string, 'book' | 'comic' | 'film' | 'documentary' | 'tv' | 'album'> = {
-  BOOKS: 'book', COMICS: 'comic', FILMS: 'film', DOCS: 'documentary', TV: 'tv', ALBUMS: 'album', ALL: 'book',
+const TAB_MEDIA_TYPE: Record<string, 'book' | 'comic' | 'film' | 'documentary' | 'tv' | 'album' | 'game'> = {
+  BOOKS: 'book', COMICS: 'comic', FILMS: 'film', DOCS: 'documentary', TV: 'tv', ALBUMS: 'album', GAMES: 'game', ALL: 'book',
 };
 
 const IN_PROGRESS = ['READING', 'WATCHING', 'LISTENED', 'LISTENING'];
@@ -35,17 +35,15 @@ const MediaWidget = ({ onClose, onFullscreen, isFullscreen, onMediaClick }: Widg
   const [showAdd, setShowAdd] = useState(false);
 
   const { data: media } = useQuery({
-    queryKey: ['media', user?.id],
+    queryKey: ['media'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('media')
         .select('*')
-        .eq('user_id', user!.id)
         .order('created_at', { ascending: false });
       if (error) throw error;
       return data ?? [];
     },
-    enabled: !!user?.id,
   });
 
   const filtered = (media ?? []).filter(m =>

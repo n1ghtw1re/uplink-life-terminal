@@ -5,13 +5,13 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { awardXP, XP_VALUES } from '@/services/xpService';
+// xpService imported dynamically in handlers
 import { STAT_META, StatKey } from '@/types';
 
 // ── Types ─────────────────────────────────────────────────────
 
-type MediaType   = 'book' | 'comic' | 'film' | 'documentary' | 'tv' | 'album';
-type MediaStatus = 'READING' | 'WATCHING' | 'LISTENING' | 'QUEUED' | 'FINISHED' | 'DROPPED';
+type MediaType   = 'book' | 'comic' | 'film' | 'documentary' | 'tv' | 'album' | 'game';
+type MediaStatus = 'READING' | 'WATCHING' | 'LISTENING' | 'PLAYING' | 'QUEUED' | 'FINISHED' | 'DROPPED';
 
 interface MediaItem {
   id: string;
@@ -47,15 +47,21 @@ const bgTer     = 'hsl(var(--bg-tertiary))';
 
 // ── Helpers ───────────────────────────────────────────────────
 
+// Bonus XP on completion — feeds via quick log stat pick
+const COMPLETION_XP: Record<string, number> = {
+  book: 100, comic: 50, film: 40, documentary: 50,
+  tv: 75, album: 30, game: 60,
+};
+// Per-season XP for TV/game (ongoing series)
+const SEASON_XP: Record<string, number> = {
+  tv: 25, game: 20,
+};
+
 function getXPValue(type: MediaType): number {
-  switch (type) {
-    case 'book':        return XP_VALUES.BOOK_COMPLETE;
-    case 'comic':       return XP_VALUES.COMIC_COMPLETE;
-    case 'film':        return XP_VALUES.FILM_WATCHED;
-    case 'documentary': return XP_VALUES.DOCUMENTARY_WATCHED;
-    case 'tv':          return XP_VALUES.TV_SERIES_COMPLETE;
-    case 'album':       return XP_VALUES.ALBUM_LISTENED;
-  }
+  return COMPLETION_XP[type] ?? 40;
+}
+function getSeasonXP(type: MediaType): number {
+  return SEASON_XP[type] ?? 0;
 }
 
 function getSourceType(type: MediaType): string {
@@ -64,20 +70,24 @@ function getSourceType(type: MediaType): string {
     case 'comic':       return 'comic_complete';
     case 'film':        return 'film_watched';
     case 'documentary': return 'documentary_watched';
-    case 'tv':          return 'tv_series';
+    case 'tv':          return 'tv_complete';
     case 'album':       return 'album_listened';
+    case 'game':        return 'game_complete';
+    default:            return 'media_complete';
   }
 }
 
 function getInProgressStatus(type: MediaType): MediaStatus {
   if (type === 'album') return 'LISTENING';
   if (type === 'book' || type === 'comic') return 'READING';
+  if (type === 'game') return 'PLAYING';
   return 'WATCHING';
 }
 
 function getFinishLabel(type: MediaType): string {
   if (type === 'film' || type === 'documentary') return 'WATCHED';
   if (type === 'album') return 'LISTENED';
+  if (type === 'game') return 'COMPLETED';
   return 'FINISHED';
 }
 
@@ -211,7 +221,7 @@ export default function MediaDetailDrawer({ mediaId, onClose }: Props) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['media-item', mediaId] });
-      queryClient.invalidateQueries({ queryKey: ['media', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['media'] });
     },
   });
 
@@ -224,30 +234,29 @@ export default function MediaDetailDrawer({ mediaId, onClose }: Props) {
         .update({ status: 'FINISHED', completed_at: completedAt })
         .eq('id', mediaId);
 
-      const statKeys = item.linked_stat ? [item.linked_stat] : [] as StatKey[];
-      const skillIds = item.linked_skill_ids ?? [];
-      const baseXP   = getXPValue(item.type);
-      const source   = getSourceType(item.type) as any;
+      const baseXP = Math.floor(getXPValue(item.type) * (item.is_legacy ? 0.5 : 1.0));
+      const source  = getSourceType(item.type);
 
-      await awardXP({
-        userId: user.id,
-        source,
-        sourceId: mediaId,
-        baseAmount: baseXP,
-        statKeys,
-        skillId: skillIds[0] ?? undefined,
-        notes: item.title,
-      });
+      if (item.linked_stat && baseXP > 0) {
+        const { awardBonusXP } = await import('@/services/xpService');
+        await awardBonusXP({
+          source,
+          sourceId: mediaId,
+          statKey:  item.linked_stat,
+          amount:   baseXP,
+          notes:    item.title,
+        });
+      }
 
       setLastXP(baseXP);
       setTimeout(() => setLastXP(null), 3000);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['media-item', mediaId] });
-      queryClient.invalidateQueries({ queryKey: ['media', user?.id] });
-      queryClient.invalidateQueries({ queryKey: ['stats', user?.id] });
-      queryClient.invalidateQueries({ queryKey: ['operator', user?.id] });
-      queryClient.invalidateQueries({ queryKey: ['xp-recent', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['media'] });
+      queryClient.invalidateQueries({ queryKey: ['stats'] });
+      queryClient.invalidateQueries({ queryKey: ['operator'] });
+      queryClient.invalidateQueries({ queryKey: ['xp-recent'] });
     },
   });
 
@@ -276,7 +285,7 @@ export default function MediaDetailDrawer({ mediaId, onClose }: Props) {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['media', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['media'] });
       onClose?.();
     },
   });
@@ -404,8 +413,8 @@ export default function MediaDetailDrawer({ mediaId, onClose }: Props) {
           </div>
         )}
 
-        {/* TV season progress */}
-        {item.type === 'tv' && totalSeasons && (
+        {/* TV / Game season progress */}
+        {(item.type === 'tv' || item.type === 'game') && totalSeasons && (
           <div style={{ marginBottom: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <XPBar value={currentSeason ?? 0} max={totalSeasons} />
@@ -414,12 +423,35 @@ export default function MediaDetailDrawer({ mediaId, onClose }: Props) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
               <span style={{ fontSize: 9, color: dimText }}>Season {currentSeason ?? '—'} of {totalSeasons}</span>
               {!isFinished && !editingProgress && (
-                <span
-                  onClick={() => { setEditingProgress(true); setSeasonInput(String(currentSeason ?? '')); }}
-                  style={{ fontSize: 9, color: accentDim, cursor: 'pointer', opacity: 0.7 }}
-                  onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
-                  onMouseLeave={e => (e.currentTarget.style.opacity = '0.7')}
-                >[ UPDATE ]</span>
+                <>
+                  <span
+                    onClick={() => { setEditingProgress(true); setSeasonInput(String(currentSeason ?? '')); }}
+                    style={{ fontSize: 9, color: accentDim, cursor: 'pointer', opacity: 0.7 }}
+                    onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+                    onMouseLeave={e => (e.currentTarget.style.opacity = '0.7')}
+                  >[ UPDATE ]</span>
+                  <span
+                    onClick={async () => {
+                      const next = (currentSeason ?? 0) + 1;
+                      updateTVProgress.mutate(Math.min(next, totalSeasons));
+                      // Award per-season XP
+                      const xp = getSeasonXP(item.type);
+                      if (xp > 0 && item.linked_stat) {
+                        const { awardBonusXP } = await import('@/services/xpService');
+                        await awardBonusXP({
+                          source:   `${item.type}_season`,
+                          sourceId: item.id,
+                          statKey:  item.linked_stat,
+                          amount:   xp,
+                          notes:    `${item.title} — Season ${next}`,
+                        });
+                      }
+                    }}
+                    style={{ fontSize: 9, color: '#44ff88', cursor: 'pointer', opacity: 0.8, letterSpacing: 1 }}
+                    onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+                    onMouseLeave={e => (e.currentTarget.style.opacity = '0.8')}
+                  >[ ✓ COMPLETE SEASON {(currentSeason ?? 0) + 1} ]</span>
+                </>
               )}
             </div>
             {editingProgress && (
@@ -486,7 +518,7 @@ export default function MediaDetailDrawer({ mediaId, onClose }: Props) {
           onBlur={async e => {
             await supabase.from('media').update({ notes: e.target.value.trim() || null }).eq('id', mediaId);
             queryClient.invalidateQueries({ queryKey: ['media-item', mediaId] });
-            queryClient.invalidateQueries({ queryKey: ['media', user?.id] });
+            queryClient.invalidateQueries({ queryKey: ['media'] });
           }}
           placeholder="Add notes..."
           rows={3}

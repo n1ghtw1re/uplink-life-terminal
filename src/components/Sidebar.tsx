@@ -19,6 +19,7 @@ interface SidebarProps {
   onOpenLibrary?: () => void;
   onOpenCourses?: () => void;
   onOpenTools?: () => void;
+  onOpenAugments?: () => void;
   onOpenLifepath?: () => void;
   onOpenWidgetManager?: () => void;
   onOpenSocials?: () => void;
@@ -37,7 +38,7 @@ const sectionMap: Record<string, string> = {
 const Sidebar = ({
   expanded, onToggle, onExpand, theme, onThemeChange,
   onOpenCharSheet, onOpenStat, onOpenSkills, onOpenLibrary, onOpenCourses,
-  onOpenTools, onOpenLifepath, onOpenWidgetManager, onOpenSocials,
+  onOpenTools, onOpenAugments, onOpenLifepath, onOpenWidgetManager, onOpenSocials,
   onOpenClockWidget, onOpenCalculatorWidget, onOpenUnitConverterWidget,
 }: SidebarProps) => {
   const { user } = useAuth();
@@ -46,13 +47,14 @@ const Sidebar = ({
   const { data: counts } = useQuery({
     queryKey: ['arsenal-counts'],
     queryFn: async () => {
-      const [courses, media, skills, tools] = await Promise.all([
+      const [courses, media, skills, tools, augments] = await Promise.all([
         supabase.from('courses').select('id', { count: 'exact', head: true }),
         supabase.from('media').select('id', { count: 'exact', head: true }),
         supabase.from('skills').select('id', { count: 'exact', head: true }),
         supabase.from('tools').select('id', { count: 'exact', head: true }),
+        supabase.from('augments').select('id', { count: 'exact', head: true }),
       ]);
-      return { courses: courses.count ?? 0, library: media.count ?? 0, skills: skills.count ?? 0, tools: tools.count ?? 0 };
+      return { courses: courses.count ?? 0, library: media.count ?? 0, skills: skills.count ?? 0, tools: tools.count ?? 0, augments: augments.count ?? 0 };
     },
   });
 
@@ -118,13 +120,13 @@ const Sidebar = ({
   ];
 
   const arsenalItems = [
+    { icon: '▸', name: 'AUGMENTS',  count: counts?.augments },
+    { icon: '▸', name: 'CERTS',     count: undefined },
     { icon: '▸', name: 'COURSES',   count: counts?.courses },
     { icon: '▸', name: 'LIBRARY',   count: counts?.library },
     { icon: '▸', name: 'PROJECTS',  count: undefined },
-    { icon: '▸', name: 'CERTS',     count: undefined },
-    { icon: '▸', name: 'TOOLS',     count: counts?.tools },
-    { icon: '▸', name: 'AUGMENTS',  count: undefined },
     { icon: '▸', name: 'RESOURCES', count: undefined },
+    { icon: '▸', name: 'TOOLS',     count: counts?.tools },
   ];
 
   const trackingItems = [
@@ -226,7 +228,7 @@ const Sidebar = ({
           {openSection === 'arsenal' && arsenalItems.map(item => (
             <div key={item.name} className="sidebar-item"
               style={{ cursor: (item.name === 'LIBRARY' || item.name === 'COURSES') ? 'pointer' : undefined }}
-              onClick={() => { if (item.name === 'LIBRARY') onOpenLibrary?.(); if (item.name === 'COURSES') onOpenCourses?.(); if (item.name === 'TOOLS') onOpenTools?.(); }}
+              onClick={() => { if (item.name === 'LIBRARY') onOpenLibrary?.(); if (item.name === 'COURSES') onOpenCourses?.(); if (item.name === 'TOOLS') onOpenTools?.(); if (item.name === 'AUGMENTS') onOpenAugments?.(); }}
             >
               <span>{item.icon} {item.name}</span>
               <span style={{ fontSize: 9, color: 'hsl(var(--text-dim))' }}>{item.count !== undefined ? `(${item.count})` : '—'}</span>
