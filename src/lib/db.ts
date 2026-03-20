@@ -124,6 +124,12 @@ async function initSchema(db: PGlite) {
       created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
+    CREATE TABLE IF NOT EXISTS tool_lifepaths (
+      tool_id     TEXT NOT NULL REFERENCES tools(id) ON DELETE CASCADE,
+      lifepath_id TEXT NOT NULL REFERENCES lifepaths(id) ON DELETE CASCADE,
+      PRIMARY KEY (tool_id, lifepath_id)
+    );
+
     CREATE TABLE IF NOT EXISTS augments (
       id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
       name        TEXT NOT NULL,
@@ -350,6 +356,12 @@ async function initSchema(db: PGlite) {
       tags       JSONB NOT NULL DEFAULT '[]',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS tool_lifepaths (
+      tool_id     TEXT NOT NULL REFERENCES tools(id) ON DELETE CASCADE,
+      lifepath_id TEXT NOT NULL REFERENCES lifepaths(id) ON DELETE CASCADE,
+      PRIMARY KEY (tool_id, lifepath_id)
     );
 
     CREATE INDEX IF NOT EXISTS idx_sessions_skill  ON sessions(skill_id);

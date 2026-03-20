@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useStats } from '@/hooks/useStats';
 import { StatKey } from '@/types';
 import { THEME_OPTIONS, type ThemeCode } from '@/lib/themes';
+import { exportAllData, importData } from '@/services/exportService';
 
 interface SidebarProps {
   expanded: boolean;
@@ -17,6 +18,7 @@ interface SidebarProps {
   onOpenSkills?: () => void;
   onOpenLibrary?: () => void;
   onOpenCourses?: () => void;
+  onOpenTools?: () => void;
   onOpenLifepath?: () => void;
   onOpenWidgetManager?: () => void;
   onOpenSocials?: () => void;
@@ -35,7 +37,7 @@ const sectionMap: Record<string, string> = {
 const Sidebar = ({
   expanded, onToggle, onExpand, theme, onThemeChange,
   onOpenCharSheet, onOpenStat, onOpenSkills, onOpenLibrary, onOpenCourses,
-  onOpenLifepath, onOpenWidgetManager, onOpenSocials,
+  onOpenTools, onOpenLifepath, onOpenWidgetManager, onOpenSocials,
   onOpenClockWidget, onOpenCalculatorWidget, onOpenUnitConverterWidget,
 }: SidebarProps) => {
   const { user } = useAuth();
@@ -44,12 +46,13 @@ const Sidebar = ({
   const { data: counts } = useQuery({
     queryKey: ['arsenal-counts'],
     queryFn: async () => {
-      const [courses, media, skills] = await Promise.all([
+      const [courses, media, skills, tools] = await Promise.all([
         supabase.from('courses').select('id', { count: 'exact', head: true }),
         supabase.from('media').select('id', { count: 'exact', head: true }),
         supabase.from('skills').select('id', { count: 'exact', head: true }),
+        supabase.from('tools').select('id', { count: 'exact', head: true }),
       ]);
-      return { courses: courses.count ?? 0, library: media.count ?? 0, skills: skills.count ?? 0 };
+      return { courses: courses.count ?? 0, library: media.count ?? 0, skills: skills.count ?? 0, tools: tools.count ?? 0 };
     },
   });
 
@@ -70,6 +73,30 @@ const Sidebar = ({
 
   const handleSystemItem = async (name: string) => {
     if (name === 'LOGOUT') { await supabase.auth.signOut(); window.location.reload(); }
+    if (name === 'EXPORT DATA') {
+      try {
+        await exportAllData();
+      } catch (err) {
+        console.error('Export failed:', err);
+      }
+    }
+    if (name === 'IMPORT DATA') {
+      const input = document.createElement('input');
+      input.type  = 'file';
+      input.accept = '.json';
+      input.onchange = async (e) => {
+        const file = (e.target as HTMLInputElement).files?.[0];
+        if (!file) return;
+        const text = await file.text();
+        const result = await importData(text);
+        if (result.success) {
+          window.location.reload();
+        } else {
+          alert('Import failed: ' + result.error);
+        }
+      };
+      input.click();
+    }
   };
 
   const collapsedIcons = [
@@ -95,7 +122,7 @@ const Sidebar = ({
     { icon: '▸', name: 'LIBRARY',   count: counts?.library },
     { icon: '▸', name: 'PROJECTS',  count: undefined },
     { icon: '▸', name: 'CERTS',     count: undefined },
-    { icon: '▸', name: 'TOOLS',     count: undefined },
+    { icon: '▸', name: 'TOOLS',     count: counts?.tools },
     { icon: '▸', name: 'AUGMENTS',  count: undefined },
     { icon: '▸', name: 'RESOURCES', count: undefined },
   ];
@@ -113,6 +140,7 @@ const Sidebar = ({
     { icon: '⚙', name: 'SETTINGS' },
     { icon: '?', name: 'HELP' },
     { icon: '💾', name: 'EXPORT DATA' },
+    { icon: '📂', name: 'IMPORT DATA' },
     { icon: '⏻', name: 'LOGOUT' },
   ];
 
@@ -198,7 +226,7 @@ const Sidebar = ({
           {openSection === 'arsenal' && arsenalItems.map(item => (
             <div key={item.name} className="sidebar-item"
               style={{ cursor: (item.name === 'LIBRARY' || item.name === 'COURSES') ? 'pointer' : undefined }}
-              onClick={() => { if (item.name === 'LIBRARY') onOpenLibrary?.(); if (item.name === 'COURSES') onOpenCourses?.(); }}
+              onClick={() => { if (item.name === 'LIBRARY') onOpenLibrary?.(); if (item.name === 'COURSES') onOpenCourses?.(); if (item.name === 'TOOLS') onOpenTools?.(); }}
             >
               <span>{item.icon} {item.name}</span>
               <span style={{ fontSize: 9, color: 'hsl(var(--text-dim))' }}>{item.count !== undefined ? `(${item.count})` : '—'}</span>

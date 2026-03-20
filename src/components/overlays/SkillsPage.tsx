@@ -156,9 +156,10 @@ export default function SkillsPage({ onClose }: Props) {
   const { data: skills, isLoading } = useSkills(user?.id);
 
   const [activeTab, setActiveTab]     = useState<StatKey | 'ALL'>('ALL');
-  const [sortKey, setSortKey]         = useState<SortKey>('name');
+  const [sortKey, setSortKey]         = useState<SortKey>('active');
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
   const [showAddSkill, setShowAddSkill] = useState(false);
+  const [search, setSearch]             = useState('');
 
   // Count skills per stat
   const countForStat = (key: StatKey) =>
@@ -171,7 +172,11 @@ export default function SkillsPage({ onClose }: Props) {
       ? (skills ?? [])
       : (skills ?? []).filter(s => s.statKeys.includes(activeTab));
 
-    return [...base].sort((a, b) => {
+    const searched = search.trim()
+      ? base.filter(s => s.name.toLowerCase().includes(search.toLowerCase()))
+      : base;
+
+    return [...searched].sort((a, b) => {
       // Always sort active before inactive as secondary sort
       if (sortKey === 'active') {
         const aActive = (a as any).active !== false;
@@ -188,7 +193,7 @@ export default function SkillsPage({ onClose }: Props) {
       }
       return 0;
     });
-  }, [skills, activeTab, sortKey]);
+  }, [skills, activeTab, sortKey, search]);
 
   return (
     <div style={{
@@ -214,6 +219,27 @@ export default function SkillsPage({ onClose }: Props) {
         </span>
         <div style={{ flex: 1 }} />
 
+        {/* Search */}
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+          <span style={{ position: 'absolute', left: 8, fontSize: 10, color: adim, pointerEvents: 'none' }}>⌕</span>
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search skills..."
+            style={{
+              padding: '4px 10px 4px 24px', fontSize: 10, width: 200,
+              background: bgS, border: `1px solid ${search ? acc : adim}`,
+              color: acc, fontFamily: mono, outline: 'none',
+            }}
+          />
+          {search && (
+            <button onClick={() => setSearch('')} style={{
+              position: 'absolute', right: 6, background: 'transparent',
+              border: 'none', color: adim, cursor: 'pointer', fontSize: 12, padding: 0,
+            }}>×</button>
+          )}
+        </div>
+
         {/* Sort */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ fontSize: 9, color: adim, letterSpacing: 1 }}>SORT:</span>
@@ -222,6 +248,9 @@ export default function SkillsPage({ onClose }: Props) {
               padding: '3px 8px', fontSize: 9,
               fontFamily: mono, cursor: 'pointer', letterSpacing: 1,
               transition: 'all 150ms',
+              border: `1px solid ${sortKey === s.key ? acc : adim}`,
+              background: sortKey === s.key ? 'rgba(255,176,0,0.1)' : 'transparent',
+              color: sortKey === s.key ? acc : dim,
             }}>{s.label}</button>
           ))}
         </div>

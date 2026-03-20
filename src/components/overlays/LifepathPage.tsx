@@ -46,6 +46,11 @@ export default function LifepathPage({ onClose }: Props) {
   const [activeTab, setActiveTab]       = useState('Physical');
   const [showCreate, setShowCreate]     = useState(false);
   const [drawerLifepath, setDrawerLifepath] = useState<Lifepath | null>(null);
+  const [showAddSkillSearch, setShowAddSkillSearch] = useState(false);
+  const [showAddToolSearch, setShowAddToolSearch]   = useState(false);
+  const [addToolSearch, setAddToolSearch]           = useState('');
+  const [addSkillSearch, setAddSkillSearch]         = useState('');
+  const [confirmDelete, setConfirmDelete]           = useState(false);
 
   // ── All lifepaths ─────────────────────────────────────────
   const { data: lifepaths = [] } = useQuery({
@@ -68,6 +73,87 @@ export default function LifepathPage({ onClose }: Props) {
         `SELECT id, name, stat_keys, lifepath_id, active, xp FROM skills ORDER BY name;`
       );
       return res.rows;
+    },
+  });
+
+  // ── Tools for lifepath drawer ───────────────────────────
+  const { data: allTools = [] } = useQuery({
+    queryKey: ['tools-for-lifepath'],
+    queryFn: async () => {
+      const db  = await getDB();
+      const res = await db.query(
+        `SELECT t.id, t.name, t.type, t.active,
+                COALESCE(
+                  (SELECT json_agg(tl.lifepath_id)
+                   FROM tool_lifepaths tl WHERE tl.tool_id = t.id),
+                  '[]'::json
+                ) as lifepath_ids
+         FROM tools t ORDER BY t.name;`
+      );
+      return res.rows as { id: string; name: string; type: string; active: boolean; lifepath_ids: string[] }[];
+    },
+  });
+
+  // ── Add/remove tool from lifepath ────────────────────────
+  const addToolToLifepath = useMutation({
+    mutationFn: async ({ toolId, lifepathId }: { toolId: string; lifepathId: string }) => {
+      const db = await getDB();
+      await db.query(
+        `INSERT INTO tool_lifepaths (tool_id, lifepath_id) VALUES ($1, $2) ON CONFLICT DO NOTHING;`,
+        [toolId, lifepathId]
+      );
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tools-for-lifepath'] }),
+  });
+
+  const removeToolFromLifepath = useMutation({
+    mutationFn: async ({ toolId, lifepathId }: { toolId: string; lifepathId: string }) => {
+      const db = await getDB();
+      await db.query(`DELETE FROM tool_lifepaths WHERE tool_id = $1 AND lifepath_id = $2;`, [toolId, lifepathId]);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tools-for-lifepath'] }),
+  });
+
+  // ── All skills for add-skill picker ─────────────────────
+  const { data: allSkills = [] } = useQuery({
+    queryKey: ['all-skills-flat'],
+    queryFn: async () => {
+      const db  = await getDB();
+      const res = await db.query<{ id: string; name: string; stat_keys: StatKey[]; lifepath_id: string | null }>(
+        `SELECT id, name, stat_keys, lifepath_id FROM skills ORDER BY name;`
+      );
+      return res.rows;
+    },
+  });
+
+  // ── Delete lifepath ───────────────────────────────────────
+  const deleteLifepath = useMutation({
+    mutationFn: async (id: string) => {
+      const db = await getDB();
+      await db.exec(`UPDATE skills SET lifepath_id = NULL WHERE lifepath_id = '${id}';`);
+      await db.exec(`DELETE FROM lifepaths WHERE id = '${id}';`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['lifepaths'] });
+      queryClient.invalidateQueries({ queryKey: ['lifepath-skills-all'] });
+      queryClient.invalidateQueries({ queryKey: ['skills'] });
+      setDrawerLifepath(null);
+      setConfirmDelete(false);
+    },
+  });
+
+  // ── Add skill to lifepath ─────────────────────────────────
+  const addSkillToLifepath = useMutation({
+    mutationFn: async ({ skillId, lifepathId }: { skillId: string; lifepathId: string }) => {
+      const db = await getDB();
+      await db.exec(`UPDATE skills SET lifepath_id = '${lifepathId}', active = true WHERE id = '${skillId}';`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['lifepath-skills-all'] });
+      queryClient.invalidateQueries({ queryKey: ['skills'] });
+      queryClient.invalidateQueries({ queryKey: ['all-skills-flat'] });
+      setShowAddSkillSearch(false);
+      setAddSkillSearch('');
     },
   });
 
@@ -177,7 +263,14 @@ export default function LifepathPage({ onClose }: Props) {
               }}>
                 {/* Card header — click to open drawer */}
                 <div
-                  onClick={() => setDrawerLifepath(isSelected ? null : lp)}
+                  onClick={() => {
+            setDrawerLifepath(isSelected ? null : lp);
+            setShowAddSkillSearch(false);
+            setAddSkillSearch('');
+            setShowAddToolSearch(false);
+            setAddToolSearch('');
+            setConfirmDelete(false);
+          }}
                   style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', cursor: 'pointer' }}
                 >
                   <div style={{ flex: 1 }}>
@@ -271,13 +364,162 @@ export default function LifepathPage({ onClose }: Props) {
                 })}
               </div>
 
+              {/* Add skill search panel */}
+              {showAddSkillSearch && (
+                <div style={{ padding: '12px 16px', borderTop: `1px solid ${adim}`, flexShrink: 0 }}>
+                  <div style={{ fontSize: 9, color: adim, letterSpacing: 2, marginBottom: 8 }}>ADD SKILL TO LIFEPATH</div>
+                  <input
+                    autoFocus
+                    value={addSkillSearch}
+                    onChange={e => setAddSkillSearch(e.target.value)}
+                    placeholder="Search skills..."
+                    style={{ width: '100%', padding: '6px 10px', fontSize: 10, boxSizing: 'border-box', background: bgP, border: `1px solid ${adim}`, color: acc, fontFamily: mono, outline: 'none' }}
+                  />
+                  {addSkillSearch && (
+                    <div style={{ maxHeight: 160, overflowY: 'auto', background: bgP, border: `1px solid ${adim}`, borderTop: 'none', scrollbarWidth: 'thin', scrollbarColor: `${adim} ${bgS}` }}>
+                      {allSkills
+                        .filter(s =>
+                          s.name.toLowerCase().includes(addSkillSearch.toLowerCase()) &&
+                          s.lifepath_id !== drawerLifepath?.id &&
+                          !drawerSkills.find(ds => ds.id === s.id)
+                        )
+                        .slice(0, 15)
+                        .map(skill => {
+                          const keys = Array.isArray(skill.stat_keys) ? skill.stat_keys : JSON.parse((skill.stat_keys as any) ?? '[]');
+                          const statIcons = keys.map((k: StatKey) => `${STAT_META[k]?.icon ?? ''} ${k.toUpperCase()}`).join(' / ');
+                          return (
+                            <div key={skill.id}
+                              onClick={() => addSkillToLifepath.mutate({ skillId: skill.id, lifepathId: drawerLifepath!.id })}
+                              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', cursor: 'pointer', borderBottom: `1px solid rgba(153,104,0,0.15)` }}
+                              onMouseEnter={e => e.currentTarget.style.background = bgS}
+                              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                            >
+                              <span style={{ flex: 1, fontSize: 10, color: acc }}>{skill.name}</span>
+                              <span style={{ fontSize: 9, color: adim }}>{statIcons}</span>
+                              <span style={{ fontSize: 9, color: '#44ff88' }}>+ ADD</span>
+                            </div>
+                          );
+                        })
+                      }
+                      {allSkills.filter(s => s.name.toLowerCase().includes(addSkillSearch.toLowerCase()) && s.lifepath_id !== drawerLifepath?.id && !drawerSkills.find(ds => ds.id === s.id)).length === 0 && (
+                        <div style={{ padding: '8px 10px', fontSize: 10, color: dim }}>No matching skills</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Delete confirm */}
+              {confirmDelete && (
+                <div style={{ padding: '12px 16px', borderTop: `1px solid ${adim}`, flexShrink: 0, background: 'rgba(255,60,60,0.05)', border: `1px solid rgba(255,60,60,0.3)` }}>
+                  <div style={{ fontSize: 10, color: 'hsl(0,80%,55%)', marginBottom: 10 }}>
+                    Delete "{drawerLifepath?.name}"? Skills will be unlinked but not deleted.
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={() => setConfirmDelete(false)} style={{ flex: 1, padding: '6px', fontSize: 9, border: `1px solid ${adim}`, background: 'transparent', color: dim, fontFamily: mono, cursor: 'pointer' }}>
+                      CANCEL
+                    </button>
+                    <button
+                      onClick={() => drawerLifepath && deleteLifepath.mutate(drawerLifepath.id)}
+                      disabled={deleteLifepath.isPending}
+                      style={{ flex: 1, padding: '6px', fontSize: 9, border: `1px solid rgba(255,60,60,0.6)`, background: 'rgba(255,60,60,0.1)', color: 'hsl(0,80%,55%)', fontFamily: mono, cursor: 'pointer' }}
+                    >
+                      {deleteLifepath.isPending ? 'DELETING...' : 'CONFIRM DELETE'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Tools section */}
+              <div style={{ padding: '12px 16px', borderTop: `1px solid ${adim}`, flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <div style={{ fontSize: 9, color: adim, letterSpacing: 2 }}>
+                    TOOLS ({allTools.filter(t => (t.lifepath_ids as any)?.includes?.(drawerLifepath?.id)).length})
+                  </div>
+                  <button
+                    onClick={() => { setShowAddToolSearch(!showAddToolSearch); setShowAddSkillSearch(false); }}
+                    style={{ fontSize: 9, background: 'transparent', border: 'none', color: showAddToolSearch ? dim : acc, cursor: 'pointer', fontFamily: mono }}
+                  >{showAddToolSearch ? '− CANCEL' : '+ ADD TOOL'}</button>
+                </div>
+
+                {/* Tool search */}
+                {showAddToolSearch && (
+                  <div style={{ marginBottom: 8 }}>
+                    <input autoFocus value={addToolSearch} onChange={e => setAddToolSearch(e.target.value)}
+                      placeholder="Search tools..."
+                      style={{ width: '100%', padding: '5px 8px', fontSize: 10, boxSizing: 'border-box', background: bgP, border: `1px solid ${adim}`, color: acc, fontFamily: mono, outline: 'none' }}
+                    />
+                    {addToolSearch && (
+                      <div style={{ maxHeight: 120, overflowY: 'auto', background: bgP, border: `1px solid ${adim}`, borderTop: 'none' }}>
+                        {allTools
+                          .filter(t => t.name.toLowerCase().includes(addToolSearch.toLowerCase()) &&
+                            !(t.lifepath_ids as any)?.includes?.(drawerLifepath?.id))
+                          .slice(0, 10)
+                          .map(tool => (
+                            <div key={tool.id}
+                              onClick={() => { addToolToLifepath.mutate({ toolId: tool.id, lifepathId: drawerLifepath!.id }); setAddToolSearch(''); setShowAddToolSearch(false); }}
+                              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', cursor: 'pointer', borderBottom: `1px solid rgba(153,104,0,0.15)` }}
+                              onMouseEnter={e => e.currentTarget.style.background = bgS}
+                              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                            >
+                              <span style={{ fontSize: 8, color: adim, border: `1px solid ${adim}`, padding: '1px 4px' }}>{tool.type.slice(0,3).toUpperCase()}</span>
+                              <span style={{ flex: 1, fontSize: 10, color: acc }}>{tool.name}</span>
+                              <span style={{ fontSize: 9, color: '#44ff88' }}>+ ADD</span>
+                            </div>
+                          ))
+                        }
+                        {allTools.filter(t => t.name.toLowerCase().includes(addToolSearch.toLowerCase()) && !(t.lifepath_ids as any)?.includes?.(drawerLifepath?.id)).length === 0 && (
+                          <div style={{ padding: '6px 8px', fontSize: 10, color: dim }}>No matching tools</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Linked tools list */}
+                <div style={{ maxHeight: 120, overflowY: 'auto', scrollbarWidth: 'thin', scrollbarColor: `${adim} ${bgS}` }}>
+                  {allTools
+                    .filter(t => (t.lifepath_ids as any)?.includes?.(drawerLifepath?.id))
+                    .map(tool => (
+                      <div key={tool.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: `1px solid rgba(153,104,0,0.1)`, opacity: tool.active ? 1 : 0.5 }}>
+                        <span style={{ fontSize: 8, color: adim, border: `1px solid ${adim}`, padding: '1px 4px', flexShrink: 0 }}>{tool.type.slice(0,3).toUpperCase()}</span>
+                        <span style={{ flex: 1, fontSize: 10, color: tool.active ? acc : dim }}>{tool.name}</span>
+                        <button
+                          onClick={() => removeToolFromLifepath.mutate({ toolId: tool.id, lifepathId: drawerLifepath!.id })}
+                          style={{ background: 'transparent', border: 'none', color: adim, cursor: 'pointer', fontSize: 11, padding: '0 2px' }}
+                          onMouseEnter={e => e.currentTarget.style.color = 'hsl(0,80%,55%)'}
+                          onMouseLeave={e => e.currentTarget.style.color = adim}
+                        >×</button>
+                      </div>
+                    ))
+                  }
+                  {allTools.filter(t => (t.lifepath_ids as any)?.includes?.(drawerLifepath?.id)).length === 0 && !showAddToolSearch && (
+                    <div style={{ fontSize: 9, color: dim, opacity: 0.5 }}>No tools linked</div>
+                  )}
+                </div>
+              </div>
+
               {/* Drawer footer */}
               <div style={{ padding: '12px 16px', borderTop: `1px solid ${adim}`, flexShrink: 0, display: 'flex', gap: 8 }}>
-                <button style={{ flex: 1, padding: '7px', fontSize: 9, border: `1px solid ${acc}`, background: 'transparent', color: acc, fontFamily: mono, cursor: 'pointer', letterSpacing: 1 }}>
-                  + ADD SKILL
+                <button
+                  onClick={() => { setShowAddSkillSearch(!showAddSkillSearch); setConfirmDelete(false); setAddSkillSearch(''); }}
+                  style={{ flex: 1, padding: '7px', fontSize: 9, fontFamily: mono, cursor: 'pointer', letterSpacing: 1,
+                    border: `1px solid ${showAddSkillSearch ? adim : acc}`,
+                    background: showAddSkillSearch ? 'rgba(255,176,0,0.05)' : 'transparent',
+                    color: showAddSkillSearch ? dim : acc,
+                  }}
+                >
+                  {showAddSkillSearch ? '− CANCEL' : '+ ADD SKILL'}
                 </button>
-                <button style={{ flex: 1, padding: '7px', fontSize: 9, border: `1px solid rgba(255,60,60,0.4)`, background: 'transparent', color: 'hsl(0,80%,55%)', fontFamily: mono, cursor: 'pointer', letterSpacing: 1 }}>
-                  DELETE LIFEPATH
+                <button
+                  onClick={() => { setConfirmDelete(!confirmDelete); setShowAddSkillSearch(false); setAddSkillSearch(''); }}
+                  style={{ flex: 1, padding: '7px', fontSize: 9, fontFamily: mono, cursor: 'pointer', letterSpacing: 1,
+                    border: `1px solid ${confirmDelete ? 'rgba(255,60,60,0.6)' : 'rgba(255,60,60,0.4)'}`,
+                    background: confirmDelete ? 'rgba(255,60,60,0.1)' : 'transparent',
+                    color: 'hsl(0,80%,55%)',
+                  }}
+                >
+                  {confirmDelete ? 'CANCEL DELETE' : 'DELETE LIFEPATH'}
                 </button>
               </div>
             </>

@@ -1,6 +1,5 @@
 // ============================================================
 // src/components/modals/CreateLifepathModal.tsx
-// Create a new custom lifepath under one of the 9 categories
 // ============================================================
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -11,6 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 const mono  = "'IBM Plex Mono', monospace";
 const vt    = "'VT323', monospace";
 const acc   = 'hsl(var(--accent))';
+const bright= 'hsl(var(--accent-bright))';
 const dim   = 'hsl(var(--text-dim))';
 const adim  = 'hsl(var(--accent-dim))';
 const bgP   = 'hsl(var(--bg-primary))';
@@ -29,21 +29,15 @@ interface ExistingSkill {
   name: string;
   stat_keys: StatKey[];
   lifepath_id: string | null;
-  subcategory: string | null;
-}
-
-interface NewSkillDraft {
-  name: string;
-  stat_keys: StatKey[];
-  default_split: number[];
 }
 
 interface AddedSkill {
   type: 'existing' | 'new';
-  id?: string;          // for existing
-  draft?: NewSkillDraft; // for new
+  id?: string;
   name: string;
   stat_keys: StatKey[];
+  default_split: number[];
+  notes?: string;
 }
 
 interface Props {
@@ -55,47 +49,70 @@ export default function CreateLifepathModal({ onClose, initialCategory }: Props)
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  // ── Step state ────────────────────────────────────────────
-  const [step, setStep] = useState<'info' | 'skills'>(initialCategory ? 'info' : 'info');
+  // ── Step ──────────────────────────────────────────────────
+  const [step, setStep] = useState<'info' | 'skills'>('info');
 
-  // ── Form state ────────────────────────────────────────────
-  const [category, setCategory]     = useState(initialCategory ?? 'Physical');
-  const [name, setName]             = useState('');
+  // ── Info state ────────────────────────────────────────────
+  const [category, setCategory]       = useState(initialCategory ?? 'Physical');
+  const [name, setName]               = useState('');
   const [description, setDescription] = useState('');
-  const [nameError, setNameError]   = useState('');
+  const [nameError, setNameError]     = useState('');
 
   // ── Skills state ──────────────────────────────────────────
   const [addedSkills, setAddedSkills] = useState<AddedSkill[]>([]);
   const [skillSearch, setSkillSearch] = useState('');
-  const [skillTab, setSkillTab]       = useState('Physical');
 
-  // New skill inline form
-  const [showNewSkill, setShowNewSkill]   = useState(false);
-  const [newSkillName, setNewSkillName]   = useState('');
-  const [newSkillStats, setNewSkillStats] = useState<StatKey[]>(['body']);
-  const [newSkillSplit, setNewSkillSplit] = useState<number[]>([100]);
+  // New skill form — consistent with AddSkillModal
+  const [showNewSkill, setShowNewSkill]       = useState(false);
+  const [addedTools, setAddedTools]           = useState<{ id: string; name: string; type: string }[]>([]);
+  const [toolSearch, setToolSearch]           = useState('');
+  const [newSkillName, setNewSkillName]       = useState('');
+  const [newSkillNotes, setNewSkillNotes]     = useState('');
+  const [newSkillPrimary, setNewSkillPrimary] = useState<StatKey>('body');
+  const [newSkillSecondary, setNewSkillSecondary] = useState<StatKey | ''>('');
+  const [newSkillSplit, setNewSkillSplit]     = useState(50);
+  const [newSkillError, setNewSkillError]     = useState('');
 
-  // ── Fetch existing skills for search ─────────────────────
+  const hasDual = newSkillSecondary !== '';
+
+  // ── Fetch existing skills ─────────────────────────────────
+  const { data: allTools = [] } = useQuery({
+    queryKey: ['all-tools-for-lifepath'],
+    queryFn: async () => {
+      const db  = await getDB();
+      const res = await db.query(`SELECT id, name, type FROM tools ORDER BY name;`);
+      return res.rows as { id: string; name: string; type: string }[];
+    },
+  });
+
+  const filteredTools = allTools.filter(t => {
+    if (!toolSearch) return false;
+    return t.name.toLowerCase().includes(toolSearch.toLowerCase()) &&
+           !addedTools.find(a => a.id === t.id);
+  });
+
   const { data: allSkills = [] } = useQuery({
     queryKey: ['all-skills-for-lifepath'],
     queryFn: async () => {
       const db  = await getDB();
       const res = await db.query<ExistingSkill>(
-        `SELECT id, name, stat_keys, lifepath_id, subcategory
-         FROM skills ORDER BY name;`
+        `SELECT id, name, stat_keys, lifepath_id FROM skills ORDER BY name;`
       );
       return res.rows;
     },
   });
 
+  // Filter: match search, not already in pending list, not already in DB-added list
+  const pendingNames = new Set(addedSkills.map(s => s.name.toLowerCase()));
   const filteredSkills = allSkills.filter(s => {
-    const matchSearch = !skillSearch || s.name.toLowerCase().includes(skillSearch.toLowerCase());
+    if (!skillSearch) return false; // only show when searching
+    const matchSearch = s.name.toLowerCase().includes(skillSearch.toLowerCase());
     const notAdded    = !addedSkills.find(a => a.id === s.id);
     return matchSearch && notAdded;
   });
 
   // ── Duplicate check ───────────────────────────────────────
-  const checkDuplicate = async (n: string, cat: string) => {
+  const checkLifepathDupe = async (n: string, cat: string) => {
     const db  = await getDB();
     const res = await db.query(
       `SELECT id FROM lifepaths WHERE LOWER(name) = LOWER($1) AND category = $2 LIMIT 1;`,
@@ -111,89 +128,112 @@ export default function CreateLifepathModal({ onClose, initialCategory }: Props)
       const id  = crypto.randomUUID();
       const now = new Date().toISOString();
 
-      // Insert lifepath
       await db.query(
         `INSERT INTO lifepaths (id, name, category, active, sort_order)
          VALUES ($1, $2, $3, true, 0);`,
         [id, name.trim(), category]
       );
 
-      // Insert skills
+      // Link tools
+      for (const tool of addedTools) {
+        await db.query(
+          `INSERT INTO tool_lifepaths (tool_id, lifepath_id) VALUES ($1, $2) ON CONFLICT DO NOTHING;`,
+          [tool.id, id]
+        );
+      }
+
       for (const skill of addedSkills) {
         if (skill.type === 'existing' && skill.id) {
-          // Link existing skill to this lifepath
           await db.exec(
             `UPDATE skills SET lifepath_id = '${id}', active = true WHERE id = '${skill.id}';`
           );
-        } else if (skill.type === 'new' && skill.draft) {
-          // Create new skill
+        } else if (skill.type === 'new') {
           const sid = crypto.randomUUID();
           await db.query(
-            `INSERT INTO skills (id, name, stat_keys, default_split, lifepath_id, is_custom, active, created_at)
-             VALUES ($1, $2, $3, $4, $5, true, true, $6);`,
-            [sid, skill.draft.name, JSON.stringify(skill.draft.stat_keys), JSON.stringify(skill.draft.default_split), id, now]
+            `INSERT INTO skills (id, name, stat_keys, default_split, lifepath_id, notes, is_custom, active, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, true, true, $7);`,
+            [
+              sid, skill.name,
+              JSON.stringify(skill.stat_keys),
+              JSON.stringify(skill.default_split),
+              id,
+              skill.notes ?? null,
+              now,
+            ]
           );
         }
       }
-
       return id;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['lifepaths'] });
       queryClient.invalidateQueries({ queryKey: ['skills'] });
+      queryClient.invalidateQueries({ queryKey: ['lifepath-skills-all'] });
       queryClient.invalidateQueries({ queryKey: ['all-skills-for-lifepath'] });
+      queryClient.invalidateQueries({ queryKey: ['all-tools-for-lifepath'] });
+      queryClient.invalidateQueries({ queryKey: ['tools-for-lifepath'] });
       toast({ title: '✓ LIFEPATH CREATED', description: `${name.trim()} added to ${category}` });
       onClose();
     },
-    onError: (err) => {
-      toast({ title: 'ERROR', description: String(err) });
-    },
+    onError: (err) => toast({ title: 'ERROR', description: String(err) }),
   });
 
   const handleNext = async () => {
     if (!name.trim()) { setNameError('Name required'); return; }
-    const isDupe = await checkDuplicate(name.trim(), category);
+    const isDupe = await checkLifepathDupe(name.trim(), category);
     if (isDupe) { setNameError(`"${name.trim()}" already exists in ${category}`); return; }
     setNameError('');
     setStep('skills');
   };
 
   const handleAddExisting = (skill: ExistingSkill) => {
+    const keys = Array.isArray(skill.stat_keys)
+      ? skill.stat_keys
+      : JSON.parse((skill.stat_keys as any) ?? '[]');
     setAddedSkills(prev => [...prev, {
       type: 'existing', id: skill.id, name: skill.name,
-      stat_keys: Array.isArray(skill.stat_keys) ? skill.stat_keys : JSON.parse(skill.stat_keys as any ?? '[]'),
+      stat_keys: keys, default_split: keys.length === 2 ? [50, 50] : [100],
     }]);
     setSkillSearch('');
   };
 
   const handleAddNewSkill = () => {
     if (!newSkillName.trim()) return;
+
+    // Check against pending list
+    if (pendingNames.has(newSkillName.trim().toLowerCase())) {
+      setNewSkillError(`"${newSkillName.trim()}" already added`);
+      return;
+    }
+
+    // Check against DB skills
+    const dbDupe = allSkills.find(
+      s => s.name.toLowerCase() === newSkillName.trim().toLowerCase()
+    );
+    if (dbDupe) {
+      setNewSkillError(`"${newSkillName.trim()}" already exists — use search to add it`);
+      return;
+    }
+
+    const statKeys    = hasDual ? [newSkillPrimary, newSkillSecondary as StatKey] : [newSkillPrimary];
+    const defaultSplit = hasDual ? [newSkillSplit, 100 - newSkillSplit] : [100];
+
     setAddedSkills(prev => [...prev, {
       type: 'new',
       name: newSkillName.trim(),
-      stat_keys: newSkillStats,
-      draft: { name: newSkillName.trim(), stat_keys: newSkillStats, default_split: newSkillSplit },
+      stat_keys: statKeys,
+      default_split: defaultSplit,
+      notes: newSkillNotes.trim() || undefined,
     }]);
-    setNewSkillName('');
-    setNewSkillStats(['body']);
-    setNewSkillSplit([100]);
-    setShowNewSkill(false);
-  };
 
-  const handleToggleNewStat = (stat: StatKey) => {
-    setNewSkillStats(prev => {
-      if (prev.includes(stat)) {
-        if (prev.length === 1) return prev; // always keep at least 1
-        const next = prev.filter(s => s !== stat);
-        setNewSkillSplit(next.map(() => Math.floor(100 / next.length)));
-        return next;
-      } else {
-        if (prev.length >= 2) return prev; // max 2 stats
-        const next = [...prev, stat];
-        setNewSkillSplit(next.map(() => Math.floor(100 / next.length)));
-        return next;
-      }
-    });
+    // Reset form
+    setNewSkillName('');
+    setNewSkillNotes('');
+    setNewSkillPrimary('body');
+    setNewSkillSecondary('');
+    setNewSkillSplit(50);
+    setNewSkillError('');
+    setShowNewSkill(false);
   };
 
   // ── Render ────────────────────────────────────────────────
@@ -203,45 +243,31 @@ export default function CreateLifepathModal({ onClose, initialCategory }: Props)
       background: 'rgba(0,0,0,0.8)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontFamily: mono,
-    }}
-      onClick={onClose}
-    >
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{
-          width: 680, maxHeight: '88vh',
-          background: bgP, border: `1px solid ${adim}`,
-          boxShadow: '0 0 40px rgba(255,176,0,0.12)',
-          display: 'flex', flexDirection: 'column',
-        }}
-      >
+    }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width: 700, maxWidth: 'calc(100vw - 40px)', maxHeight: '90vh',
+        background: bgP, border: `1px solid ${adim}`,
+        boxShadow: '0 0 40px rgba(255,176,0,0.12)',
+        display: 'flex', flexDirection: 'column',
+      }}>
+
         {/* Header */}
-        <div style={{
-          padding: '14px 20px', borderBottom: `1px solid ${adim}`,
-          display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0,
-        }}>
+        <div style={{ padding: '14px 20px', borderBottom: `1px solid ${adim}`, display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
           <span style={{ fontFamily: mono, fontSize: 9, color: adim, letterSpacing: 2 }}>// LIFEPATH</span>
           <span style={{ fontFamily: vt, fontSize: 22, color: acc }}>CREATE LIFEPATH</span>
           <div style={{ flex: 1 }} />
-          {/* Step indicator */}
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            {['info', 'skills'].map((s, i) => (
-              <div key={s} style={{
-                width: 24, height: 4,
-                background: step === s ? acc : adim,
-                opacity: step === s ? 1 : 0.4,
-              }} />
+          <div style={{ display: 'flex', gap: 6 }}>
+            {['info','skills'].map(s => (
+              <div key={s} style={{ width: 24, height: 4, background: step === s ? acc : adim, opacity: step === s ? 1 : 0.4 }} />
             ))}
           </div>
-          <button onClick={onClose} style={{
-            background: 'transparent', border: 'none', color: dim,
-            fontFamily: mono, fontSize: 10, cursor: 'pointer', letterSpacing: 1, padding: '2px 8px',
-          }}>× CLOSE</button>
+          <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: dim, fontFamily: mono, fontSize: 10, cursor: 'pointer', letterSpacing: 1, padding: '2px 8px' }}>× CLOSE</button>
         </div>
 
         {/* Body */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', scrollbarWidth: 'thin', scrollbarColor: `${adim} ${bgS}` }}>
 
+          {/* ── STEP 1: INFO ── */}
           {step === 'info' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
@@ -251,11 +277,10 @@ export default function CreateLifepathModal({ onClose, initialCategory }: Props)
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   {TOP_CATEGORIES.map(cat => (
                     <button key={cat} onClick={() => setCategory(cat)} style={{
-                      padding: '6px 14px', fontSize: 10,
+                      padding: '6px 14px', fontSize: 10, fontFamily: mono, cursor: 'pointer', letterSpacing: 1,
                       border: `1px solid ${category === cat ? acc : adim}`,
                       background: category === cat ? 'rgba(255,176,0,0.1)' : 'transparent',
                       color: category === cat ? acc : dim,
-                      fontFamily: mono, cursor: 'pointer', letterSpacing: 1,
                     }}>{cat}</button>
                   ))}
                 </div>
@@ -264,49 +289,35 @@ export default function CreateLifepathModal({ onClose, initialCategory }: Props)
               {/* Name */}
               <div>
                 <div style={{ fontSize: 9, color: adim, letterSpacing: 2, marginBottom: 8 }}>
-                  LIFEPATH NAME <span style={{ color: adim, opacity: 0.6 }}>(e.g. Strength Training)</span>
+                  LIFEPATH NAME <span style={{ opacity: 0.6 }}>(e.g. Strength Training)</span>
                 </div>
-                <input
-                  autoFocus
-                  value={name}
+                <input autoFocus value={name}
                   onChange={e => { setName(e.target.value); setNameError(''); }}
-                  onKeyDown={e => { if (e.key === 'Enter') handleNext(); }}
+                  onKeyDown={e => e.key === 'Enter' && handleNext()}
                   placeholder="Enter lifepath name..."
-                  style={{
-                    width: '100%', padding: '8px 12px', fontSize: 11,
-                    background: bgS, border: `1px solid ${nameError ? 'hsl(0,80%,55%)' : adim}`,
-                    color: acc, fontFamily: mono, outline: 'none', boxSizing: 'border-box',
-                  }}
+                  style={{ width: '100%', padding: '8px 12px', fontSize: 11, boxSizing: 'border-box', background: bgS, border: `1px solid ${nameError ? 'hsl(0,80%,55%)' : adim}`, color: acc, fontFamily: mono, outline: 'none' }}
                 />
-                {nameError && (
-                  <div style={{ fontSize: 9, color: 'hsl(0,80%,55%)', marginTop: 4 }}>{nameError}</div>
-                )}
+                {nameError && <div style={{ fontSize: 9, color: 'hsl(0,80%,55%)', marginTop: 4 }}>{nameError}</div>}
               </div>
 
               {/* Description */}
               <div>
                 <div style={{ fontSize: 9, color: adim, letterSpacing: 2, marginBottom: 8 }}>
-                  DESCRIPTION <span style={{ color: adim, opacity: 0.6 }}>(optional)</span>
+                  DESCRIPTION <span style={{ opacity: 0.6 }}>(optional)</span>
                 </div>
-                <textarea
-                  value={description}
-                  onChange={e => setDescription(e.target.value)}
-                  placeholder="Describe this lifepath..."
-                  rows={3}
-                  style={{
-                    width: '100%', padding: '8px 12px', fontSize: 11, resize: 'vertical',
-                    background: bgS, border: `1px solid ${adim}`,
-                    color: acc, fontFamily: mono, outline: 'none', boxSizing: 'border-box',
-                  }}
+                <textarea value={description} onChange={e => setDescription(e.target.value)}
+                  placeholder="Describe this lifepath..." rows={3}
+                  style={{ width: '100%', padding: '8px 12px', fontSize: 11, resize: 'vertical', boxSizing: 'border-box', background: bgS, border: `1px solid ${adim}`, color: acc, fontFamily: mono, outline: 'none' }}
                 />
               </div>
             </div>
           )}
 
+          {/* ── STEP 2: SKILLS ── */}
           {step === 'skills' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-              {/* Added skills list */}
+              {/* Added skills */}
               <div>
                 <div style={{ fontSize: 9, color: adim, letterSpacing: 2, marginBottom: 8 }}>
                   SKILLS ADDED ({addedSkills.length})
@@ -318,20 +329,18 @@ export default function CreateLifepathModal({ onClose, initialCategory }: Props)
                 )}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   {addedSkills.map((skill, i) => {
-                    const statIcons = skill.stat_keys.map(k => `${STAT_META[k]?.icon ?? ''} ${k.toUpperCase()}`).join(' / ');
+                    const statIcons = skill.stat_keys
+                      .map(k => `${STAT_META[k]?.icon ?? ''} ${k.toUpperCase()}`).join(' / ');
                     return (
-                      <div key={i} style={{
-                        display: 'flex', alignItems: 'center', gap: 10,
-                        padding: '7px 12px', background: 'rgba(255,176,0,0.05)',
-                        border: `1px solid rgba(255,176,0,0.2)`,
-                      }}>
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 12px', background: 'rgba(255,176,0,0.05)', border: `1px solid rgba(255,176,0,0.2)` }}>
                         <span style={{ fontSize: 8, color: skill.type === 'new' ? '#44ff88' : adim }}>
                           {skill.type === 'new' ? '★ NEW' : '○ EXT'}
                         </span>
                         <span style={{ flex: 1, fontSize: 11, color: acc }}>{skill.name}</span>
+                        {skill.notes && <span style={{ fontSize: 9, color: dim, fontStyle: 'italic' }}>{skill.notes}</span>}
                         <span style={{ fontSize: 9, color: adim }}>{statIcons}</span>
                         <button onClick={() => setAddedSkills(prev => prev.filter((_, j) => j !== i))}
-                          style={{ background: 'transparent', border: 'none', color: dim, cursor: 'pointer', fontSize: 12, padding: '0 4px' }}
+                          style={{ background: 'transparent', border: 'none', color: dim, cursor: 'pointer', fontSize: 12 }}
                           onMouseEnter={e => e.currentTarget.style.color = 'hsl(0,80%,55%)'}
                           onMouseLeave={e => e.currentTarget.style.color = dim}
                         >×</button>
@@ -341,43 +350,27 @@ export default function CreateLifepathModal({ onClose, initialCategory }: Props)
                 </div>
               </div>
 
-              {/* Divider */}
               <div style={{ height: 1, background: adim, opacity: 0.3 }} />
 
               {/* Search existing */}
               <div>
                 <div style={{ fontSize: 9, color: adim, letterSpacing: 2, marginBottom: 8 }}>SEARCH EXISTING SKILLS</div>
-                <input
-                  value={skillSearch}
-                  onChange={e => setSkillSearch(e.target.value)}
-                  placeholder="Type to search skills..."
-                  style={{
-                    width: '100%', padding: '8px 12px', fontSize: 11,
-                    background: bgS, border: `1px solid ${adim}`,
-                    color: acc, fontFamily: mono, outline: 'none', boxSizing: 'border-box',
-                  }}
+                <input value={skillSearch} onChange={e => setSkillSearch(e.target.value)}
+                  placeholder="Type to search existing skills..."
+                  style={{ width: '100%', padding: '8px 12px', fontSize: 11, boxSizing: 'border-box', background: bgS, border: `1px solid ${adim}`, color: acc, fontFamily: mono, outline: 'none' }}
                 />
                 {skillSearch && (
-                  <div style={{
-                    marginTop: 4, maxHeight: 200, overflowY: 'auto',
-                    border: `1px solid ${adim}`, background: bgS,
-                    scrollbarWidth: 'thin', scrollbarColor: `${adim} ${bgS}`,
-                  }}>
+                  <div style={{ marginTop: 4, maxHeight: 160, overflowY: 'auto', border: `1px solid ${adim}`, background: bgS, scrollbarWidth: 'thin', scrollbarColor: `${adim} ${bgS}` }}>
                     {filteredSkills.length === 0 ? (
                       <div style={{ padding: '10px 12px', fontSize: 10, color: dim }}>
                         No matching skills — create one below
                       </div>
                     ) : filteredSkills.slice(0, 20).map(skill => {
-                      const keys = Array.isArray(skill.stat_keys) ? skill.stat_keys : JSON.parse(skill.stat_keys as any ?? '[]');
+                      const keys = Array.isArray(skill.stat_keys) ? skill.stat_keys : JSON.parse((skill.stat_keys as any) ?? '[]');
                       const statIcons = keys.map((k: StatKey) => `${STAT_META[k]?.icon ?? ''} ${k.toUpperCase()}`).join(' / ');
                       return (
-                        <div key={skill.id}
-                          onClick={() => handleAddExisting(skill)}
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: 10,
-                            padding: '8px 12px', cursor: 'pointer',
-                            borderBottom: `1px solid rgba(153,104,0,0.2)`,
-                          }}
+                        <div key={skill.id} onClick={() => handleAddExisting(skill)}
+                          style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', cursor: 'pointer', borderBottom: `1px solid rgba(153,104,0,0.2)` }}
                           onMouseEnter={e => e.currentTarget.style.background = bgT}
                           onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                         >
@@ -391,106 +384,185 @@ export default function CreateLifepathModal({ onClose, initialCategory }: Props)
                 )}
               </div>
 
-              {/* Create new skill inline */}
+              {/* Create new skill — consistent with AddSkillModal */}
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
                   <div style={{ fontSize: 9, color: adim, letterSpacing: 2 }}>CREATE NEW SKILL</div>
-                  <button
-                    onClick={() => setShowNewSkill(!showNewSkill)}
-                    style={{
-                      padding: '3px 10px', fontSize: 9,
-                      border: `1px solid ${showNewSkill ? adim : acc}`,
-                      background: 'transparent', color: showNewSkill ? dim : acc,
-                      fontFamily: mono, cursor: 'pointer', letterSpacing: 1,
-                    }}
-                  >{showNewSkill ? '− CANCEL' : '+ NEW SKILL'}</button>
+                  <button onClick={() => { setShowNewSkill(!showNewSkill); setNewSkillError(''); }} style={{
+                    padding: '3px 10px', fontSize: 9, fontFamily: mono, cursor: 'pointer', letterSpacing: 1,
+                    border: `1px solid ${showNewSkill ? adim : acc}`,
+                    background: 'transparent', color: showNewSkill ? dim : acc,
+                  }}>{showNewSkill ? '− CANCEL' : '+ NEW SKILL'}</button>
                 </div>
 
                 {showNewSkill && (
-                  <div style={{ padding: '14px', background: bgS, border: `1px solid ${adim}`, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    <input
-                      autoFocus
-                      value={newSkillName}
-                      onChange={e => setNewSkillName(e.target.value)}
-                      placeholder="Skill name..."
-                      style={{
-                        width: '100%', padding: '7px 10px', fontSize: 11,
-                        background: bgP, border: `1px solid ${adim}`,
-                        color: acc, fontFamily: mono, outline: 'none', boxSizing: 'border-box',
-                      }}
-                    />
+                  <div style={{ padding: '16px', background: bgS, border: `1px solid ${adim}`, display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+                    {/* Skill name */}
                     <div>
-                      <div style={{ fontSize: 9, color: adim, letterSpacing: 1, marginBottom: 6 }}>LINKED STATS (max 2)</div>
+                      <div style={{ fontSize: 9, color: adim, letterSpacing: 1, marginBottom: 6 }}>
+                        SKILL NAME <span style={{ color: acc }}>*</span>
+                      </div>
+                      <input autoFocus value={newSkillName}
+                        onChange={e => { setNewSkillName(e.target.value); setNewSkillError(''); }}
+                        onKeyDown={e => e.key === 'Enter' && handleAddNewSkill()}
+                        placeholder="Skill name..."
+                        style={{ width: '100%', padding: '7px 10px', fontSize: 11, boxSizing: 'border-box', background: bgP, border: `1px solid ${newSkillError ? 'hsl(0,80%,55%)' : adim}`, color: acc, fontFamily: mono, outline: 'none' }}
+                      />
+                      {newSkillError && <div style={{ fontSize: 9, color: 'hsl(0,80%,55%)', marginTop: 4 }}>{newSkillError}</div>}
+                    </div>
+
+                    {/* Primary stat — same pill style as AddSkillModal */}
+                    <div>
+                      <div style={{ fontSize: 9, color: adim, letterSpacing: 1, marginBottom: 6 }}>
+                        PRIMARY STAT <span style={{ color: acc }}>*</span>
+                      </div>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                        {STAT_KEYS.map(stat => {
-                          const meta    = STAT_META[stat];
-                          const selected = newSkillStats.includes(stat);
-                          return (
-                            <button key={stat} onClick={() => handleToggleNewStat(stat)} style={{
-                              padding: '4px 10px', fontSize: 9,
-                              border: `1px solid ${selected ? acc : adim}`,
-                              background: selected ? 'rgba(255,176,0,0.1)' : 'transparent',
-                              color: selected ? acc : dim,
-                              fontFamily: mono, cursor: 'pointer',
-                            }}>
-                              {meta?.icon} {stat.toUpperCase()}
-                            </button>
-                          );
-                        })}
+                        {STAT_KEYS.map(k => (
+                          <button key={k} className="topbar-btn" onClick={() => {
+                            setNewSkillPrimary(k);
+                            if (newSkillSecondary === k) setNewSkillSecondary('');
+                          }} style={{
+                            border: `1px solid ${newSkillPrimary === k ? acc : adim}`,
+                            color: newSkillPrimary === k ? bright : dim,
+                            boxShadow: newSkillPrimary === k ? '0 0 6px rgba(255,176,0,0.3)' : 'none',
+                          }}>
+                            {STAT_META[k].icon} {STAT_META[k].name}
+                          </button>
+                        ))}
                       </div>
                     </div>
-                    {newSkillStats.length === 2 && (
+
+                    {/* Secondary stat */}
+                    <div>
+                      <div style={{ fontSize: 9, color: adim, letterSpacing: 1, marginBottom: 6 }}>
+                        SECONDARY STAT <span style={{ color: dim }}>(optional)</span>
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        <button className="topbar-btn" onClick={() => setNewSkillSecondary('')} style={{
+                          border: `1px solid ${newSkillSecondary === '' ? acc : adim}`,
+                          color: newSkillSecondary === '' ? bright : dim,
+                        }}>NONE</button>
+                        {STAT_KEYS.filter(k => k !== newSkillPrimary).map(k => (
+                          <button key={k} className="topbar-btn" onClick={() => setNewSkillSecondary(k)} style={{
+                            border: `1px solid ${newSkillSecondary === k ? acc : adim}`,
+                            color: newSkillSecondary === k ? bright : dim,
+                            boxShadow: newSkillSecondary === k ? '0 0 6px rgba(255,176,0,0.3)' : 'none',
+                          }}>
+                            {STAT_META[k].icon} {STAT_META[k].name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Split slider */}
+                    {hasDual && (
                       <div>
-                        <div style={{ fontSize: 9, color: adim, letterSpacing: 1, marginBottom: 6 }}>
-                          SPLIT: {newSkillStats[0].toUpperCase()} {newSkillSplit[0]}% / {newSkillStats[1].toUpperCase()} {100 - newSkillSplit[0]}%
+                        <div style={{ fontSize: 9, color: adim, letterSpacing: 1, marginBottom: 8 }}>DEFAULT SPLIT</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span style={{ fontSize: 10, color: acc, width: 80 }}>
+                            {STAT_META[newSkillSecondary as StatKey].icon} {STAT_META[newSkillSecondary as StatKey].name}
+                          </span>
+                          <input type="range" className="ql-split-slider" min={10} max={90} step={5}
+                            value={newSkillSplit}
+                            onChange={e => setNewSkillSplit(Number(e.target.value))}
+                            style={{ flex: 1 }}
+                          />
+                          <span style={{ fontSize: 10, color: acc, width: 80, textAlign: 'right' }}>
+                            {STAT_META[newSkillPrimary].icon} {STAT_META[newSkillPrimary].name}
+                          </span>
                         </div>
-                        <input type="range" min={10} max={90} value={newSkillSplit[0]}
-                          onChange={e => setNewSkillSplit([Number(e.target.value), 100 - Number(e.target.value)])}
-                          style={{ width: '100%', accentColor: acc }}
-                        />
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: dim, marginTop: 4 }}>
+                          <span>{100 - newSkillSplit}%</span><span>{newSkillSplit}%</span>
+                        </div>
                       </div>
                     )}
-                    <button
-                      onClick={handleAddNewSkill}
-                      disabled={!newSkillName.trim()}
-                      style={{
-                        padding: '7px 16px', fontSize: 10, alignSelf: 'flex-start',
-                        border: `1px solid ${newSkillName.trim() ? acc : adim}`,
-                        background: newSkillName.trim() ? 'rgba(255,176,0,0.1)' : 'transparent',
-                        color: newSkillName.trim() ? acc : dim,
-                        fontFamily: mono, cursor: newSkillName.trim() ? 'pointer' : 'not-allowed',
-                        letterSpacing: 1,
-                      }}
-                    >+ ADD SKILL</button>
+
+                    {/* Notes */}
+                    <div>
+                      <div style={{ fontSize: 9, color: adim, letterSpacing: 1, marginBottom: 6 }}>
+                        NOTES <span style={{ color: dim }}>(optional)</span>
+                      </div>
+                      <input value={newSkillNotes} onChange={e => setNewSkillNotes(e.target.value)}
+                        placeholder="Any notes about this skill..."
+                        style={{ width: '100%', padding: '7px 10px', fontSize: 11, boxSizing: 'border-box', background: bgP, border: `1px solid ${adim}`, color: acc, fontFamily: mono, outline: 'none' }}
+                      />
+                    </div>
+
+                    <button onClick={handleAddNewSkill} disabled={!newSkillName.trim()} style={{
+                      padding: '7px 16px', fontSize: 10, alignSelf: 'flex-start', letterSpacing: 1,
+                      border: `1px solid ${newSkillName.trim() ? acc : adim}`,
+                      background: newSkillName.trim() ? 'rgba(255,176,0,0.1)' : 'transparent',
+                      color: newSkillName.trim() ? acc : dim,
+                      fontFamily: mono, cursor: newSkillName.trim() ? 'pointer' : 'not-allowed',
+                    }}>+ ADD SKILL</button>
                   </div>
                 )}
               </div>
 
-              {/* Tools / Augments — placeholders */}
-              <div style={{ opacity: 0.4 }}>
+              {/* ADD TOOLS */}
+              <div>
                 <div style={{ height: 1, background: adim, opacity: 0.3, marginBottom: 12 }} />
-                <div style={{ fontSize: 9, color: adim, letterSpacing: 2, marginBottom: 4 }}>ADD TOOLS</div>
-                <div style={{ fontSize: 10, color: dim }}>Tools system coming soon — add tools after creation via the lifepath drawer.</div>
+                <div style={{ fontSize: 9, color: adim, letterSpacing: 2, marginBottom: 8 }}>
+                  ADD TOOLS ({addedTools.length})
+                </div>
+
+                {/* Added tools list */}
+                {addedTools.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 10 }}>
+                    {addedTools.map((tool, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', background: 'rgba(255,176,0,0.04)', border: `1px solid rgba(255,176,0,0.2)` }}>
+                        <span style={{ fontSize: 8, color: adim, border: `1px solid ${adim}`, padding: '1px 4px' }}>{tool.type.slice(0,3).toUpperCase()}</span>
+                        <span style={{ flex: 1, fontSize: 11, color: acc }}>{tool.name}</span>
+                        <button onClick={() => setAddedTools(prev => prev.filter((_, j) => j !== i))}
+                          style={{ background: 'transparent', border: 'none', color: dim, cursor: 'pointer', fontSize: 12 }}
+                          onMouseEnter={e => e.currentTarget.style.color = 'hsl(0,80%,55%)'}
+                          onMouseLeave={e => e.currentTarget.style.color = dim}
+                        >×</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Tool search */}
+                <input value={toolSearch} onChange={e => setToolSearch(e.target.value)}
+                  placeholder="Search existing tools..."
+                  style={{ width: '100%', padding: '7px 10px', fontSize: 11, boxSizing: 'border-box', background: bgS, border: `1px solid ${adim}`, color: acc, fontFamily: mono, outline: 'none' }}
+                />
+                {toolSearch && (
+                  <div style={{ maxHeight: 140, overflowY: 'auto', border: `1px solid ${adim}`, borderTop: 'none', background: bgS, scrollbarWidth: 'thin', scrollbarColor: `${adim} ${bgS}` }}>
+                    {filteredTools.length === 0 ? (
+                      <div style={{ padding: '8px 10px', fontSize: 10, color: dim }}>No matching tools — add via Tools page first</div>
+                    ) : filteredTools.slice(0, 15).map(tool => (
+                      <div key={tool.id}
+                        onClick={() => { setAddedTools(prev => [...prev, tool]); setToolSearch(''); }}
+                        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', cursor: 'pointer', borderBottom: `1px solid rgba(153,104,0,0.2)` }}
+                        onMouseEnter={e => e.currentTarget.style.background = bgT}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                      >
+                        <span style={{ fontSize: 8, color: adim, border: `1px solid ${adim}`, padding: '1px 4px' }}>{tool.type.slice(0,3).toUpperCase()}</span>
+                        <span style={{ flex: 1, fontSize: 11, color: acc }}>{tool.name}</span>
+                        <span style={{ fontSize: 9, color: '#44ff88' }}>+ ADD</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <div style={{ opacity: 0.4 }}>
                 <div style={{ height: 1, background: adim, opacity: 0.3, marginBottom: 12 }} />
                 <div style={{ fontSize: 9, color: adim, letterSpacing: 2, marginBottom: 4 }}>ADD AUGMENTS</div>
-                <div style={{ fontSize: 10, color: dim }}>Augments system coming soon — add augments after creation via the lifepath drawer.</div>
+                <div style={{ fontSize: 10, color: dim }}>Augments system coming soon.</div>
               </div>
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div style={{
-          padding: '14px 24px', borderTop: `1px solid ${adim}`,
-          display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0,
-        }}>
+        <div style={{ padding: '14px 24px', borderTop: `1px solid ${adim}`, display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
           {step === 'skills' && (
             <button onClick={() => setStep('info')} style={{
-              padding: '7px 16px', fontSize: 10,
+              padding: '7px 16px', fontSize: 10, fontFamily: mono, cursor: 'pointer', letterSpacing: 1,
               border: `1px solid ${adim}`, background: 'transparent', color: dim,
-              fontFamily: mono, cursor: 'pointer', letterSpacing: 1,
             }}>‹ BACK</button>
           )}
           <div style={{ flex: 1 }} />
@@ -498,42 +570,40 @@ export default function CreateLifepathModal({ onClose, initialCategory }: Props)
           {step === 'info' ? (
             <>
               <button
-                onClick={() => { if (!name.trim()) { setNameError('Name required'); return; } createLifepath.mutate(); }}
+                onClick={async () => {
+                  if (!name.trim()) { setNameError('Name required'); return; }
+                  const isDupe = await checkLifepathDupe(name.trim(), category);
+                  if (isDupe) { setNameError(`"${name.trim()}" already exists in ${category}`); return; }
+                  createLifepath.mutate();
+                }}
                 disabled={!name.trim() || createLifepath.isPending}
                 style={{
-                  padding: '7px 20px', fontSize: 10,
-                  border: `1px solid ${adim}`, background: 'transparent', color: dim,
-                  fontFamily: mono, cursor: name.trim() ? 'pointer' : 'not-allowed', letterSpacing: 1,
+                  padding: '7px 20px', fontSize: 10, fontFamily: mono, letterSpacing: 1,
+                  border: `1px solid ${adim}`, background: 'transparent',
+                  color: name.trim() ? dim : dim,
+                  cursor: name.trim() ? 'pointer' : 'not-allowed',
                 }}
               >CREATE EMPTY</button>
               <button onClick={handleNext} disabled={!name.trim()} style={{
-                padding: '7px 20px', fontSize: 10,
+                padding: '7px 20px', fontSize: 10, fontFamily: mono, letterSpacing: 1,
                 border: `1px solid ${name.trim() ? acc : adim}`,
                 background: name.trim() ? 'rgba(255,176,0,0.1)' : 'transparent',
                 color: name.trim() ? acc : dim,
-                fontFamily: mono, cursor: name.trim() ? 'pointer' : 'not-allowed', letterSpacing: 1,
+                cursor: name.trim() ? 'pointer' : 'not-allowed',
               }}>ADD SKILLS ›</button>
             </>
           ) : (
             <>
-              <button
-                onClick={() => createLifepath.mutate()}
-                disabled={createLifepath.isPending}
-                style={{
-                  padding: '7px 20px', fontSize: 10,
-                  border: `1px solid ${adim}`, background: 'transparent', color: dim,
-                  fontFamily: mono, cursor: 'pointer', letterSpacing: 1,
-                }}
-              >SKIP — CREATE EMPTY</button>
-              <button
-                onClick={() => createLifepath.mutate()}
-                disabled={createLifepath.isPending}
-                style={{
-                  padding: '7px 20px', fontSize: 10,
-                  border: `1px solid ${acc}`, background: 'rgba(255,176,0,0.1)', color: acc,
-                  fontFamily: mono, cursor: 'pointer', letterSpacing: 1,
-                }}
-              >{createLifepath.isPending ? 'CREATING...' : `CREATE WITH ${addedSkills.length} SKILL${addedSkills.length !== 1 ? 'S' : ''}`}</button>
+              <button onClick={() => createLifepath.mutate()} disabled={createLifepath.isPending} style={{
+                padding: '7px 20px', fontSize: 10, fontFamily: mono, letterSpacing: 1,
+                border: `1px solid ${adim}`, background: 'transparent', color: dim, cursor: 'pointer',
+              }}>SKIP — CREATE EMPTY</button>
+              <button onClick={() => createLifepath.mutate()} disabled={createLifepath.isPending} style={{
+                padding: '7px 20px', fontSize: 10, fontFamily: mono, letterSpacing: 1,
+                border: `1px solid ${acc}`, background: 'rgba(255,176,0,0.1)', color: acc, cursor: 'pointer',
+              }}>
+                {createLifepath.isPending ? 'CREATING...' : `CREATE WITH ${addedSkills.length} SKILL${addedSkills.length !== 1 ? 'S' : ''}`}
+              </button>
             </>
           )}
         </div>

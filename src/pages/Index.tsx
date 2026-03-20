@@ -17,6 +17,7 @@ import SkillsWidget from '@/components/widgets/SkillsWidget';
 import ClockWidget from '@/components/widgets/ClockWidget';
 import CalculatorWidget from '@/components/widgets/CalculatorWidget';
 import UnitConverterWidget from '@/components/widgets/UnitConverterWidget';
+import ToolsWidget from '@/components/widgets/ToolsWidget';
 import QuickLogOverlay from '@/components/overlays/QuickLogOverlay';
 import CharacterSheet from '@/components/overlays/CharacterSheet';
 import SearchOverlay from '@/components/overlays/SearchOverlay';
@@ -26,6 +27,7 @@ import LibraryPage from '@/components/overlays/LibraryPage';
 import CoursesPage from '@/components/overlays/CoursesPage';
 import SocialsOverlay from '@/components/overlays/SocialsOverlay';
 import LifepathPage from '@/components/overlays/LifepathPage';
+import ToolsPage from '@/components/overlays/ToolsPage';
 import WidgetManager from '@/components/overlays/WidgetManager';
 import FirstBootWizard from '@/components/wizard/FirstBootWizard';
 import DetailDrawer from '@/components/drawer/DetailDrawer';
@@ -37,7 +39,7 @@ import { applyThemeClass, normalizeTheme, type ThemeCode } from '@/lib/themes';
 
 type LayoutItem = { i: string; x: number; y: number; w: number; h: number; minW?: number; minH?: number };
 
-const ALL_WIDGET_IDS = ['xp', 'checkin', 'heatmap', 'stats', 'courses', 'media', 'skills', 'clock', 'calculator', 'unitConverter'];
+const ALL_WIDGET_IDS = ['xp', 'checkin', 'heatmap', 'stats', 'courses', 'media', 'skills', 'tools', 'clock', 'calculator', 'unitConverter'];
 const DEFAULT_ACTIVE_WIDGET_IDS = ['xp', 'checkin', 'heatmap', 'stats', 'courses', 'media', 'skills'];
 
 const defaultLayout: LayoutItem[] = [
@@ -48,8 +50,10 @@ const defaultLayout: LayoutItem[] = [
   { i: 'courses', x: 4, y: 3, w: 4, h: 4, minW: 2, minH: 2 },
   { i: 'media', x: 8, y: 3, w: 4, h: 4, minW: 2, minH: 2 },
   { i: 'skills', x: 4, y: 7, w: 4, h: 4, minW: 2, minH: 2 },
+  { i: 'tools', x: 0, y: 8, w: 4, h: 4, minW: 2, minH: 2 },
   { i: 'clock', x: 8, y: 7, w: 4, h: 4, minW: 2, minH: 2 },
   { i: 'calculator', x: 0, y: 9, w: 4, h: 4, minW: 2, minH: 2 },
+  { i: 'tools',         x: 0, y: 8, w: 4, h: 4, minW: 2, minH: 2 },
   { i: 'unitConverter', x: 4, y: 9, w: 4, h: 4, minW: 2, minH: 2 },
 ];
 
@@ -70,6 +74,7 @@ const Index = () => {
   const [showSearch, setShowSearch] = useState(false);
   const [showSocials, setShowSocials] = useState(false);
   const [showLifepath, setShowLifepath] = useState(false);
+  const [showTools, setShowTools]         = useState(false);
   const [showCheckin, setShowCheckin] = useState(false);
   const [showFlash, setShowFlash] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -185,6 +190,7 @@ const Index = () => {
       case 'courses':      return <CoursesWidget {...props} onCourseClick={(id) => openDrawer('course', id)} />;
       case 'media':        return <MediaWidget {...props} onMediaClick={(id) => openDrawer('media', id)} />;
       case 'skills':       return <SkillsWidget {...props} onOpenSkills={() => setShowSkills(true)} onSkillClick={(id) => openDrawer('skill', id)} />;
+      case 'tools':        return <ToolsWidget {...props} onOpenTools={() => setShowTools(true)} onToolClick={(id) => openDrawer('tool', id)} />;
       case 'clock':        return <ClockWidget {...props} />;
       case 'calculator':   return <CalculatorWidget {...props} />;
       case 'unitConverter':return <UnitConverterWidget {...props} />;
@@ -220,6 +226,7 @@ const Index = () => {
           onOpenLibrary={() => setShowLibrary(true)}
           onOpenCourses={() => setShowCourses(true)}
           onOpenLifepath={() => setShowLifepath(true)}
+          onOpenTools={() => setShowTools(true)}
           onOpenWidgetManager={() => setShowWidgetManager(true)}
           onOpenSocials={() => setShowSocials(true)}
           onOpenCalculatorWidget={() => handleOpenWidgetById('calculator')}
@@ -256,6 +263,7 @@ const Index = () => {
       </div>
 
       {showLifepath      && <LifepathPage  onClose={() => setShowLifepath(false)} />}
+      {showTools         && <ToolsPage     onClose={() => setShowTools(false)} />}
       {showWidgetManager && <WidgetManager activeWidgets={activeWidgets} onRestore={handleRestore} onClose={handleClose} onDismiss={() => setShowWidgetManager(false)} />}
       {showCourses       && <CoursesPage   onClose={() => setShowCourses(false)} />}
       {showLibrary       && <LibraryPage   onClose={() => setShowLibrary(false)} />}
