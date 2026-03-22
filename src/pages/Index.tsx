@@ -19,6 +19,7 @@ import CalculatorWidget from '@/components/widgets/CalculatorWidget';
 import UnitConverterWidget from '@/components/widgets/UnitConverterWidget';
 import ToolsWidget from '@/components/widgets/ToolsWidget';
 import AugmentsWidget from '@/components/widgets/AugmentsWidget';
+import ProjectsWidget from '@/components/widgets/ProjectsWidget';
 import QuickLogOverlay from '@/components/overlays/QuickLogOverlay';
 import CharacterSheet from '@/components/overlays/CharacterSheet';
 import SearchOverlay from '@/components/overlays/SearchOverlay';
@@ -30,6 +31,7 @@ import SocialsOverlay from '@/components/overlays/SocialsOverlay';
 import LifepathPage from '@/components/overlays/LifepathPage';
 import ToolsPage from '@/components/overlays/ToolsPage';
 import AugmentsPage from '@/components/overlays/AugmentsPage';
+import ProjectsPage from '@/components/overlays/ProjectsPage';
 import WidgetManager from '@/components/overlays/WidgetManager';
 import FirstBootWizard from '@/components/wizard/FirstBootWizard';
 import DetailDrawer from '@/components/drawer/DetailDrawer';
@@ -41,7 +43,7 @@ import { applyThemeClass, normalizeTheme, type ThemeCode } from '@/lib/themes';
 
 type LayoutItem = { i: string; x: number; y: number; w: number; h: number; minW?: number; minH?: number };
 
-const ALL_WIDGET_IDS = ['xp', 'checkin', 'heatmap', 'stats', 'courses', 'media', 'skills', 'tools', 'augments', 'clock', 'calculator', 'unitConverter'];
+const ALL_WIDGET_IDS = ['xp', 'checkin', 'heatmap', 'stats', 'courses', 'media', 'skills', 'tools', 'augments', 'projects', 'clock', 'calculator', 'unitConverter'];
 const DEFAULT_ACTIVE_WIDGET_IDS = ['xp', 'checkin', 'heatmap', 'stats', 'courses', 'media', 'skills'];
 
 const defaultLayout: LayoutItem[] = [
@@ -53,7 +55,8 @@ const defaultLayout: LayoutItem[] = [
   { i: 'media', x: 8, y: 3, w: 4, h: 4, minW: 2, minH: 2 },
   { i: 'skills', x: 4, y: 7, w: 4, h: 4, minW: 2, minH: 2 },
   { i: 'tools',    x: 0, y: 8, w: 4, h: 4, minW: 2, minH: 2 },
-  { i: 'augments', x: 4, y: 8, w: 4, h: 4, minW: 2, minH: 2 },
+  { i: 'augments',  x: 4, y: 8, w: 4, h: 4, minW: 2, minH: 2 },
+  { i: 'projects',  x: 8, y: 8, w: 4, h: 4, minW: 2, minH: 2 },
   { i: 'clock', x: 8, y: 7, w: 4, h: 4, minW: 2, minH: 2 },
   { i: 'calculator', x: 0, y: 9, w: 4, h: 4, minW: 2, minH: 2 },
   { i: 'tools',         x: 0, y: 8, w: 4, h: 4, minW: 2, minH: 2 },
@@ -79,6 +82,7 @@ const Index = () => {
   const [showLifepath, setShowLifepath] = useState(false);
   const [showTools, setShowTools]         = useState(false);
   const [showAugments, setShowAugments]   = useState(false);
+  const [showProjects, setShowProjects]   = useState(false);
   const [showCheckin, setShowCheckin] = useState(false);
   const [showFlash, setShowFlash] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -196,6 +200,7 @@ const Index = () => {
       case 'skills':       return <SkillsWidget {...props} onOpenSkills={() => setShowSkills(true)} onSkillClick={(id) => openDrawer('skill', id)} />;
       case 'tools':    return <ToolsWidget {...props} onOpenTools={() => setShowTools(true)} onToolClick={(id) => openDrawer('tool', id)} />;
       case 'augments': return <AugmentsWidget {...props} onOpenAugments={() => setShowAugments(true)} onAugmentClick={(id) => openDrawer('augment', id)} />;
+      case 'projects': return <ProjectsWidget {...props} onOpenProjects={() => setShowProjects(true)} onProjectClick={(id) => openDrawer('project', id)} />;
       case 'clock':        return <ClockWidget {...props} />;
       case 'calculator':   return <CalculatorWidget {...props} />;
       case 'unitConverter':return <UnitConverterWidget {...props} />;
@@ -233,6 +238,7 @@ const Index = () => {
           onOpenLifepath={() => setShowLifepath(true)}
           onOpenTools={() => setShowTools(true)}
           onOpenAugments={() => setShowAugments(true)}
+          onOpenProjects={() => setShowProjects(true)}
           onOpenWidgetManager={() => setShowWidgetManager(true)}
           onOpenSocials={() => setShowSocials(true)}
           onOpenCalculatorWidget={() => handleOpenWidgetById('calculator')}
@@ -271,6 +277,7 @@ const Index = () => {
       {showLifepath      && <LifepathPage  onClose={() => setShowLifepath(false)} />}
       {showTools     && <ToolsPage     onClose={() => setShowTools(false)} />}
       {showAugments  && <AugmentsPage  onClose={() => setShowAugments(false)} />}
+      {showProjects  && <ProjectsPage  onClose={() => setShowProjects(false)} />}
       {showWidgetManager && <WidgetManager activeWidgets={activeWidgets} onRestore={handleRestore} onClose={handleClose} onDismiss={() => setShowWidgetManager(false)} />}
       {showCourses       && <CoursesPage   onClose={() => setShowCourses(false)} />}
       {showLibrary       && <LibraryPage   onClose={() => setShowLibrary(false)} />}

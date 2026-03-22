@@ -171,19 +171,18 @@ export default function CoursesPage({ onClose }: Props) {
   const { user } = useAuth();
 
   const [activeTab, setActiveTab]   = useState<CourseStatus | 'ALL'>('ALL');
+  const [search, setSearch]         = useState('');
   const [sortKey, setSortKey]       = useState<SortKey>('status');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showAdd, setShowAdd]       = useState(false);
 
   const { data: courses, isLoading } = useQuery({
-    queryKey: ['courses-all', user?.id],
-    enabled: !!user?.id,
-    queryFn: async () => {
+    queryKey: ['courses-all'],
+        queryFn: async () => {
       const { data, error } = await supabase
         .from('courses')
         .select('*')
-        .eq('user_id', user!.id)
-        .order('name');
+                .order('name');
       if (error) throw error;
       return data as Course[];
     },
@@ -195,9 +194,15 @@ export default function CoursesPage({ onClose }: Props) {
       : (courses ?? []).filter(c => c.status === key).length;
 
   const filtered = useMemo(() => {
-    const base = activeTab === 'ALL'
+    let base = activeTab === 'ALL'
       ? (courses ?? [])
       : (courses ?? []).filter(c => c.status === activeTab);
+    if (search.trim()) {
+      base = base.filter(c =>
+        c.name.toLowerCase().includes(search.toLowerCase()) ||
+        (c.provider ?? '').toLowerCase().includes(search.toLowerCase())
+      );
+    }
 
     return [...base].sort((a, b) => {
       if (sortKey === 'name')     return a.name.localeCompare(b.name);
@@ -246,6 +251,16 @@ export default function CoursesPage({ onClose }: Props) {
               transition: 'all 150ms',
             }}>{s.label}</button>
           ))}
+        </div>
+
+        {/* Search */}
+        <div style={{ position: 'relative' }}>
+          <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: adim, pointerEvents: 'none' }}>⌕</span>
+          <input value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Search courses..."
+            style={{ padding: '4px 10px 4px 24px', fontSize: 10, width: 180, background: bgS, border: `1px solid ${search ? acc : adim}`, color: acc, fontFamily: mono, outline: 'none' }}
+          />
+          {search && <button onClick={() => setSearch('')} style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: adim, cursor: 'pointer', fontSize: 12 }}>×</button>}
         </div>
 
         <button

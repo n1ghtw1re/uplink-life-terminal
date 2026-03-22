@@ -17,18 +17,16 @@ const CoursesWidget = ({ onClose, onFullscreen, isFullscreen, onCourseClick }: W
   const [showAdd, setShowAdd] = useState(false);
 
   const { data: courses } = useQuery({
-    queryKey: ['courses', user?.id],
+    queryKey: ['courses'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('courses')
         .select('*')
-        .eq('user_id', user!.id)
-        .order('created_at', { ascending: false });
+                .order('created_at', { ascending: false });
       if (error) throw error;
       return data ?? [];
     },
-    enabled: !!user?.id,
-  });
+      });
 
   const active = (courses ?? []).filter(c => c.status !== 'COMPLETE' && c.status !== 'DROPPED');
   const completed = (courses ?? []).filter(c => c.status === 'COMPLETE');

@@ -2,11 +2,12 @@ import { useEffect } from 'react';
 import CourseDetailDrawer from './CourseDetailDrawer';
 import SkillDetailDrawer from './SkillDetailDrawer';
 import AugmentDetailDrawer from './AugmentDetailDrawer';
+import ProjectDetailDrawer from './ProjectDetailDrawer';
 import MediaDetailDrawer from './MediaDetailDrawer';
 import ToolDetailDrawer from './ToolDetailDrawer';
 
 export interface DrawerItem {
-  type: 'skill' | 'course' | 'book' | 'project' | 'cert' | 'tool' | 'augment' | 'resource';
+  type: 'skill' | 'course' | 'book' | 'project' | 'cert' | 'tool' | 'augment' | 'resource' | 'media';
   id: string;
 }
 
@@ -77,6 +78,7 @@ const DetailDrawer = ({ open, item, onClose, onOpenLog }: DetailDrawerProps) => 
       {item?.type === 'augment' && <AugmentDetailDrawer augmentId={item.id} onClose={onClose} />}
       {item?.type === 'tool'    && <ToolDetailDrawer toolId={item.id} onClose={onClose} />}
       {item?.type === 'book'    && <MediaDetailDrawer mediaId={item.id} onClose={onClose} />}
+      {item?.type === 'project'  && <ProjectDetailDrawer projectId={item.id} onClose={onClose} />}
       {!item?.type && null}
       </div>
     </div>

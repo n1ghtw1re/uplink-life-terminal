@@ -31,10 +31,10 @@ export const WIDGET_REGISTRY: WidgetDef[] = [
   { id: 'skills',  name: 'SKILLS',             icon: '◫', category: 'CORE',    description: 'Top skills by level — XP bars, stat icons, quick access' },
   { id: 'tools',    name: 'TOOLS',    icon: '⚙', category: 'ARSENAL', description: 'Active tools by level — toolXP progress, filter by type' },
   { id: 'augments', name: 'AUGMENTS', icon: '⬡', category: 'ARSENAL', description: 'AI augments with augmentXP progress — filter by cluster and usage' },
+  { id: 'projects', name: 'PROJECTS', icon: '◎', category: 'ARSENAL', description: 'Active projects with objective progress bars and status' },
   // Future widgets (greyed out, not yet available)
   { id: 'goals',    name: 'GOALS',            icon: '◎', category: 'FUTURE',  description: 'Life, mid, and sprint goals — coming soon' },
   { id: 'habits',   name: 'HABIT TRACKER',    icon: '✓', category: 'FUTURE',  description: 'Daily habit streaks and completion — coming soon' },
-  { id: 'projects', name: 'PROJECTS',         icon: '⚙', category: 'FUTURE',  description: 'Active projects with milestones — coming soon' },
   { id: 'terminal', name: 'TERMINAL',         icon: '$', category: 'FUTURE',  description: 'Command-line interface for UPLINK — coming soon' },
 ];
 

@@ -210,6 +210,8 @@ async function initSchema(db: PGlite) {
       linked_skill_ids  JSONB NOT NULL DEFAULT '[]',
       linked_tool_ids   JSONB NOT NULL DEFAULT '[]',
       linked_augment_ids JSONB NOT NULL DEFAULT '[]',
+      linked_media_ids  JSONB NOT NULL DEFAULT '[]',
+      is_legacy         BOOLEAN NOT NULL DEFAULT FALSE,
       status            TEXT NOT NULL DEFAULT 'QUEUED',
       progress          INTEGER NOT NULL DEFAULT 0,
       cert_earned       BOOLEAN NOT NULL DEFAULT FALSE,
@@ -364,6 +366,13 @@ async function initSchema(db: PGlite) {
       PRIMARY KEY (tool_id, lifepath_id)
     );
 
+    -- ── TOOL LIFEPATHS JUNCTION ─────────────────────────────
+    CREATE TABLE IF NOT EXISTS tool_lifepaths (
+      tool_id      TEXT NOT NULL REFERENCES tools(id) ON DELETE CASCADE,
+      lifepath_id  TEXT NOT NULL REFERENCES lifepaths(id) ON DELETE CASCADE,
+      PRIMARY KEY (tool_id, lifepath_id)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_sessions_skill  ON sessions(skill_id);
     CREATE INDEX IF NOT EXISTS idx_sessions_date   ON sessions(logged_at);
     CREATE INDEX IF NOT EXISTS idx_xp_log_tier     ON xp_log(tier);
@@ -372,4 +381,25 @@ async function initSchema(db: PGlite) {
     CREATE INDEX IF NOT EXISTS idx_checkins_date   ON checkins(checked_date);
 
   `);
+
+  // ── Migrations — safe to run repeatedly ─────────────────────────────────
+  // ALTER TABLE with IF NOT EXISTS is idempotent — safe on every boot
+  await db.exec(
+    `ALTER TABLE courses ADD COLUMN IF NOT EXISTS linked_media_ids JSONB NOT NULL DEFAULT '[]'`
+  );
+  await db.exec(
+    `ALTER TABLE courses ADD COLUMN IF NOT EXISTS is_legacy BOOLEAN NOT NULL DEFAULT FALSE`
+  );
+  await db.exec(
+    `ALTER TABLE courses ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ`
+  );
+  await db.exec(
+    `ALTER TABLE projects ADD COLUMN IF NOT EXISTS linked_media_ids JSONB NOT NULL DEFAULT '[]'`
+  );
+  await db.exec(
+    `ALTER TABLE projects ADD COLUMN IF NOT EXISTS linked_course_ids JSONB NOT NULL DEFAULT '[]'`
+  );
+  await db.exec(
+    `ALTER TABLE sessions ADD COLUMN IF NOT EXISTS project_ids JSONB NOT NULL DEFAULT '[]'`
+  );
 }

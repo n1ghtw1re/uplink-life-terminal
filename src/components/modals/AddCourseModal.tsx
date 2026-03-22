@@ -1,11 +1,10 @@
 // ============================================================
 // src/components/modals/AddCourseModal.tsx
 // ============================================================
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
-import { useSkills } from '@/hooks/useSkills';
 import { StatKey, STAT_META } from '@/types';
 import { toast } from '@/hooks/use-toast';
 
@@ -15,10 +14,114 @@ interface Props {
   onClose: () => void;
 }
 
+
+// ── Reusable linked-item picker ───────────────────────────────
+import { getDB } from '@/lib/db';
+
+function LinkedIdsInput({ label, tableName, nameField, subField, selectedIds, onChange }: {
+  label: string; tableName: string; nameField: string; subField: string;
+  selectedIds: string[]; onChange: (ids: string[]) => void;
+}) {
+  const [search, setSearch]   = useState('');
+  const [results, setResults] = useState<{ id: string; name: string; sub: string }[]>([]);
+  const [selected, setSelected] = useState<{ id: string; name: string; sub: string }[]>([]);
+  const [open, setOpen]       = useState(false);
+  const mono = "'IBM Plex Mono', monospace";
+  const acc  = 'hsl(var(--accent))';
+  const adim = 'hsl(var(--accent-dim))';
+  const dim  = 'hsl(var(--text-dim))';
+  const bgS  = 'hsl(var(--bg-secondary))';
+
+  // Load names for already-selected IDs on mount / when selectedIds changes
+  useEffect(() => {
+    if (selectedIds.length === 0) { setSelected([]); return; }
+    (async () => {
+      const db  = await getDB();
+      const res = await db.query<{ id: string; [k: string]: string }>(
+        `SELECT id, ${nameField}, ${subField} FROM ${tableName} WHERE id = ANY($1::text[]);`,
+        [selectedIds]
+      );
+      setSelected(res.rows.map(r => ({ id: r.id, name: r[nameField] ?? '', sub: r[subField] ?? '' })));
+    })();
+  }, [selectedIds.join(',')]);
+
+  // Load search results when dropdown open
+  useEffect(() => {
+    if (!open) return;
+    (async () => {
+      const db  = await getDB();
+      const q   = search.trim();
+      const res = await db.query<{ id: string; [k: string]: string }>(
+        `SELECT id, ${nameField}, ${subField} FROM ${tableName}
+         ${q ? `WHERE LOWER(${nameField}) LIKE LOWER($1)` : ''}
+         ORDER BY ${nameField} LIMIT 20;`,
+        q ? [`%${q}%`] : []
+      );
+      setResults(res.rows.map(r => ({ id: r.id, name: r[nameField] ?? '', sub: r[subField] ?? '' })));
+    })();
+  }, [search, open]);
+
+  const toggle = (item: { id: string; name: string; sub: string }) => {
+    const next = selectedIds.includes(item.id)
+      ? selectedIds.filter(x => x !== item.id)
+      : [...selectedIds, item.id];
+    onChange(next);
+  };
+
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <div style={{ fontSize: 9, color: adim, letterSpacing: 2, marginBottom: 5 }}>{label}</div>
+
+      {/* Selected tags */}
+      {selected.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 5 }}>
+          {selected.map(item => (
+            <span key={item.id} onClick={() => toggle(item)}
+              style={{ fontSize: 9, color: acc, border: `1px solid ${acc}`, padding: '2px 8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontFamily: mono }}>
+              {item.name.toUpperCase()} <span style={{ opacity: 0.5 }}>×</span>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Add button / search */}
+      {!open ? (
+        <span onClick={() => setOpen(true)}
+          style={{ fontSize: 9, color: adim, cursor: 'pointer', border: `1px dashed ${adim}`, padding: '2px 10px', fontFamily: mono }}>
+          + ADD
+        </span>
+      ) : (
+        <div style={{ position: 'relative' }}>
+          <input autoFocus value={search} onChange={e => setSearch(e.target.value)}
+            onBlur={() => setTimeout(() => setOpen(false), 150)}
+            placeholder="Type to search..."
+            style={{ width: '100%', padding: '5px 8px', fontSize: 10, background: bgS, border: `1px solid ${acc}`, color: acc, fontFamily: mono, outline: 'none', boxSizing: 'border-box' as const }}
+          />
+          {results.length > 0 && (
+            <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: bgS, border: `1px solid ${adim}`, zIndex: 100, maxHeight: 150, overflowY: 'auto' as const }}>
+              {results.map(r => {
+                const isSel = selectedIds.includes(r.id);
+                return (
+                  <div key={r.id} onMouseDown={() => toggle(r)}
+                    style={{ padding: '6px 10px', fontSize: 10, cursor: 'pointer', color: isSel ? acc : dim, background: isSel ? 'rgba(255,176,0,0.08)' : 'transparent', display: 'flex', justifyContent: 'space-between', fontFamily: mono }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,176,0,0.06)'}
+                    onMouseLeave={e => { e.currentTarget.style.background = isSel ? 'rgba(255,176,0,0.08)' : 'transparent'; }}>
+                    <span>{r.name} {isSel && '✓'}</span>
+                    <span style={{ fontSize: 9, opacity: 0.5 }}>{r.sub}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AddCourseModal({ onClose }: Props) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const { data: allSkills } = useSkills(user?.id);
 
   const [name, setName]         = useState('');
   const [provider, setProvider] = useState('');
@@ -27,10 +130,13 @@ export default function AddCourseModal({ onClose }: Props) {
   const [notes, setNotes]       = useState('');
   const [certEarned, setCertEarned] = useState(false);
   const [isLegacy, setIsLegacy]     = useState(false);
+  const [isOngoing, setIsOngoing]   = useState(false);
   const [saving, setSaving]         = useState(false);
 
-  const [linkedStats, setLinkedStats]       = useState<StatKey[]>([]);
-  const [linkedSkillIds, setLinkedSkillIds] = useState<string[]>([]);
+  const [linkedStats, setLinkedStats]         = useState<StatKey[]>([]);
+  const [linkedToolIds, setLinkedToolIds]     = useState<string[]>([]);
+  const [linkedAugmentIds, setLinkedAugmentIds] = useState<string[]>([]);
+  const [linkedMediaIds, setLinkedMediaIds]   = useState<string[]>([]);
   const [modules, setModules]               = useState<string[]>(['']);
 
   const toggleStat = (k: StatKey) =>
@@ -38,10 +144,6 @@ export default function AddCourseModal({ onClose }: Props) {
       prev.includes(k) ? prev.filter(s => s !== k) : [...prev, k]
     );
 
-  const toggleSkillId = (id: string) =>
-    setLinkedSkillIds(prev =>
-      prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
-    );
 
   const updateModule = (i: number, val: string) =>
     setModules(prev => prev.map((m, idx) => idx === i ? val : m));
@@ -51,61 +153,52 @@ export default function AddCourseModal({ onClose }: Props) {
 
   const addModule = () => setModules(prev => [...prev, '']);
 
-  // Skills filtered to selected stats; if no stat selected show all
-  const visibleSkills = linkedStats.length > 0
-    ? (allSkills ?? []).filter(s =>
-        s.statKeys.some(k => linkedStats.includes(k as StatKey))
-      )
-    : (allSkills ?? []);
-
-  const selectedSkillNames = (allSkills ?? [])
-    .filter(s => linkedSkillIds.includes(s.id))
-    .map(s => s.name)
-    .join(', ');
 
   const handleSubmit = async () => {
-    if (!name.trim() || !user) return;
+    if (!name.trim()) return;
     setSaving(true);
     try {
-      const { data: course, error: courseErr } = await supabase
-        .from('courses')
-        .insert({
-          user_id:          user.id,
-          name:             name.trim(),
-          provider:         provider.trim() || null,
-          subject:          subject.trim() || null,
-          url:              url.trim()      || null,
-          notes:            notes.trim()    || null,
-          linked_stats:     linkedStats,
-          linked_skill_ids: linkedSkillIds,
-          status:           isLegacy ? 'COMPLETE' : 'ACTIVE',
-          progress:         isLegacy ? 100 : 0,
-          cert_earned:      certEarned,
-          is_legacy:        isLegacy,
-          completed_at:     isLegacy ? new Date().toISOString() : null,
-        })
-        .select()
-        .single();
+      const { getDB } = await import('@/lib/db');
+      const db = await getDB();
+      const courseId = crypto.randomUUID();
+      const now = new Date().toISOString();
 
-      if (courseErr) throw courseErr;
+      await db.query(
+        `INSERT INTO courses
+          (id, name, provider, subject, url, notes, linked_stats, linked_tool_ids,
+           linked_augment_ids, linked_media_ids, status, progress, cert_earned,
+           is_legacy, is_ongoing, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+        [
+          courseId, name.trim(),
+          provider.trim() || null, subject.trim() || null,
+          url.trim() || null, notes.trim() || null,
+          JSON.stringify(linkedStats),
+          JSON.stringify(linkedToolIds),
+          JSON.stringify(linkedAugmentIds),
+          JSON.stringify(linkedMediaIds),
+          isLegacy ? 'COMPLETE' : 'ACTIVE',
+          isLegacy ? 100 : 0,
+          certEarned, isLegacy, isOngoing, now,
+        ]
+      );
 
       const validModules = modules
         .map((title, sort_order) => ({ title: title.trim(), sort_order }))
         .filter(m => m.title.length > 0);
 
-      if (validModules.length > 0) {
-        const sectionRows = validModules.map(m => ({ course_id: course.id, ...m }));
-        console.log('Inserting course_sections:', sectionRows);
-        const { error: secErr } = await supabase
-          .from('course_sections')
-          .insert(sectionRows);
-        if (secErr) throw secErr;
+      for (const m of validModules) {
+        await db.query(
+          `INSERT INTO course_sections (id, course_id, title, sort_order)
+           VALUES ($1, $2, $3, $4)`,
+          [crypto.randomUUID(), courseId, m.title, m.sort_order]
+        );
       }
 
-      queryClient.invalidateQueries({ queryKey: ['courses', user.id] });
-      queryClient.invalidateQueries({ queryKey: ['stats', user.id] });
-      queryClient.invalidateQueries({ queryKey: ['operator', user.id] });
-      queryClient.invalidateQueries({ queryKey: ['xp-recent', user.id] });
+      queryClient.invalidateQueries({ queryKey: ['courses'] });
+      queryClient.invalidateQueries({ queryKey: ['stats'] });
+      queryClient.invalidateQueries({ queryKey: ['operator'] });
+      queryClient.invalidateQueries({ queryKey: ['xp-recent'] });
 
       toast({
         title: '✓ COURSE ADDED',
@@ -205,106 +298,67 @@ export default function AddCourseModal({ onClose }: Props) {
         </div>
       </div>
 
-      {/* Linked skills — native multi-select styled as CRT */}
-      {visibleSkills.length > 0 && (
-        <div>
-          <div className="crt-field-label">
-            LINKED SKILLS
-            <span style={{ opacity: 0.5, marginLeft: 8, fontWeight: 'normal', textTransform: 'none', letterSpacing: 0 }}>
-              hold Ctrl / Cmd to select multiple
-            </span>
-          </div>
-          <select
-            multiple
-            value={linkedSkillIds}
-            onChange={e => {
-              const selected = Array.from(e.target.selectedOptions).map(o => o.value);
-              setLinkedSkillIds(selected);
-            }}
-            style={{
-              width: '100%',
-              background: 'hsl(var(--bg-primary))',
-              border: '1px solid hsl(var(--accent-dim))',
-              color: 'hsl(var(--accent))',
-              fontFamily: 'IBM Plex Mono, monospace',
-              fontSize: 11,
-              padding: '4px',
-              height: Math.min(visibleSkills.length * 22 + 8, 132),
-              outline: 'none',
-              cursor: 'pointer',
-            }}
-          >
-            {visibleSkills.map(s => (
-              <option
-                key={s.id}
-                value={s.id}
-                style={{
-                  padding: '3px 6px',
-                  background: linkedSkillIds.includes(s.id) ? 'rgba(255,176,0,0.15)' : 'transparent',
-                }}
-              >
-                {s.icon} {s.name}
-              </option>
-            ))}
-          </select>
-          {selectedSkillNames && (
-            <div style={{ color: 'hsl(var(--text-dim))', fontSize: 9, marginTop: 4 }}>
-              SELECTED: {selectedSkillNames}
-            </div>
-          )}
-          <div style={{ color: 'hsl(var(--text-dim))', fontSize: 9, marginTop: 2, opacity: 0.7 }}>
-            XP fires to selected skills when you log sessions for this course.
-          </div>
-        </div>
-      )}
-
-      {/* Modules */}
+      {/* ── Modules ── */}
       <div>
-        <div className="crt-field-label">
-          MODULES
-          <span style={{ opacity: 0.5, marginLeft: 8, fontWeight: 'normal', textTransform: 'none', letterSpacing: 0 }}>
-            optional — progress = completed / total
-          </span>
-        </div>
-        <div style={{ display: 'grid', gap: 5 }}>
-          {modules.map((mod, i) => (
-            <div key={i} style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
-              <span style={{ color: 'hsl(var(--text-dim))', fontSize: 9, width: 16, textAlign: 'right', flexShrink: 0 }}>
-                {i + 1}.
-              </span>
-              <input
-                className="crt-input"
-                style={{ flex: 1 }}
-                placeholder={`Module ${i + 1}...`}
-                value={mod}
-                onChange={e => updateModule(i, e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addModule(); } }}
-              />
-              {modules.length > 1 && (
-                <button
-                  className="topbar-btn"
-                  style={{ padding: '2px 7px', fontSize: 12, color: 'hsl(var(--text-dim))' }}
-                  onClick={() => removeModule(i)}
-                >
-                  ×
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
+        <div className="crt-field-label">MODULES <span style={{ opacity: 0.5 }}>(optional — add top-level sections)</span></div>
+        {modules.map((mod, i) => (
+          <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+            <input
+              className="crt-input"
+              style={{ flex: 1 }}
+              placeholder={`Module ${i + 1} name...`}
+              value={mod}
+              onChange={e => updateModule(i, e.target.value)}
+            />
+            {modules.length > 1 && (
+              <button
+                onClick={() => removeModule(i)}
+                style={{ background: 'transparent', border: '1px solid rgba(153,104,0,0.4)', color: 'hsl(var(--text-dim))', fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, padding: '0 8px', cursor: 'pointer' }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = '#ff4400'; e.currentTarget.style.color = '#ff4400'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(153,104,0,0.4)'; e.currentTarget.style.color = 'hsl(var(--text-dim))'; }}
+              >×</button>
+            )}
+          </div>
+        ))}
         <button
-          className="topbar-btn"
-          style={{ marginTop: 6, fontSize: 10, color: 'hsl(var(--text-dim))' }}
           onClick={addModule}
-        >
-          + ADD MODULE
-        </button>
+          style={{ background: 'transparent', border: 'none', color: 'hsl(var(--accent-dim))', fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, cursor: 'pointer', padding: 0, letterSpacing: 1 }}
+          onMouseEnter={e => e.currentTarget.style.color = 'hsl(var(--accent))'}
+          onMouseLeave={e => e.currentTarget.style.color = 'hsl(var(--accent-dim))'}
+        >+ ADD MODULE</button>
       </div>
+
+      {/* ── Linked references (optional) ── */}
+      <LinkedIdsInput
+        label="LINKED TOOLS (optional)"
+        tableName="tools"
+        nameField="name"
+        subField="type"
+        selectedIds={linkedToolIds}
+        onChange={setLinkedToolIds}
+      />
+      <LinkedIdsInput
+        label="LINKED AUGMENTS (optional)"
+        tableName="augments"
+        nameField="name"
+        subField="category"
+        selectedIds={linkedAugmentIds}
+        onChange={setLinkedAugmentIds}
+      />
+      <LinkedIdsInput
+        label="LINKED MEDIA (optional)"
+        tableName="media"
+        nameField="title"
+        subField="type"
+        selectedIds={linkedMediaIds}
+        onChange={setLinkedMediaIds}
+      />
 
       {/* Checkboxes */}
       <div style={{ display: 'flex', gap: 20 }}>
         {([
           [certEarned, () => setCertEarned(!certEarned), 'CERTIFICATE EARNED'],
+          [isOngoing,  () => setIsOngoing(!isOngoing),    'ONGOING COURSE (no finish XP)'],
           [isLegacy,   () => setIsLegacy(!isLegacy),     'LEGACY ENTRY'],
         ] as [boolean, () => void, string][]).map(([val, toggle, label]) => (
           <div
