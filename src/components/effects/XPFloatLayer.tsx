@@ -1,3 +1,6 @@
+// ============================================================
+// src/effects/XPFloatLayer.tsx
+// ============================================================
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -19,8 +22,9 @@ export const triggerXPFloat = (
   multiplier?: number,
   large?: boolean
 ) => {
-  const total = multiplier ? Math.round(amount * multiplier) : amount;
-  const text = multiplier && multiplier !== 1
+  if (amount <= 0) return;
+  const total = multiplier && multiplier !== 1 ? Math.round(amount * multiplier) : amount;
+  const text  = multiplier && multiplier !== 1
     ? `+${amount} XP  ×${multiplier}  =  +${total} XP`
     : `+${total} XP`;
 
@@ -58,16 +62,30 @@ const XPFloatLayer = () => {
       {floats.map(f => (
         <div
           key={f.id}
-          className={`xp-float ${f.large ? 'xp-float-large' : ''}`}
           style={{
+            position: 'fixed',
             left: f.x,
             top: f.y,
             transform: 'translateX(-50%)',
+            fontFamily: "'VT323', monospace",
+            fontSize: f.large ? 22 : 16,
+            color: 'hsl(var(--accent))',
+            textShadow: '0 0 8px hsla(var(--accent-glow) / 0.8), 0 0 16px hsla(var(--accent-glow) / 0.4)',
+            pointerEvents: 'none',
+            zIndex: 99999,
+            whiteSpace: 'nowrap',
+            animation: `xpFloat ${f.large ? 1.8 : 1.4}s ease-out forwards`,
           }}
         >
           {f.text}
         </div>
       ))}
+      <style>{`
+        @keyframes xpFloat {
+          0%   { opacity: 1; transform: translateX(-50%) translateY(0); }
+          100% { opacity: 0; transform: translateX(-50%) translateY(-52px); }
+        }
+      `}</style>
     </>,
     document.body
   );

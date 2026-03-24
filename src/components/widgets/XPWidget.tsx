@@ -21,46 +21,30 @@ const XPWidget = ({ onClose, onFullscreen, isFullscreen }: WidgetProps) => {
 
   // Fetch recent XP log entries
   const { data: recentXP } = useQuery({
-    queryKey: ['xp-recent', user?.id],
+    queryKey: ['xp-recent'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('xp_log')
-        .select('amount, source, notes, created_at')
-        .eq('user_id', user!.id)
-        .eq('tier', 'master')
-        .order('created_at', { ascending: false })
-        .limit(5);
-      if (error) throw error;
-      return data ?? [];
+      const db  = await import('@/lib/db').then(m => m.getDB());
+      const res = await db.query<{ amount: number; source: string; notes: string | null; logged_at: string }>(
+        `SELECT x.amount, x.source, COALESCE(x.notes, s.skill_name) as notes, x.logged_at
+         FROM xp_log x
+         LEFT JOIN sessions s ON s.id = x.source_id
+         WHERE x.tier = 'master'
+         ORDER BY x.logged_at DESC LIMIT 5;`
+      );
+      return res.rows;
     },
-    enabled: !!user?.id,
   });
 
-  // Fetch active weekly challenge
-  const { data: challenge } = useQuery({
-    queryKey: ['weekly-challenge', user?.id],
-    queryFn: async () => {
-      const monday = new Date();
-      monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
-      const weekStart = monday.toISOString().slice(0, 10);
-      const { data } = await supabase
-        .from('weekly_challenges')
-        .select('*')
-        .eq('user_id', user!.id)
-        .eq('week_start', weekStart)
-        .maybeSingle();
-      return data;
-    },
-    enabled: !!user?.id,
-  });
+  // Weekly challenge — placeholder until challenges system is built
+  const challenge = null;
 
   const level      = op?.level      ?? 1;
-  const title      = op?.title      ?? 'INITIALISING';
+  const title      = op?.levelTitle  ?? 'INITIALISING';
   const xpInLevel  = op?.xpInLevel  ?? 0;
   const xpForLevel = op?.xpForLevel ?? 500;
-  const totalXP    = op?.totalXP    ?? 0;
+  const totalXP    = op?.totalXp    ?? 0;
   const streak     = op?.streak     ?? 0;
-  const multiplier = op?.multiplier ?? 1.0;
+  const multiplier = streak >= 30 ? 3.0 : streak >= 14 ? 2.0 : streak >= 7 ? 1.5 : 1.0;
   const shields    = op?.shields    ?? 0;
   const streakTier = getStreakTier(streak);
   const streakLabel = STREAK_LABELS[streakTier];

@@ -96,8 +96,7 @@ export default function ToolDetailDrawer({ toolId, onClose }: Props) {
         WHERE id = '${toolId}';`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tool', toolId] });
-      queryClient.invalidateQueries({ queryKey: ['tools'] });
+      queryClient.invalidateQueries();
       setEditing(false);
       toast({ title: '✓ TOOL UPDATED' });
     },
@@ -109,8 +108,7 @@ export default function ToolDetailDrawer({ toolId, onClose }: Props) {
       await db.exec(`UPDATE tools SET active = ${active} WHERE id = '${toolId}';`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tool', toolId] });
-      queryClient.invalidateQueries({ queryKey: ['tools'] });
+      queryClient.invalidateQueries();
     },
   });
 
@@ -171,8 +169,7 @@ export default function ToolDetailDrawer({ toolId, onClose }: Props) {
           <span style={{ fontSize: 10, color: dim, flexShrink: 0 }}>{xpPct}%</span>
         </div>
         <div style={{ fontSize: 9, color: adim }}>
-          {tool.xp.toLocaleString()} toolXP
-          {toolProgress && <span style={{ marginLeft: 10, color: dim }}>Overall Tool LVL {toolProgress.level}</span>}
+          {Number(tool.xp).toLocaleString()} / {xpForLevel.toLocaleString()} XP to LVL {level + 1}
         </div>
       </div>
 

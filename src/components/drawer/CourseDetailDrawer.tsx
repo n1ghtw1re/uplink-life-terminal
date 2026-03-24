@@ -466,9 +466,7 @@ export default function CourseDetailDrawer({ courseId, onClose }: Props) {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['course-sections', courseId] });
-      queryClient.invalidateQueries({ queryKey: ['course', courseId] });
-      queryClient.invalidateQueries({ queryKey: ['courses-all'] });
+      queryClient.invalidateQueries();
     },
   });
 
@@ -507,14 +505,10 @@ export default function CourseDetailDrawer({ courseId, onClose }: Props) {
         s.id === section.id ? { ...s, completed_at: completedAt } : s
       );
       await updateProgress(updatedSections);
-      queryClient.invalidateQueries({ queryKey: ['stats'] });
-      queryClient.invalidateQueries({ queryKey: ['operator'] });
-      queryClient.invalidateQueries({ queryKey: ['xp-recent'] });
+      queryClient.invalidateQueries();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['course-sections', courseId] });
-      queryClient.invalidateQueries({ queryKey: ['course', courseId] });
-      queryClient.invalidateQueries({ queryKey: ['courses-all'] });
+      queryClient.invalidateQueries();
     },
   });
 
@@ -608,9 +602,7 @@ export default function CourseDetailDrawer({ courseId, onClose }: Props) {
       );
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['course', courseId] });
-      queryClient.invalidateQueries({ queryKey: ['courses'] });
-      queryClient.invalidateQueries({ queryKey: ['courses-all'] });
+      queryClient.invalidateQueries();
       setEditing(false);
     },
   });
@@ -622,8 +614,7 @@ export default function CourseDetailDrawer({ courseId, onClose }: Props) {
       await db.exec(`DELETE FROM courses WHERE id = '${courseId}'`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['courses'] });
-      queryClient.invalidateQueries({ queryKey: ['courses-all'] });
+      queryClient.invalidateQueries();
       onClose?.();
     },
   });

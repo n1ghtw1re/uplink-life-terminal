@@ -31,52 +31,69 @@ interface Props {
 export default function AugmentsWidget({ onClose, onFullscreen, isFullscreen, onOpenAugments, onAugmentClick }: Props) {
   const { data: augments, isLoading } = useAugments();
   const [showAdd, setShowAdd]         = useState(false);
-  const [filter, setFilter]           = useState<FilterKey>('active');
+  const [filter, setFilter]         = useState<FilterKey>(() => (localStorage.getItem('widget-augments-filter') as FilterKey) || 'active');
+  const [search, setSearch]         = useState('');
+  const setFilterPersist = (f: FilterKey) => { setFilter(f); localStorage.setItem('widget-augments-filter', f); };
 
   const { data: sessionCounts = {} } = useQuery({
     queryKey: ['augment-session-counts'],
+    staleTime: 0,
     queryFn: async () => {
       const db  = await getDB();
       const res = await db.query<{ augment_id: string; count: string }>(
-        `SELECT unnest(augment_ids::text[]) as augment_id, COUNT(*) as count FROM sessions WHERE augment_ids != '[]' GROUP BY 1;`
+        `SELECT aug_id, COUNT(*) as count
+         FROM (
+           SELECT jsonb_array_elements_text(augment_ids::jsonb) as aug_id FROM sessions WHERE augment_ids::text != '[]'
+         ) t GROUP BY aug_id;`
       );
-      return Object.fromEntries(res.rows.map(r => [r.augment_id, Number(r.count)]));
+      return Object.fromEntries(res.rows.map(r => [(r as any).aug_id ?? (r as any).augment_id, Number(r.count)]));
     },
   });
 
   const { data: lastSessions = {} } = useQuery({
     queryKey: ['augment-last-session'],
+    staleTime: 0,
     queryFn: async () => {
       const db  = await getDB();
       const res = await db.query<{ augment_id: string; last: string }>(
-        `SELECT augment_ids::text as augment_id, MAX(logged_at) as last FROM sessions WHERE augment_ids != '[]' GROUP BY 1;`
+        `SELECT aug_id, MAX(logged_at) as last
+         FROM (
+           SELECT jsonb_array_elements_text(augment_ids::jsonb) as aug_id, logged_at FROM sessions WHERE augment_ids::text != '[]'
+         ) t GROUP BY aug_id;`
       );
-      return Object.fromEntries(res.rows.map(r => [r.augment_id, r.last]));
+      return Object.fromEntries(res.rows.map(r => [(r as any).aug_id ?? (r as any).augment_id, r.last]));
     },
   });
 
   const displayAugments = useMemo(() => {
+    const searchFn = (name: string) => !search.trim() || name.toLowerCase().includes(search.toLowerCase());
     const all = augments ?? [];
     switch (filter) {
       case 'active':
-        return all.filter(a => a.active).sort((a, b) => b.level !== a.level ? b.level - a.level : b.xp - a.xp).slice(0, 8);
+        return all.filter(a => a.active && searchFn(a.name)).sort((a, b) => b.level !== a.level ? b.level - a.level : b.xp - a.xp).slice(0, 8);
       case 'recent':
-        return all.filter(a => a.active && lastSessions[a.id]).sort((a, b) => (lastSessions[b.id] ?? '').localeCompare(lastSessions[a.id] ?? '')).slice(0, 8);
+        return all.filter(a => a.active && lastSessions[a.id] && searchFn(a.name)).sort((a, b) => String(lastSessions[b.id] ?? '').localeCompare(String(lastSessions[a.id] ?? ''))).slice(0, 8);
       case 'most_used':
-        return all.filter(a => a.active && (sessionCounts[a.id] ?? 0) > 0).sort((a, b) => (sessionCounts[b.id] ?? 0) - (sessionCounts[a.id] ?? 0)).slice(0, 8);
+        return all.filter(a => a.active && (sessionCounts[a.id] ?? 0) > 0 && searchFn(a.name)).sort((a, b) => (sessionCounts[b.id] ?? 0) - (sessionCounts[a.id] ?? 0)).slice(0, 8);
       case 'new':
-        return all.filter(a => a.active && !sessionCounts[a.id]).sort((a, b) => a.name.localeCompare(b.name)).slice(0, 8);
+        return all.filter(a => a.active && !sessionCounts[a.id] && searchFn(a.name)).sort((a, b) => a.name.localeCompare(b.name)).slice(0, 8);
       default: return [];
     }
-  }, [augments, filter, sessionCounts, lastSessions]);
+  }, [augments, filter, sessionCounts, lastSessions, search]);
 
   return (
     <WidgetWrapper title="AUGMENTS" onClose={onClose} onFullscreen={onFullscreen} isFullscreen={isFullscreen}>
 
       {/* Filter tabs */}
+      <div style={{ position: 'relative', marginBottom: 6 }}>
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search augments..."
+          style={{ width: '100%', padding: '3px 8px 3px 20px', fontSize: 9, background: 'hsl(var(--bg-tertiary))', border: `1px solid ${search ? 'hsl(var(--accent))' : 'hsl(var(--accent-dim))'}`, color: 'hsl(var(--accent))', fontFamily: "'IBM Plex Mono', monospace", outline: 'none', boxSizing: 'border-box' as const }} />
+        <span style={{ position: 'absolute', left: 5, top: '50%', transform: 'translateY(-50%)', fontSize: 9, color: 'hsl(var(--accent-dim))', pointerEvents: 'none' }}>⌕</span>
+        {search && <span onClick={() => setSearch('')} style={{ position: 'absolute', right: 5, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: 'hsl(var(--accent-dim))', cursor: 'pointer' }}>×</span>}
+      </div>
       <div style={{ display: 'flex', gap: 4, marginBottom: 10, flexWrap: 'wrap' }}>
         {FILTER_OPTIONS.map(f => (
-          <button key={f.key} onClick={() => setFilter(f.key)} style={{
+          <button key={f.key} onClick={() => setFilterPersist(f.key)} style={{
             padding: '2px 8px', fontSize: 9, fontFamily: mono, cursor: 'pointer', letterSpacing: 1,
             border: `1px solid ${filter === f.key ? acc : adim}`,
             background: filter === f.key ? 'rgba(255,176,0,0.1)' : 'transparent',
@@ -97,8 +114,8 @@ export default function AugmentsWidget({ onClose, onFullscreen, isFullscreen, on
       ) : (
         <div>
           {displayAugments.map(aug => {
-            const { level, xpInLevel, xpForLevel } = getLevelFromXP(aug.xp);
-            const pct   = xpForLevel > 0 ? Math.round((xpInLevel / xpForLevel) * 100) : 100;
+            const { level, xpInLevel, xpForLevel } = getLevelFromXP(Number(aug.xp) || 0);
+            const pct   = xpForLevel > 0 ? Math.round((xpInLevel / xpForLevel) * 100) : 0;
             const count = sessionCounts[aug.id];
             const last  = lastSessions[aug.id];
             return (

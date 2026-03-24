@@ -2,8 +2,6 @@
 // src/components/modals/AddCourseModal.tsx
 // ============================================================
 import { useState, useEffect } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { StatKey, STAT_META } from '@/types';
 import { toast } from '@/hooks/use-toast';
@@ -120,7 +118,6 @@ function LinkedIdsInput({ label, tableName, nameField, subField, selectedIds, on
 }
 
 export default function AddCourseModal({ onClose }: Props) {
-  const { user } = useAuth();
   const queryClient = useQueryClient();
 
   const [name, setName]         = useState('');

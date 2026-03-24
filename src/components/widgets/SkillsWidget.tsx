@@ -38,11 +38,14 @@ export default function SkillsWidget({ onClose, onFullscreen, isFullscreen, onOp
   const { user } = useAuth();
   const { data: skills, isLoading } = useSkills(user?.id);
   const [showAdd, setShowAdd]     = useState(false);
-  const [filter, setFilter]       = useState<FilterKey>('active');
+  const [filter, setFilter]       = useState<FilterKey>(() => (localStorage.getItem('widget-skills-filter') as FilterKey) || 'active');
+  const [search, setSearch]       = useState('');
+  const setFilterPersist = (f: FilterKey) => { setFilter(f); localStorage.setItem('widget-skills-filter', f); };
 
   // ── Session counts per skill (for MOST USED) ─────────────
   const { data: sessionCounts = {} } = useQuery({
     queryKey: ['skill-session-counts'],
+    staleTime: 0,
     queryFn: async () => {
       const db  = await getDB();
       const res = await db.query<{ skill_id: string; count: string }>(
@@ -55,6 +58,7 @@ export default function SkillsWidget({ onClose, onFullscreen, isFullscreen, onOp
   // ── Last session date per skill (for RECENT) ─────────────
   const { data: lastSessions = {} } = useQuery({
     queryKey: ['skill-last-session'],
+    staleTime: 0,
     queryFn: async () => {
       const db  = await getDB();
       const res = await db.query<{ skill_id: string; last: string }>(
@@ -66,7 +70,8 @@ export default function SkillsWidget({ onClose, onFullscreen, isFullscreen, onOp
 
   // ── Filtered + sorted list ────────────────────────────────
   const displaySkills = useMemo(() => {
-    const all = skills ?? [];
+    let all = (skills ?? []);
+    if (search.trim()) all = all.filter(s => s.name.toLowerCase().includes(search.toLowerCase()));
 
     switch (filter) {
       case 'active':
@@ -83,8 +88,8 @@ export default function SkillsWidget({ onClose, onFullscreen, isFullscreen, onOp
         return all
           .filter(s => (s as any).active !== false && lastSessions[s.id])
           .sort((a, b) => {
-            const da = lastSessions[a.id] ?? '';
-            const db = lastSessions[b.id] ?? '';
+            const da = String(lastSessions[a.id] ?? '');
+            const db = String(lastSessions[b.id] ?? '');
             return db.localeCompare(da);
           })
           .slice(0, 8);
@@ -92,7 +97,7 @@ export default function SkillsWidget({ onClose, onFullscreen, isFullscreen, onOp
       case 'most_used':
         return all
           .filter(s => (s as any).active !== false && (sessionCounts[s.id] ?? 0) > 0)
-          .sort((a, b) => (sessionCounts[b.id] ?? 0) - (sessionCounts[a.id] ?? 0))
+          .sort((a, b) => Number(sessionCounts[b.id] ?? 0) - Number(sessionCounts[a.id] ?? 0))
           .slice(0, 8);
 
       case 'new':
@@ -104,15 +109,22 @@ export default function SkillsWidget({ onClose, onFullscreen, isFullscreen, onOp
       default:
         return [];
     }
-  }, [skills, filter, sessionCounts, lastSessions]);
+  }, [skills, filter, sessionCounts, lastSessions, search]);
 
   return (
     <WidgetWrapper title="SKILLS" onClose={onClose} onFullscreen={onFullscreen} isFullscreen={isFullscreen}>
 
       {/* Filter tabs */}
+      {/* Search */}
+      <div style={{ position: 'relative', marginBottom: 6 }}>
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search skills..."
+          style={{ width: '100%', padding: '3px 8px 3px 20px', fontSize: 9, background: 'hsl(var(--bg-tertiary))', border: `1px solid ${search ? acc : adim}`, color: acc, fontFamily: mono, outline: 'none', boxSizing: 'border-box' as const }} />
+        <span style={{ position: 'absolute', left: 5, top: '50%', transform: 'translateY(-50%)', fontSize: 9, color: adim, pointerEvents: 'none' }}>⌕</span>
+        {search && <span onClick={() => setSearch('')} style={{ position: 'absolute', right: 5, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: adim, cursor: 'pointer' }}>×</span>}
+      </div>
       <div style={{ display: 'flex', gap: 4, marginBottom: 10, flexWrap: 'wrap' }}>
         {FILTER_OPTIONS.map(f => (
-          <button key={f.key} onClick={() => setFilter(f.key)} style={{
+          <button key={f.key} onClick={() => setFilterPersist(f.key)} style={{
             padding: '2px 8px', fontSize: 9, fontFamily: mono,
             cursor: 'pointer', letterSpacing: 1,
             border: `1px solid ${filter === f.key ? acc : adim}`,

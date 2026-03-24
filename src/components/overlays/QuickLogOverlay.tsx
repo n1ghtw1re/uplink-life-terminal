@@ -1,407 +1,767 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import { useOperator } from '@/hooks/useOperator';
-import { useSkills, SkillOption } from '@/hooks/useSkills';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
-import { logSession } from '@/services/sessionService';
-import { StatKey, STAT_META, getStreakTier, STREAK_MULTIPLIERS } from '@/types';
-import { toast } from '@/hooks/use-toast';
+// src/components/overlays/QuickLogOverlay.tsx
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { getDB } from '@/lib/db';
+import { useSkills } from '@/hooks/useSkills';
+import { previewXP, awardSessionXP, awardBonusXP } from '@/services/xpService';
 import { triggerXPFloat } from '@/components/effects/XPFloatLayer';
+import { triggerLevelUp } from '@/components/effects/LevelUpAnimation';
+import { STAT_META, StatKey } from '@/types';
+import { toast } from '@/hooks/use-toast';
 
-const DURATION_PRESETS = [
-  { label: '15m', value: 15 },
-  { label: '30m', value: 30 },
-  { label: '45m', value: 45 },
-  { label: '1h', value: 60 },
-  { label: '2h', value: 120 },
-];
+// ── Constants ─────────────────────────────────────────────────
+const mono  = "'IBM Plex Mono', monospace";
+const vt    = "'VT323', monospace";
+const acc   = 'hsl(var(--accent))';
+const adim  = 'hsl(var(--accent-dim))';
+const dim   = 'hsl(var(--text-dim))';
+const bgP   = 'hsl(var(--bg-primary))';
+const bgS   = 'hsl(var(--bg-secondary))';
+const bgT   = 'hsl(var(--bg-tertiary))';
+const green = '#44ff88';
+const cyan  = '#00cfff';
+const purple= '#cc88ff';
+const teal  = '#44ffaa';
 
-const LEGACY_RATE = 0.5;
-const BASE_XP_PER_HOUR = 100;
+const DURATION_PRESETS = [15, 30, 45, 60, 90, 120];
+const STAT_KEYS: StatKey[] = ['body','wire','mind','cool','grit','flow','ghost'];
 
-function fuzzyMatch(query: string, target: string): boolean {
-  const q = query.toLowerCase();
-  const t = target.toLowerCase();
-  let qi = 0;
-  for (let ti = 0; ti < t.length && qi < q.length; ti++) {
-    if (t[ti] === q[qi]) qi++;
-  }
-  return qi === q.length;
+// ── Types ─────────────────────────────────────────────────────
+interface TaggedTool     { id: string; name: string; type: string; }
+interface TaggedAugment  { id: string; name: string; category: string; }
+interface TaggedMedia    { id: string; title: string; type: string; status: string; pages?: number; page_current?: number; }
+interface TaggedCourse   { id: string; name: string; sections: { id: string; title: string; completed_at: string | null }[]; }
+interface TaggedProject  { id: string; name: string; objectives: { id: string; title: string; completed_at: string | null }[]; }
+
+// ── Small helpers ─────────────────────────────────────────────
+function Label({ children }: { children: React.ReactNode }) {
+  return <div style={{ fontSize: 9, color: adim, letterSpacing: 2, marginBottom: 5, fontFamily: mono }}>{children}</div>;
 }
 
-interface QuickLogOverlayProps {
-  onSubmit?: (xp: number) => void;
+function SectionDivider({ label }: { label: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '14px 0 8px', fontFamily: mono }}>
+      <div style={{ height: 1, flex: 1, background: 'rgba(153,104,0,0.3)' }} />
+      <span style={{ fontSize: 9, color: adim, letterSpacing: 2 }}>{label}</span>
+      <div style={{ height: 1, flex: 1, background: 'rgba(153,104,0,0.3)' }} />
+    </div>
+  );
 }
 
-const QuickLogOverlay = ({ onSubmit }: QuickLogOverlayProps) => {
-  const { user } = useAuth();
-  const { data: op } = useOperator(user?.id);
-  const { data: skills } = useSkills(user?.id);
-  const queryClient = useQueryClient();
-
-  const { data: activeCourses } = useQuery({
-    queryKey: ['courses-active', user?.id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('courses')
-        .select('id, name')
-        .eq('user_id', user!.id)
-        .eq('status', 'ACTIVE');
-      return data ?? [];
-    },
-    enabled: !!user?.id,
-  });
-
-  const logMutation = useMutation({
-    mutationFn: logSession,
-    onSuccess: (session) => {
-      queryClient.invalidateQueries({ queryKey: ['operator', user?.id] });
-      queryClient.invalidateQueries({ queryKey: ['stats', user?.id] });
-      queryClient.invalidateQueries({ queryKey: ['xp-recent', user?.id] });
-      queryClient.invalidateQueries({ queryKey: ['xp-log-by-stat'] });
-      queryClient.invalidateQueries({ queryKey: ['checkins-heatmap', user?.id] });
-      queryClient.invalidateQueries({ queryKey: ['skills', user?.id] });
-      if (selectedSkill?.id) {
-        queryClient.invalidateQueries({ queryKey: ['skill', selectedSkill.id] });
-        queryClient.invalidateQueries({ queryKey: ['skill-sessions', selectedSkill.id] });
-      }
-      onSubmit?.(session.skillXpAwarded + session.masterXpAwarded);
-    },
-  });
-
+// ── Autosuggest search input ──────────────────────────────────
+function AutoSearch<T extends { id: string; name: string; sub?: string }>({
+  placeholder, onSelect, items, selectedIds = [], color = acc,
+}: {
+  placeholder: string;
+  onSelect: (item: T) => void;
+  items: T[];
+  selectedIds?: string[];
+  color?: string;
+}) {
   const [query, setQuery] = useState('');
-  const [selectedSkill, setSelectedSkill] = useState<SkillOption | null>(null);
-  const [showDropdown, setShowDropdown] = useState(false);
-  const [highlightIdx, setHighlightIdx] = useState(0);
-  const [duration, setDuration] = useState(60);
-  const [activePreset, setActivePreset] = useState<number | null>(60);
-  const [split, setSplit] = useState<number[]>([50, 50]);
-  const [notes, setNotes] = useState('');
-  const [tagCourseId, setTagCourseId] = useState('');
-  const [isLegacy, setIsLegacy] = useState(false);
-  const [logYesterday, setLogYesterday] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [open, setOpen]   = useState(false);
+  const ref               = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    setTimeout(() => inputRef.current?.focus(), 100);
-  }, []);
-
-  const filtered = query.length > 0
-    ? (skills ?? []).filter(s => fuzzyMatch(query, s.name)).slice(0, 6)
-    : (skills ?? []).slice(0, 6);
-
-  const selectSkill = useCallback((skill: SkillOption) => {
-    setSelectedSkill(skill);
-    setQuery(skill.name);
-    setShowDropdown(false);
-    setHighlightIdx(0);
-    if (skill.statKeys.length === 2) {
-      setSplit(skill.defaultSplit?.length === 2 ? skill.defaultSplit : [50, 50]);
-    }
-  }, []);
-
-  const handleInputKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      e.stopPropagation();
-      if (showDropdown) { setShowDropdown(false); }
-      else { setQuery(''); setSelectedSkill(null); }
-      return;
-    }
-    if (!showDropdown) return;
-    if (e.key === 'ArrowDown') { e.preventDefault(); setHighlightIdx(i => Math.min(i + 1, filtered.length - 1)); }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); setHighlightIdx(i => Math.max(i - 1, 0)); }
-    else if (e.key === 'Enter' && filtered[highlightIdx]) { e.preventDefault(); selectSkill(filtered[highlightIdx]); }
-  };
-
-  const handleSplitChange = (idx: number, val: number) => {
-    const clamped = Math.max(10, Math.min(90, val));
-    const newSplit = [...split];
-    newSplit[idx] = clamped;
-    newSplit[1 - idx] = 100 - clamped;
-    setSplit(newSplit);
-  };
-
-  // XP preview — mirrors xpService logic
-  const streak = op?.streak ?? 0;
-  const streakTier = getStreakTier(streak);
-  const mult = isLegacy ? 1.0 : (STREAK_MULTIPLIERS[streakTier] ?? 1.0);
-  const legacyFactor = isLegacy ? LEGACY_RATE : 1.0;
-  const baseAmount = Math.floor((duration / 60) * BASE_XP_PER_HOUR);
-  const skillXp = Math.round(baseAmount * mult * legacyFactor);
-  const statTotalXp = Math.round(baseAmount * 0.6 * mult * legacyFactor);
-  const masterXp = Math.round(baseAmount * 0.3 * mult * legacyFactor);
-  const hasDualStat = selectedSkill && selectedSkill.statKeys.length === 2;
-  const statXps = hasDualStat
-    ? [Math.round(statTotalXp * split[0] / 100), Math.round(statTotalXp * split[1] / 100)]
-    : [statTotalXp];
-  const totalXp = skillXp + statTotalXp + masterXp;
-
-  const handleSubmit = async (e: React.MouseEvent<HTMLButtonElement>) => {
-    if (!selectedSkill || !user) return;
-
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top - 10;
-    triggerXPFloat(cx, cy, skillXp, mult > 1 ? mult : undefined);
-    setTimeout(() => triggerXPFloat(cx - 50, cy, statTotalXp, mult > 1 ? mult : undefined), 200);
-    setTimeout(() => triggerXPFloat(cx + 50, cy, masterXp, mult > 1 ? mult : undefined), 400);
-
-    const statSplit = selectedSkill.statKeys.length === 2
-      ? [
-          { stat: selectedSkill.statKeys[0], percent: split[0] },
-          { stat: selectedSkill.statKeys[1], percent: split[1] },
-        ]
-      : [{ stat: selectedSkill.statKeys[0], percent: 100 }];
-
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-
-    logMutation.mutate({
-      userId: user.id,
-      skillId: selectedSkill.id,
-      skillName: selectedSkill.name,
-      durationMinutes: duration,
-      statSplit,
-      notes: notes || undefined,
-      isLegacy,
-      loggedAt: logYesterday ? yesterday : undefined,
-    }, {
-      onSuccess: () => {
-        toast({
-          title: '✓ SESSION LOGGED',
-          description: `${selectedSkill.name}  ${duration}min  +${totalXp} XP${isLegacy ? ' [LEGACY]' : ` [${streakTier.replace('_', ' ')} ${mult}×]`}`,
-        });
-      },
-      onError: (err) => {
-        toast({ title: 'ERROR', description: String(err) });
-      },
-    });
-  };
-
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = `${yesterday.getFullYear()}.${String(yesterday.getMonth()+1).padStart(2,'0')}.${String(yesterday.getDate()).padStart(2,'0')}`;
+  const filtered = useMemo(() => {
+    if (!query.trim()) return items.slice(0, 12);
+    return items.filter(i => i.name.toLowerCase().includes(query.toLowerCase())).slice(0, 12);
+  }, [query, items]);
 
   return (
-    <div style={{ fontSize: 11 }}>
-      <div style={{ display: 'flex', gap: 16 }}>
-        {/* LEFT COLUMN */}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          {/* SKILL */}
-          <div style={{ marginBottom: 10, position: 'relative' }}>
-            <div style={{ color: 'hsl(var(--text-dim))', marginBottom: 4 }}>SKILL:</div>
-            <input
-              ref={inputRef}
-              className="crt-input"
-              style={{ width: '100%' }}
-              placeholder={skills?.length === 0 ? 'no skills yet — add skills first' : 'start typing...'}
-              value={query}
-              onChange={e => {
-                setQuery(e.target.value);
-                setShowDropdown(true);
-                setHighlightIdx(0);
-                if (!e.target.value) setSelectedSkill(null);
-              }}
-              onFocus={() => { if (query.length > 0) setShowDropdown(true); }}
-              onKeyDown={handleInputKeyDown}
-            />
-            {showDropdown && filtered.length > 0 && (
-              <div className="ql-dropdown">
-                {filtered.map((skill, i) => (
-                  <div
-                    key={skill.id}
-                    className={`ql-dropdown-item ${i === highlightIdx ? 'ql-dropdown-item--active' : ''}`}
-                    onMouseEnter={() => setHighlightIdx(i)}
-                    onClick={() => selectSkill(skill)}
-                  >
-                    <span style={{ color: 'hsl(var(--accent))', marginRight: 8 }}>{skill.icon}</span>
-                    <span style={{ flex: 1 }}>{skill.name}</span>
-                    <span style={{ color: 'hsl(var(--text-dim))', fontSize: 10 }}>
-                      {skill.statKeys.map(k => k.toUpperCase()).join(' / ')}
-                    </span>
-                  </div>
-                ))}
+    <div ref={ref} style={{ position: 'relative' }}>
+      <input value={query} onChange={e => { setQuery(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        placeholder={placeholder}
+        style={{ width: '100%', padding: '6px 10px', fontSize: 10, background: bgS, border: `1px solid ${open ? color : adim}`, color: acc, fontFamily: mono, outline: 'none', boxSizing: 'border-box' as const }}
+      />
+      {open && filtered.length > 0 && (
+        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: bgS, border: `1px solid ${adim}`, zIndex: 200, maxHeight: 160, overflowY: 'auto' as const, boxShadow: '0 4px 12px rgba(0,0,0,0.5)' }}>
+          {filtered.map(item => {
+            const isSel = selectedIds.includes(item.id);
+            return (
+              <div key={item.id} onMouseDown={() => { onSelect(item); setQuery(''); setOpen(false); }}
+                style={{ padding: '6px 10px', fontSize: 10, cursor: 'pointer', color: isSel ? color : dim, background: isSel ? 'rgba(255,176,0,0.06)' : 'transparent', display: 'flex', justifyContent: 'space-between', fontFamily: mono, borderBottom: `1px solid rgba(153,104,0,0.15)` }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,176,0,0.08)'}
+                onMouseLeave={e => { e.currentTarget.style.background = isSel ? 'rgba(255,176,0,0.06)' : 'transparent'; }}>
+                <span>{item.name}</span>
+                {item.sub && <span style={{ fontSize: 9, opacity: 0.5 }}>{item.sub}</span>}
               </div>
-            )}
-          </div>
-
-          {/* DURATION */}
-          <div style={{ marginBottom: 10 }}>
-            <div style={{ color: 'hsl(var(--text-dim))', marginBottom: 4 }}>DURATION:</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-              {DURATION_PRESETS.map(p => (
-                <button
-                  key={p.value}
-                  className={`ql-preset-btn ${activePreset === p.value ? 'ql-preset-btn--active' : ''}`}
-                  onClick={() => { setDuration(p.value); setActivePreset(p.value); }}
-                >
-                  {p.label}
-                </button>
-              ))}
-              <span style={{ color: 'hsl(var(--text-dim))', margin: '0 4px' }}>or</span>
-              <input
-                className="crt-input ql-no-spinners"
-                style={{ width: 50, textAlign: 'center' }}
-                type="text"
-                inputMode="numeric"
-                value={duration}
-                onChange={e => {
-                  const v = e.target.value.replace(/\D/g, '');
-                  setDuration(Number(v) || 1);
-                  setActivePreset(null);
-                }}
-              />
-              <span style={{ color: 'hsl(var(--text-dim))' }}>min</span>
-            </div>
-          </div>
-
-          {/* STAT SPLIT */}
-          {hasDualStat && (
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ color: 'hsl(var(--text-dim))', marginBottom: 4 }}>STAT SPLIT:</div>
-              {selectedSkill.statKeys.map((statKey, idx) => (
-                <div key={statKey} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                  <span style={{ width: 60, fontSize: 10, color: 'hsl(var(--accent))' }}>
-                    {STAT_META[statKey]?.icon} {statKey.toUpperCase()}
-                  </span>
-                  <input
-                    type="range"
-                    className="ql-split-slider"
-                    min={10} max={90}
-                    value={split[idx]}
-                    onChange={e => handleSplitChange(idx, Number(e.target.value))}
-                    style={{ flex: 1 }}
-                  />
-                  <span style={{ width: 30, textAlign: 'right', fontSize: 10, color: 'hsl(var(--text-dim))' }}>
-                    {split[idx]}%
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* NOTES */}
-          <div style={{ marginBottom: 10 }}>
-            <div style={{ color: 'hsl(var(--text-dim))', marginBottom: 4 }}>NOTES:</div>
-            <input
-              className="crt-input"
-              style={{ width: '100%' }}
-              placeholder="notes for this session..."
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              maxLength={100}
-            />
-          </div>
-
-          {/* TAG TO */}
-          <div style={{ display: 'flex', gap: 8 }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ color: 'hsl(var(--text-dim))', marginBottom: 4 }}>TAG TO:</div>
-              <div className="crt-select-wrapper">
-                <select className="crt-select" value={tagCourseId} onChange={e => setTagCourseId(e.target.value)}>
-                  <option value="">course</option>
-                  {(activeCourses ?? []).map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ color: 'hsl(var(--text-dim))', marginBottom: 4 }}>&nbsp;</div>
-              <div className="crt-select-wrapper">
-                <select className="crt-select" disabled>
-                  <option>no active projects</option>
-                </select>
-              </div>
-            </div>
-          </div>
+            );
+          })}
         </div>
+      )}
+    </div>
+  );
+}
 
-        {/* DIVIDER */}
-        <div style={{ width: 1, background: '#261600', alignSelf: 'stretch', flexShrink: 0 }} />
+// ── Tag chip ──────────────────────────────────────────────────
+function Tag({ label, color, onRemove }: { label: string; color: string; onRemove: () => void }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 9, color, border: `1px solid ${color}`, padding: '2px 8px', fontFamily: mono, marginRight: 4, marginBottom: 4 }}>
+      {label}
+      <span onClick={onRemove} style={{ cursor: 'pointer', opacity: 0.6 }}
+        onMouseEnter={e => e.currentTarget.style.opacity = '1'}
+        onMouseLeave={e => e.currentTarget.style.opacity = '0.6'}>×</span>
+    </span>
+  );
+}
 
-        {/* RIGHT COLUMN */}
-        <div style={{ width: 240, flexShrink: 0, alignSelf: 'start', paddingLeft: 8 }}>
-          <div style={{ marginBottom: 10 }}>
-            <div style={{ color: 'hsl(var(--text-dim))', marginBottom: 6, fontSize: 10, letterSpacing: 1 }}>
-              ── OPTIONS ───────────
-            </div>
-            <label className="crt-checkbox" style={{ marginBottom: 6, display: 'flex' }}>
-              <span className="crt-checkbox-box" onClick={() => setIsLegacy(!isLegacy)}>{isLegacy ? '×' : ''}</span>
-              <span style={{ color: isLegacy ? 'hsl(var(--accent))' : 'hsl(var(--text-dim))' }}>LEGACY ENTRY</span>
-            </label>
-            <label className="crt-checkbox" style={{ display: 'flex' }}>
-              <span className="crt-checkbox-box" onClick={() => setLogYesterday(!logYesterday)}>{logYesterday ? '×' : ''}</span>
-              <span style={{ color: logYesterday ? 'hsl(var(--accent))' : 'hsl(var(--text-dim))' }}>LOG FOR YESTERDAY</span>
-            </label>
-            {logYesterday && (
-              <div style={{ color: 'hsl(var(--text-dim))', fontSize: 10, marginTop: 4, paddingLeft: 20 }}>
-                DATE: {yesterdayStr}
-              </div>
-            )}
+// ── Collapsible tag section ───────────────────────────────────
+function TagSection({ label, color, hasItems, children }: { label: string; color: string; hasItems: boolean; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ marginBottom: 6 }}>
+      <button onClick={() => setOpen(v => !v)} style={{
+        background: 'transparent', border: `1px solid ${hasItems ? color : adim}`,
+        color: hasItems ? color : adim, fontFamily: mono, fontSize: 9, cursor: 'pointer',
+        padding: '3px 10px', letterSpacing: 1, width: '100%', textAlign: 'left',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      }}>
+        <span>{hasItems ? '●' : '○'} {label}</span>
+        <span>{open ? '▴' : '▾'}</span>
+      </button>
+      {open && <div style={{ border: `1px solid rgba(153,104,0,0.3)`, borderTop: 'none', padding: '10px 12px', background: bgS }}>{children}</div>}
+    </div>
+  );
+}
+
+// ── XP Preview panel ──────────────────────────────────────────
+function XPPreview({ duration, statSplit, toolIds, augIds, isLegacy, toolNames, augNames }: {
+  duration: number; statSplit: { stat: string; percent: number }[];
+  toolIds: string[]; augIds: string[]; isLegacy: boolean;
+  toolNames: Record<string, string>; augNames: Record<string, string>;
+}) {
+  if (!duration || statSplit.length === 0) return null;
+  const p = previewXP({ durationMinutes: duration, statSplit, toolIds, augmentIds: augIds, isLegacy });
+  return (
+    <div style={{ background: bgT, border: `1px solid ${adim}`, padding: '10px 12px', fontFamily: mono }}>
+      <div style={{ fontSize: 9, color: adim, letterSpacing: 2, marginBottom: 8 }}>// XP PREVIEW</div>
+
+      {/* Main XP */}
+      <div style={{ marginBottom: toolIds.length > 0 || augIds.length > 0 ? 8 : 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+          <span style={{ fontSize: 9, color: adim }}>MAIN XP</span>
+          <span style={{ fontFamily: vt, fontSize: 16, color: acc }}>{p.skillXP + p.masterXP + p.statXP.reduce((a, s) => a + s.amount, 0)}</span>
+        </div>
+        <div style={{ paddingLeft: 8 }}>
+          <div style={{ fontSize: 9, color: dim, display: 'flex', justifyContent: 'space-between' }}>
+            <span>SKILL</span><span style={{ color: acc }}>+{p.skillXP}</span>
           </div>
-
-          <div style={{ borderTop: '1px solid hsl(var(--accent-dim))', paddingTop: 8 }}>
-            <div style={{ color: 'hsl(var(--text-dim))', marginBottom: 6, fontSize: 10, letterSpacing: 1 }}>
-              ── XP PREVIEW ────────
+          {p.statXP.map(s => (
+            <div key={s.stat} style={{ fontSize: 9, color: dim, display: 'flex', justifyContent: 'space-between' }}>
+              <span>{s.stat.toUpperCase()}</span><span style={{ color: acc }}>+{s.amount}</span>
             </div>
-            <div style={{ color: 'hsl(var(--accent))', fontSize: 10, lineHeight: 1.8 }}>
-              <div>SKILL{'  '}+{skillXp} XP{isLegacy && <span style={{ color: 'hsl(var(--text-dim))', marginLeft: 8 }}>[LEGACY]</span>}</div>
-              {selectedSkill ? (
-                hasDualStat ? (
-                  <>
-                    <div>{selectedSkill.statKeys[0].toUpperCase()}{'  '}+{statXps[0]} XP</div>
-                    <div>{selectedSkill.statKeys[1].toUpperCase()}{'  '}+{statXps[1]} XP</div>
-                  </>
-                ) : (
-                  <div>{selectedSkill.statKeys[0].toUpperCase()}{'  '}+{statXps[0]} XP</div>
-                )
-              ) : (
-                <div style={{ color: 'hsl(var(--text-dim))' }}>STAT{'  '}+{statTotalXp} XP</div>
-              )}
-              <div>MASTER{'  '}+{masterXp} XP</div>
-              <div style={{ borderTop: '1px solid #261600', marginTop: 6, paddingTop: 6, fontSize: 10 }}>
-                MULT: {mult.toFixed(1)}×
-                {isLegacy ? (
-                  <span className="multiplier-tag" style={{ opacity: 0.5 }}>LEGACY</span>
-                ) : mult >= 3 ? (
-                  <span className="multiplier-tag pulse-glow">LEGENDARY {mult}×</span>
-                ) : mult > 1 ? (
-                  <span className="multiplier-tag">{streakTier.replace('_', ' ')} {mult}×</span>
-                ) : null}
-              </div>
-              <div style={{ marginTop: 4 }}>
-                <span style={{ fontSize: 13, color: 'hsl(var(--accent-bright))' }}>TOTAL: </span>
-                <span className="font-display text-glow-bright" style={{ fontSize: 16, color: 'hsl(var(--accent-bright))' }}>
-                  +{totalXp} XP
-                </span>
-              </div>
-            </div>
+          ))}
+          <div style={{ fontSize: 9, color: dim, display: 'flex', justifyContent: 'space-between' }}>
+            <span>MASTER</span><span style={{ color: acc }}>+{p.masterXP}</span>
           </div>
         </div>
       </div>
 
-      {/* BUTTONS */}
-      <div style={{ borderTop: '1px solid hsl(var(--accent-dim))', paddingTop: 8, marginTop: 12, display: 'flex', gap: 8 }}>
-        <button
-          className="topbar-btn"
-          style={{ flex: 1, opacity: !selectedSkill ? 0.4 : 1 }}
-          disabled={!selectedSkill || logMutation.isPending}
-          onClick={handleSubmit}
-        >
-          {logMutation.isPending ? '>> LOGGING...' : '>> SUBMIT LOG'}
-        </button>
-        <button
-          className="topbar-btn"
-          style={{ flex: 1, color: 'hsl(var(--text-dim))' }}
-          onClick={() => toast({ title: 'FULL FORM — COMING SOON', description: 'Detailed session logging will be available in a future build.' })}
-        >
-          OPEN FULL FORM
-        </button>
+      {/* Tool XP */}
+      {toolIds.length > 0 && p.perToolXP > 0 && (
+        <div style={{ marginBottom: augIds.length > 0 ? 8 : 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+            <span style={{ fontSize: 9, color: adim }}>TOOL XP</span>
+            <span style={{ fontFamily: vt, fontSize: 16, color: cyan }}>{p.totalToolXP}</span>
+          </div>
+          <div style={{ paddingLeft: 8 }}>
+            {toolIds.map(id => (
+              <div key={id} style={{ fontSize: 9, color: dim, display: 'flex', justifyContent: 'space-between' }}>
+                <span>{(toolNames[id] ?? id).toUpperCase()}</span><span style={{ color: cyan }}>+{p.perToolXP}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Augment XP */}
+      {augIds.length > 0 && p.perAugmentXP > 0 && (
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+            <span style={{ fontSize: 9, color: adim }}>AUGMENT XP</span>
+            <span style={{ fontFamily: vt, fontSize: 16, color: purple }}>{p.totalAugmentXP}</span>
+          </div>
+          <div style={{ paddingLeft: 8 }}>
+            {augIds.map(id => (
+              <div key={id} style={{ fontSize: 9, color: dim, display: 'flex', justifyContent: 'space-between' }}>
+                <span>{(augNames[id] ?? id).toUpperCase()}</span><span style={{ color: purple }}>+{p.perAugmentXP}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {isLegacy && <div style={{ fontSize: 9, color: '#ffaa00', marginTop: 6, letterSpacing: 1 }}>⚑ LEGACY — 50% XP</div>}
+    </div>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────
+interface Props { open: boolean; onClose: () => void; }
+
+export default function QuickLogOverlay({ open, onClose }: Props) {
+  const queryClient = useQueryClient();
+
+  // Core
+  const [statFilter, setStatFilter]   = useState<StatKey | null>(null);
+  const [skillId, setSkillId]         = useState('');
+  const [skillName, setSkillName]     = useState('');
+  const [skillStatKeys, setSkillStatKeys] = useState<StatKey[]>([]);
+  const [skillDefaultSplit, setSkillDefaultSplit] = useState<number[]>([100]);
+  const [duration, setDuration]       = useState(60);
+  const [customDuration, setCustomDuration] = useState('');
+  const [useCustom, setUseCustom]     = useState(false);
+  const [statSplit, setStatSplit]     = useState<{ stat: StatKey; percent: number }[]>([]);
+  const [notes, setNotes]             = useState('');
+  const [isLegacy, setIsLegacy]       = useState(false);
+  const [logDate, setLogDate]         = useState('');
+  const [submitting, setSubmitting]   = useState(false);
+  const submitLock = React.useRef(false);
+
+  // Tagged
+  const [tools, setTools]         = useState<TaggedTool[]>([]);
+  const [augments, setAugments]   = useState<TaggedAugment[]>([]);
+  const [media, setMedia]         = useState<TaggedMedia | null>(null);
+  const [mediaPage, setMediaPage] = useState('');
+  const [mediaFinished, setMediaFinished] = useState(false);
+  const [course, setCourse]       = useState<TaggedCourse | null>(null);
+  const [completedSections, setCompletedSections] = useState<string[]>([]);
+  const [markCourseComplete, setMarkCourseComplete] = useState(false);
+  const [project, setProject]     = useState<TaggedProject | null>(null);
+  const [completedObjectives, setCompletedObjectives] = useState<string[]>([]);
+
+  // Tool/augment filter
+  const [toolTypeFilter, setToolTypeFilter]   = useState<string | null>(null);
+  const [augClusterFilter, setAugClusterFilter] = useState<string | null>(null);
+
+  // Data queries
+  const { data: allSkills = [] } = useSkills();
+  const { data: allTools = [] }  = useQuery({
+    queryKey: ['tools'],
+    queryFn: async () => {
+      const db = await getDB();
+      const r  = await db.query<{ id: string; name: string; type: string; active: boolean }>(`SELECT id, name, type, active FROM tools ORDER BY name;`);
+      return r.rows.filter(t => t.active);
+    },
+  });
+  const { data: allAugments = [] } = useQuery({
+    queryKey: ['augments'],
+    queryFn: async () => {
+      const db = await getDB();
+      const r  = await db.query<{ id: string; name: string; category: string; active: boolean }>(`SELECT id, name, category, active FROM augments ORDER BY name;`);
+      return r.rows.filter(a => a.active);
+    },
+  });
+  const { data: allMedia = [] } = useQuery({
+    queryKey: ['media'],
+    queryFn: async () => {
+      const db = await getDB();
+      const r  = await db.query<{ id: string; title: string; type: string; status: string; pages: number | null; page_current: number | null }>(`SELECT id, title, type, status, pages, page_current FROM media WHERE status != 'FINISHED' ORDER BY title;`);
+      return r.rows;
+    },
+  });
+  const { data: allCourses = [] } = useQuery({
+    queryKey: ['courses-all'],
+    queryFn: async () => {
+      const db = await getDB();
+      const r  = await db.query<{ id: string; name: string; status: string }>(`SELECT id, name, status FROM courses WHERE status != 'COMPLETE' ORDER BY name;`);
+      return r.rows;
+    },
+  });
+  const { data: allProjects = [] } = useQuery({
+    queryKey: ['projects'],
+    queryFn: async () => {
+      const db = await getDB();
+      const r  = await db.query<{ id: string; name: string; status: string }>(`SELECT id, name, status FROM projects WHERE status = 'ACTIVE' ORDER BY name;`);
+      return r.rows;
+    },
+  });
+
+  // Reset on close
+  useEffect(() => {
+    if (!open) return;
+    setStatFilter(null); setSkillId(''); setSkillName(''); setSkillStatKeys([]); setSkillDefaultSplit([100]);
+    setDuration(60); setCustomDuration(''); setUseCustom(false); setStatSplit([]);
+    setNotes(''); setIsLegacy(false); setLogDate('');
+    setTools([]); setAugments([]); setMedia(null); setMediaPage(''); setMediaFinished(false);
+    setCourse(null); setCompletedSections([]); setMarkCourseComplete(false);
+    setProject(null); setCompletedObjectives([]);
+    setToolTypeFilter(null); setAugClusterFilter(null);
+  }, [open]);
+
+  // When skill selected — set stat split from default
+  const handleSelectSkill = (skill: { id: string; name: string; statKeys: StatKey[]; defaultSplit: number[] }) => {
+    setSkillId(skill.id);
+    setSkillName(skill.name);
+    setSkillStatKeys(skill.statKeys);
+    setSkillDefaultSplit(skill.defaultSplit);
+    const split = skill.statKeys.map((stat, i) => ({ stat, percent: skill.defaultSplit[i] ?? Math.floor(100 / skill.statKeys.length) }));
+    setStatSplit(split);
+  };
+
+  // When course selected — load sections
+  const handleSelectCourse = async (c: { id: string; name: string }) => {
+    const db = await getDB();
+    const r  = await db.query<{ id: string; title: string; completed_at: string | null }>(
+      `SELECT id, title, completed_at FROM course_sections WHERE course_id = $1 ORDER BY sort_order;`, [c.id]
+    );
+    setCourse({ id: c.id, name: c.name, sections: r.rows });
+    setCompletedSections([]);
+  };
+
+  // When project selected — load objectives
+  const handleSelectProject = async (p: { id: string; name: string }) => {
+    const db = await getDB();
+    const r  = await db.query<{ id: string; title: string; completed_at: string | null }>(
+      `SELECT id, title, completed_at FROM project_milestones WHERE project_id = $1 ORDER BY sort_order;`, [p.id]
+    );
+    setProject({ id: p.id, name: p.name, objectives: r.rows });
+    setCompletedObjectives([]);
+  };
+
+  const effectiveDuration = useCustom ? (parseInt(customDuration) || 0) : duration;
+
+  // Filter skills by stat
+  const filteredSkills = useMemo(() =>
+    statFilter ? allSkills.filter(s => s.statKeys.includes(statFilter)) : allSkills,
+    [allSkills, statFilter]
+  );
+
+  // Filter tools/augments
+  const filteredTools    = useMemo(() => toolTypeFilter ? allTools.filter(t => t.type === toolTypeFilter) : allTools, [allTools, toolTypeFilter]);
+  const filteredAugments = useMemo(() => augClusterFilter ? allAugments.filter(a => a.category === augClusterFilter) : allAugments, [allAugments, augClusterFilter]);
+
+  const toolTypes    = useMemo(() => [...new Set(allTools.map(t => t.type))].sort(), [allTools]);
+  const augClusters  = useMemo(() => [...new Set(allAugments.map(a => a.category))].sort(), [allAugments]);
+
+  const toolNames = useMemo(() => Object.fromEntries(tools.map(t => [t.id, t.name])), [tools]);
+  const augNames  = useMemo(() => Object.fromEntries(augments.map(a => [a.id, a.name])), [augments]);
+
+  // ── Submit ────────────────────────────────────────────────
+  const handleSubmit = async () => {
+    if (!skillId || !effectiveDuration) return;
+    if (submitLock.current) return;
+    submitLock.current = true;
+    setSubmitting(true);
+    try {
+      const db        = await getDB();
+      const sessionId = crypto.randomUUID();
+      const loggedAt  = logDate ? new Date(logDate).toISOString() : new Date().toISOString();
+      const toolIds   = tools.map(t => t.id);
+      const augIds    = augments.map(a => a.id);
+
+      // Calculate XP first so we can store it in the session record
+      const factor    = isLegacy ? 0.5 : 1.0;
+      const base      = effectiveDuration * 10 * factor;
+      const skillXP   = Math.floor(base * 0.5);
+      const masterXP  = Math.floor(base * 0.25);
+      const perToolXP = toolIds.length > 0 ? Math.floor(base / toolIds.length) : 0;
+      const perAugXP  = augIds.length > 0  ? Math.floor(base / augIds.length)  : 0;
+
+      await db.query(
+        `INSERT INTO sessions (id, skill_id, skill_name, duration_minutes, stat_split, notes,
+          is_legacy, logged_at, skill_xp, master_xp,
+          tool_ids, total_tool_xp, augment_ids, total_augment_xp,
+          media_id, course_id, project_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+        [sessionId, skillId, skillName, effectiveDuration,
+         JSON.stringify(statSplit), notes.trim() || null,
+         isLegacy, loggedAt, skillXP, masterXP,
+         JSON.stringify(toolIds), perToolXP * toolIds.length,
+         JSON.stringify(augIds), perAugXP * augIds.length,
+         media?.id ?? null, course?.id ?? null, project?.id ?? null]
+      );
+
+      // Award XP
+      const xpResult = await awardSessionXP({ sessionId, skillId, durationMinutes: effectiveDuration, statSplit, toolIds, augmentIds: augIds, isLegacy });
+
+      // Fire XP float animation — centre of screen
+      const totalAwarded = xpResult.skillXP + xpResult.masterXP;
+      triggerXPFloat(window.innerWidth / 2, window.innerHeight / 2 - 60, xpResult.skillXP, undefined, false);
+      if (xpResult.masterXP > 0) setTimeout(() => triggerXPFloat(window.innerWidth / 2 + 60, window.innerHeight / 2 - 80, xpResult.masterXP, undefined, false), 200);
+      if (xpResult.perToolXP > 0 && toolIds.length > 0) setTimeout(() => triggerXPFloat(window.innerWidth / 2 - 60, window.innerHeight / 2 - 40, xpResult.perToolXP * toolIds.length, undefined, false), 400);
+
+      // Fire level up animation if master leveled up
+      if (xpResult.masterLeveledUp) {
+        setTimeout(() => {
+          triggerLevelUp({
+            level: xpResult.newMasterLevel,
+            className: 'OPERATOR',
+            totalXP: xpResult.masterTotalXP,
+            unlocks: xpResult.newMasterLevel === 3  ? ['GREEN PHOSPHOR THEME'] :
+                     xpResult.newMasterLevel === 5  ? ['DOS CLASSIC THEME'] :
+                     xpResult.newMasterLevel === 7  ? ['BLOOD RED THEME'] :
+                     xpResult.newMasterLevel === 9  ? ['ICE BLUE THEME'] :
+                     xpResult.newMasterLevel === 10 ? ['CUSTOM TERMINAL PROMPT'] : [],
+          });
+        }, 800);
+      }
+
+      // Media updates
+      if (media) {
+        const updates: string[] = [];
+        if (mediaPage && media.type === 'book') updates.push(`page_current = ${parseInt(mediaPage)}`);
+        if (mediaFinished) {
+          updates.push(`status = 'FINISHED'`, `completed_at = '${new Date().toISOString()}'`);
+        }
+        if (updates.length > 0) {
+          await db.exec(`UPDATE media SET ${updates.join(', ')} WHERE id = '${media.id}';`);
+        }
+        if (mediaFinished && statSplit.length > 0) {
+          const MEDIA_BONUS: Record<string, number> = { book: 100, comic: 50, film: 40, documentary: 50, tv: 75, album: 30, game: 60 };
+          const bonus = Math.floor((MEDIA_BONUS[media.type] ?? 40) * (isLegacy ? 0.5 : 1));
+          await awardBonusXP({ source: `${media.type}_complete`, sourceId: media.id, statKey: statSplit[0].stat, amount: bonus, notes: media.title });
+        }
+      }
+
+      // Course section completions
+      if (course && completedSections.length > 0) {
+        const totalSections = course.sections.length || 1;
+        const sectionBonus  = Math.floor(totalSections * 100 * (isLegacy ? 0.5 : 1));
+        for (const secId of completedSections) {
+          await db.query(`UPDATE course_sections SET completed_at = $1 WHERE id = $2;`, [new Date().toISOString(), secId]);
+          if (statSplit.length > 0) {
+            const sec = course.sections.find(s => s.id === secId);
+            await awardBonusXP({ source: 'course_section', sourceId: secId, statKey: statSplit[0].stat, amount: sectionBonus, notes: `${course.name} — ${sec?.title ?? ''}` });
+          }
+        }
+      }
+      if (course && markCourseComplete) {
+        await db.exec(`UPDATE courses SET status = 'COMPLETE', progress = 100, completed_at = '${new Date().toISOString()}' WHERE id = '${course.id}';`);
+        const totalSections = course.sections.length || 1;
+        const courseBonus   = Math.floor(totalSections * 100 * (isLegacy ? 0.5 : 1));
+        if (statSplit.length > 0) await awardBonusXP({ source: 'course_complete', sourceId: course.id, statKey: statSplit[0].stat, amount: courseBonus, notes: `${course.name} — complete` });
+      }
+
+      // Project objectives
+      if (project && completedObjectives.length > 0) {
+        for (const objId of completedObjectives) {
+          await db.query(`UPDATE project_milestones SET completed_at = $1 WHERE id = $2;`, [new Date().toISOString(), objId]);
+        }
+      }
+
+      // Invalidate everything — broad sweep so all widgets update immediately
+      queryClient.invalidateQueries();
+
+      toast({ title: '✓ SESSION LOGGED', description: `${skillName} — ${effectiveDuration}m` });
+      onClose();
+    } catch (err) {
+      toast({ title: 'ERROR', description: String(err) });
+    } finally {
+      setSubmitting(false);
+      submitLock.current = false;
+    }
+  };
+
+  if (!open) return null;
+
+  const canSubmit = !!skillId && effectiveDuration > 0;
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.75)' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+
+      <div style={{ width: '100%', maxWidth: 760, maxHeight: '90vh', background: bgP, border: `1px solid ${adim}`, display: 'flex', flexDirection: 'column', fontFamily: mono, boxShadow: `0 0 40px rgba(255,176,0,0.1)` }}>
+
+        {/* Header */}
+        <div style={{ padding: '14px 20px', borderBottom: `1px solid ${adim}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+          <span style={{ fontFamily: vt, fontSize: 20, color: acc }}>// QUICK LOG</span>
+          <button onClick={onClose} style={{ background: 'transparent', border: `1px solid ${adim}`, color: dim, fontFamily: mono, fontSize: 10, cursor: 'pointer', padding: '3px 10px' }}>× CLOSE  ESC</button>
+        </div>
+
+        {/* Body — two columns */}
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', scrollbarWidth: 'thin', scrollbarColor: `${adim} ${bgS}` }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 0 }}>
+
+            {/* Left column — form */}
+            <div style={{ padding: '16px 20px', borderRight: `1px solid ${adim}` }}>
+
+              {/* Stat filter */}
+              <div style={{ marginBottom: 12 }}>
+                <Label>FILTER BY STAT</Label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  {STAT_KEYS.map(k => {
+                    const m   = STAT_META[k];
+                    const on  = statFilter === k;
+                    return (
+                      <button key={k} onClick={() => setStatFilter(on ? null : k)} style={{ padding: '3px 8px', fontSize: 9, fontFamily: mono, cursor: 'pointer', border: `1px solid ${on ? acc : adim}`, background: on ? 'rgba(255,176,0,0.1)' : 'transparent', color: on ? acc : dim }}>
+                        {m.icon} {k.toUpperCase()}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Skill */}
+              <div style={{ marginBottom: 12 }}>
+                <Label>SKILL <span style={{ color: acc }}>*</span></Label>
+                {skillId ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: bgS, border: `1px solid ${acc}` }}>
+                    <span style={{ flex: 1, fontSize: 11, color: acc }}>{skillName}</span>
+                    <span onClick={() => { setSkillId(''); setSkillName(''); setSkillStatKeys([]); setStatSplit([]); }} style={{ fontSize: 9, color: adim, cursor: 'pointer' }}
+                      onMouseEnter={e => e.currentTarget.style.color = '#ff4400'}
+                      onMouseLeave={e => e.currentTarget.style.color = adim}>× CHANGE</span>
+                  </div>
+                ) : (
+                  <AutoSearch
+                    placeholder="Type skill name..."
+                    items={filteredSkills.map(s => ({ id: s.id, name: s.name, sub: s.statKeys.join('/').toUpperCase() }))}
+                    onSelect={(item) => {
+                      const skill = allSkills.find(s => s.id === item.id);
+                      if (skill) handleSelectSkill(skill);
+                    }}
+                    color={acc}
+                  />
+                )}
+              </div>
+
+              {/* Duration */}
+              <div style={{ marginBottom: 12 }}>
+                <Label>DURATION <span style={{ color: acc }}>*</span></Label>
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 6 }}>
+                  {DURATION_PRESETS.map(d => (
+                    <button key={d} onClick={() => { setDuration(d); setUseCustom(false); }} style={{ padding: '3px 10px', fontSize: 9, fontFamily: mono, cursor: 'pointer', border: `1px solid ${!useCustom && duration === d ? acc : adim}`, background: !useCustom && duration === d ? 'rgba(255,176,0,0.1)' : 'transparent', color: !useCustom && duration === d ? acc : dim }}>{d}m</button>
+                  ))}
+                  <button onClick={() => setUseCustom(true)} style={{ padding: '3px 10px', fontSize: 9, fontFamily: mono, cursor: 'pointer', border: `1px solid ${useCustom ? acc : adim}`, background: useCustom ? 'rgba(255,176,0,0.1)' : 'transparent', color: useCustom ? acc : dim }}>CUSTOM</button>
+                </div>
+                {useCustom && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <input value={customDuration} onChange={e => setCustomDuration(e.target.value.replace(/\D/g, ''))} autoFocus placeholder="minutes" style={{ width: 80, padding: '5px 8px', fontSize: 11, background: bgS, border: `1px solid ${acc}`, color: acc, fontFamily: mono, outline: 'none' }} />
+                    <span style={{ fontSize: 10, color: dim }}>minutes</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Stat split — only if 2 stats */}
+              {skillStatKeys.length === 2 && (
+                <div style={{ marginBottom: 12 }}>
+                  <Label>STAT SPLIT</Label>
+                  {statSplit.map((s, i) => (
+                    <div key={s.stat} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+                      <span style={{ fontSize: 9, color: acc, width: 50, flexShrink: 0 }}>{s.stat.toUpperCase()}</span>
+                      <input type="range" min={0} max={100} value={s.percent}
+                        onChange={e => {
+                          const val = parseInt(e.target.value);
+                          setStatSplit([{ stat: statSplit[0].stat, percent: i === 0 ? val : 100 - val }, { stat: statSplit[1].stat, percent: i === 0 ? 100 - val : val }]);
+                        }}
+                        style={{ flex: 1, accentColor: acc }} />
+                      <span style={{ fontSize: 10, color: dim, width: 32, textAlign: 'right', flexShrink: 0 }}>{s.percent}%</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Notes */}
+              <div style={{ marginBottom: 12 }}>
+                <Label>NOTES <span style={{ opacity: 0.5 }}>(optional)</span></Label>
+                <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Session notes..."
+                  style={{ width: '100%', padding: '6px 10px', fontSize: 10, background: bgS, border: `1px solid ${adim}`, color: acc, fontFamily: mono, outline: 'none', boxSizing: 'border-box' as const }} />
+              </div>
+
+              {/* Options */}
+              <div style={{ marginBottom: 14, display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 9, color: isLegacy ? '#ffaa00' : adim, letterSpacing: 1 }}>
+                  <span onClick={() => setIsLegacy(v => !v)} style={{ width: 13, height: 13, border: `1px solid ${isLegacy ? '#ffaa00' : adim}`, background: isLegacy ? 'rgba(255,170,0,0.15)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, flexShrink: 0 }}>{isLegacy ? '✓' : ''}</span>
+                  LEGACY ENTRY (50% XP)
+                </label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 9, color: adim, letterSpacing: 1 }}>DATE:</span>
+                  <input type="date" value={logDate} onChange={e => setLogDate(e.target.value)}
+                    max={new Date().toISOString().split('T')[0]}
+                    style={{ padding: '2px 6px', fontSize: 9, background: bgS, border: `1px solid ${logDate ? acc : adim}`, color: logDate ? acc : dim, fontFamily: mono, outline: 'none', colorScheme: 'dark' }} />
+                  {logDate && <span onClick={() => setLogDate('')} style={{ fontSize: 9, color: adim, cursor: 'pointer' }}>× TODAY</span>}
+                </div>
+              </div>
+
+              <SectionDivider label="TAGGED" />
+
+              {/* Tools */}
+              <TagSection label="TOOLS" color={acc} hasItems={tools.length > 0}>
+                {tools.length > 0 && (
+                  <div style={{ marginBottom: 8 }}>
+                    {tools.map(t => <Tag key={t.id} label={t.name} color={acc} onRemove={() => setTools(p => p.filter(x => x.id !== t.id))} />)}
+                  </div>
+                )}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, marginBottom: 6 }}>
+                  {toolTypes.map(type => (
+                    <button key={type} onClick={() => setToolTypeFilter(toolTypeFilter === type ? null : type)} style={{ padding: '2px 6px', fontSize: 8, fontFamily: mono, cursor: 'pointer', border: `1px solid ${toolTypeFilter === type ? acc : adim}`, background: toolTypeFilter === type ? 'rgba(255,176,0,0.1)' : 'transparent', color: toolTypeFilter === type ? acc : dim }}>{type}</button>
+                  ))}
+                </div>
+                <AutoSearch
+                  placeholder="Search tools..."
+                  items={filteredTools.map(t => ({ id: t.id, name: t.name, sub: t.type }))}
+                  selectedIds={tools.map(t => t.id)}
+                  onSelect={item => { if (!tools.find(t => t.id === item.id)) setTools(p => [...p, { id: item.id, name: item.name, type: item.sub ?? '' }]); }}
+                  color={acc}
+                />
+              </TagSection>
+
+              {/* Augments */}
+              <TagSection label="AUGMENTS" color={cyan} hasItems={augments.length > 0}>
+                {augments.length > 0 && (
+                  <div style={{ marginBottom: 8 }}>
+                    {augments.map(a => <Tag key={a.id} label={a.name} color={cyan} onRemove={() => setAugments(p => p.filter(x => x.id !== a.id))} />)}
+                  </div>
+                )}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, marginBottom: 6 }}>
+                  {augClusters.map(c => (
+                    <button key={c} onClick={() => setAugClusterFilter(augClusterFilter === c ? null : c)} style={{ padding: '2px 6px', fontSize: 8, fontFamily: mono, cursor: 'pointer', border: `1px solid ${augClusterFilter === c ? cyan : adim}`, background: augClusterFilter === c ? 'rgba(0,207,255,0.1)' : 'transparent', color: augClusterFilter === c ? cyan : dim }}>{c.split(' ')[0]}</button>
+                  ))}
+                </div>
+                <AutoSearch
+                  placeholder="Search augments..."
+                  items={filteredAugments.map(a => ({ id: a.id, name: a.name, sub: a.category.split(' ')[0] }))}
+                  selectedIds={augments.map(a => a.id)}
+                  onSelect={item => { if (!augments.find(a => a.id === item.id)) setAugments(p => [...p, { id: item.id, name: item.name, category: item.sub ?? '' }]); }}
+                  color={cyan}
+                />
+              </TagSection>
+
+              {/* Media */}
+              <TagSection label="MEDIA" color={purple} hasItems={!!media}>
+                {media ? (
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                      <span style={{ fontSize: 10, color: purple, flex: 1 }}>{media.title}</span>
+                      <span onClick={() => { setMedia(null); setMediaPage(''); setMediaFinished(false); }} style={{ fontSize: 9, color: adim, cursor: 'pointer' }}>× REMOVE</span>
+                    </div>
+                    {media.type === 'book' && media.pages && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                        <span style={{ fontSize: 9, color: adim }}>PAGE:</span>
+                        <input value={mediaPage} onChange={e => setMediaPage(e.target.value.replace(/\D/g, ''))} placeholder={String(media.page_current ?? 0)}
+                          style={{ width: 60, padding: '3px 6px', fontSize: 10, background: bgS, border: `1px solid ${adim}`, color: acc, fontFamily: mono, outline: 'none' }} />
+                        <span style={{ fontSize: 9, color: dim }}>/ {media.pages}</span>
+                      </div>
+                    )}
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 9, color: mediaFinished ? green : adim, letterSpacing: 1 }}>
+                      <span onClick={() => setMediaFinished(v => !v)} style={{ width: 13, height: 13, border: `1px solid ${mediaFinished ? green : adim}`, background: mediaFinished ? 'rgba(68,255,136,0.15)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9 }}>{mediaFinished ? '✓' : ''}</span>
+                      MARK FINISHED {mediaFinished && '— bonus XP on submit'}
+                    </label>
+                  </div>
+                ) : (
+                  <AutoSearch
+                    placeholder="Search media..."
+                    items={allMedia.map(m => ({ id: m.id, name: m.title, sub: m.type }))}
+                    onSelect={item => {
+                      const m = allMedia.find(x => x.id === item.id);
+                      if (m) setMedia({ id: m.id, title: m.title, type: m.type, status: m.status, pages: m.pages ?? undefined, page_current: m.page_current ?? undefined });
+                    }}
+                    color={purple}
+                  />
+                )}
+              </TagSection>
+
+              {/* Course */}
+              <TagSection label="COURSE" color={teal} hasItems={!!course}>
+                {course ? (
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                      <span style={{ fontSize: 10, color: teal, flex: 1 }}>{course.name}</span>
+                      <span onClick={() => { setCourse(null); setCompletedSections([]); setMarkCourseComplete(false); }} style={{ fontSize: 9, color: adim, cursor: 'pointer' }}>× REMOVE</span>
+                    </div>
+                    {course.sections.length > 0 && (
+                      <div style={{ marginBottom: 8 }}>
+                        <div style={{ fontSize: 9, color: adim, letterSpacing: 1, marginBottom: 5 }}>COMPLETE MODULES:</div>
+                        {course.sections.filter(s => !s.completed_at).map(s => (
+                          <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 9, color: completedSections.includes(s.id) ? teal : dim, marginBottom: 4 }}>
+                            <span onClick={() => setCompletedSections(p => p.includes(s.id) ? p.filter(x => x !== s.id) : [...p, s.id])}
+                              style={{ width: 13, height: 13, border: `1px solid ${completedSections.includes(s.id) ? teal : adim}`, background: completedSections.includes(s.id) ? 'rgba(68,255,170,0.15)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, flexShrink: 0 }}>
+                              {completedSections.includes(s.id) ? '✓' : ''}
+                            </span>
+                            {s.title}
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 9, color: markCourseComplete ? green : adim, letterSpacing: 1 }}>
+                      <span onClick={() => setMarkCourseComplete(v => !v)} style={{ width: 13, height: 13, border: `1px solid ${markCourseComplete ? green : adim}`, background: markCourseComplete ? 'rgba(68,255,136,0.15)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9 }}>{markCourseComplete ? '✓' : ''}</span>
+                      MARK ENTIRE COURSE COMPLETE
+                    </label>
+                  </div>
+                ) : (
+                  <AutoSearch
+                    placeholder="Search courses..."
+                    items={allCourses.map(c => ({ id: c.id, name: c.name, sub: c.status }))}
+                    onSelect={item => handleSelectCourse(item)}
+                    color={teal}
+                  />
+                )}
+              </TagSection>
+
+              {/* Project */}
+              <TagSection label="PROJECT" color="#ffaa00" hasItems={!!project}>
+                {project ? (
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                      <span style={{ fontSize: 10, color: '#ffaa00', flex: 1 }}>{project.name}</span>
+                      <span onClick={() => { setProject(null); setCompletedObjectives([]); }} style={{ fontSize: 9, color: adim, cursor: 'pointer' }}>× REMOVE</span>
+                    </div>
+                    {project.objectives.filter(o => !o.completed_at).length > 0 && (
+                      <div>
+                        <div style={{ fontSize: 9, color: adim, letterSpacing: 1, marginBottom: 5 }}>COMPLETE OBJECTIVES:</div>
+                        {project.objectives.filter(o => !o.completed_at).map(o => (
+                          <label key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 9, color: completedObjectives.includes(o.id) ? '#ffaa00' : dim, marginBottom: 4 }}>
+                            <span onClick={() => setCompletedObjectives(p => p.includes(o.id) ? p.filter(x => x !== o.id) : [...p, o.id])}
+                              style={{ width: 13, height: 13, border: `1px solid ${completedObjectives.includes(o.id) ? '#ffaa00' : adim}`, background: completedObjectives.includes(o.id) ? 'rgba(255,170,0,0.15)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, flexShrink: 0 }}>
+                              {completedObjectives.includes(o.id) ? '✓' : ''}
+                            </span>
+                            {o.title}
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <AutoSearch
+                    placeholder="Search projects..."
+                    items={allProjects.map(p => ({ id: p.id, name: p.name, sub: p.status }))}
+                    onSelect={item => handleSelectProject(item)}
+                    color="#ffaa00"
+                  />
+                )}
+              </TagSection>
+
+            </div>{/* end left column */}
+
+            {/* Right column — XP preview */}
+            <div style={{ padding: '16px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <XPPreview
+                duration={effectiveDuration}
+                statSplit={statSplit}
+                toolIds={tools.map(t => t.id)}
+                augIds={augments.map(a => a.id)}
+                isLegacy={isLegacy}
+                toolNames={toolNames}
+                augNames={augNames}
+              />
+              {!skillId && (
+                <div style={{ fontSize: 9, color: adim, textAlign: 'center', marginTop: 20, lineHeight: 1.8 }}>
+                  SELECT A SKILL AND DURATION<br />TO SEE XP PREVIEW
+                </div>
+              )}
+            </div>
+
+          </div>{/* end grid */}
+        </div>{/* end scrollable body */}
+
+        {/* Footer */}
+        <div style={{ padding: '12px 20px', borderTop: `1px solid ${adim}`, flexShrink: 0, display: 'flex', justifyContent: 'flex-end' }}>
+          <button disabled={!canSubmit || submitting} onClick={handleSubmit} style={{
+            padding: '8px 32px', fontFamily: mono, fontSize: 11, letterSpacing: 2,
+            cursor: canSubmit ? 'pointer' : 'not-allowed',
+            border: `1px solid ${canSubmit ? acc : adim}`,
+            background: canSubmit ? 'rgba(255,176,0,0.1)' : 'transparent',
+            color: canSubmit ? acc : dim, opacity: canSubmit ? 1 : 0.5,
+            transition: 'all 150ms',
+          }}
+            onMouseEnter={e => { if (canSubmit) { e.currentTarget.style.background = acc; e.currentTarget.style.color = bgP; } }}
+            onMouseLeave={e => { e.currentTarget.style.background = canSubmit ? 'rgba(255,176,0,0.1)' : 'transparent'; e.currentTarget.style.color = canSubmit ? acc : dim; }}
+          >{submitting ? '>> LOGGING...' : '>> SUBMIT LOG'}</button>
+        </div>
+
       </div>
     </div>
   );
-};
-
-export default QuickLogOverlay;
+}

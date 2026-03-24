@@ -1,9 +1,12 @@
+// ============================================================
+// src/effects/LevelUpAnimation.tsx
+// ============================================================
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-interface LevelUpData {
+export interface LevelUpData {
   level: number;
   className: string;
   totalXP: number;
@@ -16,24 +19,15 @@ export const triggerLevelUp = (data: LevelUpData) => {
   listeners.forEach(fn => fn(data));
 };
 
-const LEVEL_UP_ASCII = [
-  '██╗     ███████╗██╗   ██╗███████╗██╗',
-  '██║     ██╔════╝██║   ██║██╔════╝██║',
-  '██║     █████╗  ██║   ██║█████╗  ██║',
-  '██║     ██╔══╝  ╚██╗ ██╔╝██╔══╝  ██║',
-  '███████╗███████╗ ╚████╔╝ ███████╗███████╗',
-  '╚══════╝╚══════╝  ╚═══╝  ╚══════╝╚══════╝',
-];
-
 const LevelUpAnimation = () => {
-  const [data, setData] = useState<LevelUpData | null>(null);
+  const [data, setData]           = useState<LevelUpData | null>(null);
   const [showFlash, setShowFlash] = useState(false);
   const [showGlitch, setShowGlitch] = useState(false);
   const [showModal, setShowModal] = useState(false);
-  const [step, setStep] = useState(0); // 0=nothing, 1=title, 2=level, 3=class, 4=bar, 5=unlocks, 6=button
+  const [step, setStep]           = useState(0);
   const [titleText, setTitleText] = useState('');
-  const [barWidth, setBarWidth] = useState(0);
-  const abortRef = useRef(false);
+  const [barWidth, setBarWidth]   = useState(0);
+  const abortRef                  = useRef(false);
 
   useEffect(() => {
     const handler = (d: LevelUpData) => {
@@ -47,24 +41,20 @@ const LevelUpAnimation = () => {
     };
   }, []);
 
-
   const runSequence = useCallback(async () => {
-    // Step 1: Flash
     setShowFlash(true);
     await sleep(300);
     setShowFlash(false);
 
-    // Step 2: Glitch
     await sleep(200);
     setShowGlitch(true);
     await sleep(400);
     setShowGlitch(false);
 
-    // Step 3: Show modal
     await sleep(200);
     setShowModal(true);
 
-    // Typewriter "LEVEL UP"
+    // Typewriter
     const text = 'LEVEL UP';
     for (let i = 0; i < text.length; i++) {
       if (abortRef.current) return;
@@ -75,21 +65,20 @@ const LevelUpAnimation = () => {
     await sleep(400);
 
     if (abortRef.current) return;
-    setStep(2); // level achieved
+    setStep(2);
     await sleep(300);
 
     if (abortRef.current) return;
-    setStep(3); // class name
+    setStep(3);
     await sleep(300);
 
     // Bar fill
     if (abortRef.current) return;
     setStep(4);
     const startTime = Date.now();
-    const duration = 800;
+    const duration  = 800;
     const animateBar = () => {
-      const elapsed = Date.now() - startTime;
-      const pct = Math.min(elapsed / duration, 1);
+      const pct = Math.min((Date.now() - startTime) / duration, 1);
       setBarWidth(pct * 100);
       if (pct < 1 && !abortRef.current) requestAnimationFrame(animateBar);
     };
@@ -97,11 +86,11 @@ const LevelUpAnimation = () => {
     await sleep(duration + 400);
 
     if (abortRef.current) return;
-    setStep(5); // unlocks
+    setStep(5);
     await sleep(600);
 
     if (abortRef.current) return;
-    setStep(6); // button
+    setStep(6);
   }, []);
 
   useEffect(() => {
@@ -125,121 +114,166 @@ const LevelUpAnimation = () => {
 
   useEffect(() => {
     if (!showModal) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') dismiss();
-    };
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') dismiss(); };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [showModal, dismiss]);
 
-  // Apply glitch to app wrapper
+  // Apply glitch class to root
   useEffect(() => {
+    const root = document.getElementById('root') ?? document.getElementById('app-root');
+    if (!root) return;
     if (showGlitch) {
-      document.getElementById('app-root')?.classList.add('glitch-active');
-      return () => { document.getElementById('app-root')?.classList.remove('glitch-active'); };
+      root.classList.add('glitch-active');
+      return () => root.classList.remove('glitch-active');
     }
   }, [showGlitch]);
 
   if (!data && !showFlash) return null;
 
+  const acc  = 'hsl(var(--accent))';
+  const accB = 'hsl(var(--accent-bright))';
+  const bg   = 'hsl(var(--bg-primary))';
+  const mono = "'IBM Plex Mono', monospace";
+  const vt   = "'VT323', monospace";
+
   return createPortal(
     <>
-      {showFlash && <div className="level-flash-overlay" />}
+      {/* Flash overlay */}
+      {showFlash && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 10002,
+          background: acc, opacity: 0.3,
+          animation: 'levelFlash 300ms ease-out forwards',
+        }} />
+      )}
 
-      {showModal && (
+      {/* Modal */}
+      {showModal && data && (
         <div style={{
           position: 'fixed', inset: 0, zIndex: 10001,
-          background: 'rgba(0,0,0,0.85)',
+          background: 'rgba(0,0,0,0.88)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <div className="levelup-modal">
-            {/* ASCII art LEVEL UP */}
-            <div style={{ display: 'flex', justifyContent: 'center' }}>
-              <pre style={{
-                fontFamily: "'IBM Plex Mono', monospace",
-                fontSize: '11px',
-                lineHeight: '1.2',
-                color: 'hsl(41 100% 50%)',
-                textShadow: '0 0 8px rgba(255, 176, 0, 0.8), 0 0 20px rgba(255, 176, 0, 0.4)',
-                textAlign: 'left',
-                display: 'inline-block',
-                margin: '0 auto 24px auto',
-                whiteSpace: 'pre',
-                letterSpacing: '0px',
-              }}>
+        }} onClick={step >= 6 ? dismiss : undefined}>
+          <div style={{
+            background: bg,
+            border: `1px solid ${acc}`,
+            boxShadow: `0 0 40px hsla(var(--accent-glow) / 0.3), 0 0 80px hsla(var(--accent-glow) / 0.1)`,
+            padding: '40px 48px',
+            minWidth: 480,
+            maxWidth: 600,
+            textAlign: 'center',
+            fontFamily: mono,
+          }}>
+
+            {/* ASCII art */}
+            <pre style={{
+              fontFamily: mono, fontSize: 11, lineHeight: 1.2,
+              color: acc,
+              textShadow: `0 0 8px hsla(var(--accent-glow) / 0.8), 0 0 20px hsla(var(--accent-glow) / 0.4)`,
+              textAlign: 'left', display: 'inline-block',
+              margin: '0 auto 24px auto', whiteSpace: 'pre',
+            }}>
 {`██╗     ███████╗██╗   ██╗███████╗██╗
 ██║     ██╔════╝██║   ██║██╔════╝██║
 ██║     █████╗  ██║   ██║█████╗  ██║
 ██║     ██╔══╝  ╚██╗ ██╔╝██╔══╝  ██║
 ███████╗███████╗ ╚████╔╝ ███████╗███████╗
 ╚══════╝╚══════╝  ╚═══╝  ╚══════╝╚══════╝
-                                          
-    ██╗   ██╗██████╗ 
+
+    ██╗   ██╗██████╗
     ██║   ██║██╔══██╗
     ██║   ██║██████╔╝
-    ██║   ██║██╔═══╝ 
-    ╚██████╔╝██║     
-     ╚═════╝ ╚═╝     `}
-              </pre>
-            </div>
+    ██║   ██║██╔═══╝
+    ╚██████╔╝██║
+     ╚═════╝ ╚═╝`}
+            </pre>
 
-            {/* Level achieved */}
-            {step >= 2 && (
-              <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 14, color: 'hsl(41 100% 50%)', marginBottom: 12 }}>
-                MASTER LEVEL {data!.level} ACHIEVED
+            {/* Typewriter title */}
+            {step >= 1 && (
+              <div style={{ fontFamily: vt, fontSize: 32, color: accB, marginBottom: 8, letterSpacing: 3,
+                textShadow: `0 0 12px hsla(var(--accent-glow) / 0.8)` }}>
+                {titleText}
+                <span style={{ animation: 'blink 1s step-end infinite', color: acc }}>█</span>
               </div>
             )}
 
-            {/* Class name */}
+            {/* Level */}
+            {step >= 2 && (
+              <div style={{ fontFamily: mono, fontSize: 13, color: acc, marginBottom: 8, letterSpacing: 2 }}>
+                MASTER LEVEL {data.level} ACHIEVED
+              </div>
+            )}
+
+            {/* Class */}
             {step >= 3 && (
-              <div style={{ fontFamily: "'VT323', monospace", fontSize: 28, color: 'hsl(41 100% 69%)', marginBottom: 20 }}>
-                // {data!.className}
+              <div style={{ fontFamily: vt, fontSize: 26, color: accB, marginBottom: 20, letterSpacing: 2 }}>
+                // {data.className}
               </div>
             )}
 
             {/* XP bar */}
             {step >= 4 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, padding: '0 20px' }}>
-                <div style={{ flex: 1, height: 10, background: '#1a0f00', border: '1px solid #261600', overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, padding: '0 8px' }}>
+                <div style={{ flex: 1, height: 10, background: 'hsl(var(--bg-tertiary))', border: `1px solid hsl(var(--accent-dim))`, overflow: 'hidden' }}>
                   <div style={{
                     width: `${barWidth}%`, height: '100%',
-                    background: 'hsl(41 100% 50%)',
-                    boxShadow: '0 0 10px hsla(41 100% 50% / 0.6)',
-                    transition: 'none',
+                    background: acc,
+                    boxShadow: `0 0 10px hsla(var(--accent-glow) / 0.6)`,
                   }} />
                 </div>
-                <span style={{ fontFamily: "'VT323', monospace", fontSize: 16, color: 'hsl(41 100% 50%)', whiteSpace: 'nowrap' }}>
-                  {data!.totalXP.toLocaleString()} XP
+                <span style={{ fontFamily: vt, fontSize: 16, color: acc, whiteSpace: 'nowrap' }}>
+                  {data.totalXP.toLocaleString()} XP
                 </span>
               </div>
             )}
 
             {/* Unlocks */}
-            {step >= 5 && data!.unlocks.map((u, i) => (
-              <div key={i} style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: '#44ff88', marginBottom: 4 }}>
-                {i === 0 ? 'UNLOCK: ' : '        '}{u}
+            {step >= 5 && data.unlocks.length > 0 && data.unlocks.map((u, i) => (
+              <div key={i} style={{ fontFamily: mono, fontSize: 11, color: '#44ff88', marginBottom: 4, letterSpacing: 1 }}>
+                {i === 0 ? '▸ UNLOCK: ' : '          '}{u}
               </div>
             ))}
 
-            {/* Acknowledge button */}
+            {/* Acknowledge */}
             {step >= 6 && (
-              <button
-                onClick={dismiss}
-                style={{
-                  marginTop: 24, fontFamily: "'IBM Plex Mono', monospace", fontSize: 12,
-                  color: 'hsl(41 100% 50%)', background: 'none',
-                  border: '1px solid hsl(41 100% 50%)', padding: '8px 24px',
-                  cursor: 'pointer', letterSpacing: 1,
-                }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'hsl(41 100% 50%)'; e.currentTarget.style.color = '#0d0800'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'hsl(41 100% 50%)'; }}
-              >
+              <button onClick={dismiss} style={{
+                marginTop: 24, fontFamily: mono, fontSize: 12,
+                color: acc, background: 'none',
+                border: `1px solid ${acc}`, padding: '8px 28px',
+                cursor: 'pointer', letterSpacing: 2,
+                transition: 'all 150ms ease',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = acc; e.currentTarget.style.color = bg; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = acc; }}>
                 {'>> ACKNOWLEDGE'}
               </button>
             )}
           </div>
         </div>
       )}
+
+      <style>{`
+        @keyframes levelFlash {
+          0%   { opacity: 0.3; }
+          100% { opacity: 0; }
+        }
+        @keyframes blink {
+          0%, 100% { opacity: 1; }
+          50%       { opacity: 0; }
+        }
+        .glitch-active {
+          animation: glitch 400ms ease;
+        }
+        @keyframes glitch {
+          0%   { transform: translate(0); filter: none; }
+          20%  { transform: translate(-3px, 1px); filter: hue-rotate(90deg); }
+          40%  { transform: translate(3px, -1px); filter: brightness(1.4); }
+          60%  { transform: translate(-2px, 2px); filter: hue-rotate(-90deg); }
+          80%  { transform: translate(2px, -2px); filter: brightness(0.8); }
+          100% { transform: translate(0); filter: none; }
+        }
+      `}</style>
     </>,
     document.body
   );

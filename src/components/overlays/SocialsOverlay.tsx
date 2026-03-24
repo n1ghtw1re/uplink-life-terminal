@@ -2,8 +2,23 @@
 // src/components/overlays/SocialsOverlay.tsx
 // ============================================================
 import { useEffect, useMemo, useState } from 'react';
+import { useSocials } from '@/hooks/useSocials';
+import { SocialService } from '@/services/socialService';
 
 // --- Types -----------------------------------------------------
+
+type SocialAccount = {
+  id: string;
+  account_name: string;
+  platform: string;
+  url: string | null;
+  category: string | null;
+  status: string;
+  initial_followers: number | null;
+  notes: string | null;
+  created_at: string;
+  history: { id: string; followers: number; logged_date: string; notes: string | null }[];
+};
 
 type SocialPlatform = {
   label: string;
@@ -11,26 +26,11 @@ type SocialPlatform = {
   category: string;
 };
 
-type SocialAccount = {
-  id: string;
-  name: string;
-  platform: string;
-  url: string;
-  notes?: string;
-  tags?: string[];
-  initialFollowers?: number;
-  currentFollowers?: number;
-  history: { date: string; followers: number }[];
-  createdAt: string;
-};
-
 type SocialsOverlayProps = {
   onClose: () => void;
 };
 
 // --- Constants -------------------------------------------------
-
-const STORAGE_KEY = 'uplink-socials';
 
 const PLATFORM_CATEGORIES: { title: string; platforms: SocialPlatform[] }[] = [
   {
@@ -119,9 +119,9 @@ const formatPercent = (delta: number, base: number) => {
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
 
-function buildSeriesFromHistory(history: { date: string; followers: number }[]) {
-  const sorted = [...history].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  return sorted.map(item => ({ date: item.date, value: item.followers }));
+function buildSeriesFromHistory(history: { id: string; followers: number; logged_date: string; notes: string | null }[]) {
+  const sorted = [...history].sort((a, b) => new Date(a.logged_date).getTime() - new Date(b.logged_date).getTime());
+  return sorted.map(item => ({ date: item.logged_date, value: item.followers }));
 }
 
 function computeOverallSeries(accounts: SocialAccount[]) {
@@ -269,80 +269,26 @@ function SocialsGrowthChart({ data }: { data: { date: string; value: number }[] 
 }
 
 export default function SocialsOverlay({ onClose }: SocialsOverlayProps) {
+  const { socials: dbSocials, isLoading, error, refetch } = useSocials();
+  
   const [accounts, setAccounts] = useState<SocialAccount[]>([]);
   const [activeCategory, setActiveCategory] = useState<string>(PLATFORM_CATEGORIES[0]?.title ?? '');
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [showAddEntry, setShowAddEntry] = useState(false);
   const [showNewSocial, setShowNewSocial] = useState(false);
-  const [editingHistoryEntry, setEditingHistoryEntry] = useState<{ date: string; followers: number } | null>(null);
+  const [editingHistoryEntry, setEditingHistoryEntry] = useState<{ account_id: string; log_id: string; logged_date: string; followers: number } | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Load / persist to localStorage
+  // Convert database socials to component format
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed: SocialAccount[] = JSON.parse(raw);
-        if (!parsed || parsed.length === 0) {
-          // Load demo data when storage exists but is empty
-          loadDemoData();
-        } else {
-          setAccounts(parsed);
-        }
-      } else {
-        // Seed with demo data so the UI shows how it will look
-        loadDemoData();
+    if (dbSocials) {
+      setAccounts(dbSocials);
+      if (selectedAccountId === null && dbSocials.length > 0) {
+        setSelectedAccountId(dbSocials[0].id);
       }
-    } catch {
-      // ignore
-      loadDemoData();
     }
-  }, []);
-
-  const loadDemoData = () => {
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-
-    const demoFacebook: SocialAccount = {
-      id: 'demo-facebook',
-      name: 'TestAccount',
-      platform: 'facebook',
-      url: 'https://facebook.com/testaccount',
-      notes: 'the app should do the math for change and % change',
-      tags: [],
-      initialFollowers: 12,
-      currentFollowers: 14,
-      history: [
-        { date: yesterday.toISOString().slice(0, 10), followers: 12 },
-        { date: today.toISOString().slice(0, 10), followers: 14 },
-      ],
-      createdAt: today.toISOString(),
-    };
-
-    const demoInstagram: SocialAccount = {
-      id: 'demo-instagram',
-      name: 'testInstagram',
-      platform: 'instagram',
-      url: 'https://instagram.com/test',
-      notes: 'this is a test instagram account',
-      tags: [],
-      initialFollowers: 0,
-      currentFollowers: 2000,
-      history: [
-        { date: yesterday.toISOString().slice(0, 10), followers: 0 },
-        { date: today.toISOString().slice(0, 10), followers: 2000 },
-      ],
-      createdAt: today.toISOString(),
-    };
-
-    setAccounts([demoFacebook, demoInstagram]);
-    setSelectedAccountId(demoFacebook.id);
-  };
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(accounts));
-  }, [accounts]);
+  }, [dbSocials]);
 
   const filteredPlatforms = useMemo(() => {
     const category = PLATFORM_CATEGORIES.find(c => c.title === activeCategory);
@@ -355,13 +301,14 @@ export default function SocialsOverlay({ onClose }: SocialsOverlayProps) {
   );
 
   const overallFollowers = useMemo(() => {
-    const values = accounts.map(a => a.currentFollowers ?? a.initialFollowers ?? 0);
-    return values.reduce((sum, v) => sum + (v ?? 0), 0);
+    return accounts.reduce((sum, a) => {
+      const last = a.history.length > 0 ? a.history[a.history.length - 1].followers : a.initial_followers ?? 0;
+      return sum + (last ?? 0);
+    }, 0);
   }, [accounts]);
 
   const overallInitial = useMemo(() => {
-    const values = accounts.map(a => a.initialFollowers ?? 0);
-    return values.reduce((sum, v) => sum + (v ?? 0), 0);
+    return accounts.reduce((sum, a) => sum + (a.initial_followers ?? 0), 0);
   }, [accounts]);
 
   const overallDelta = overallFollowers - overallInitial;
@@ -373,26 +320,72 @@ export default function SocialsOverlay({ onClose }: SocialsOverlayProps) {
     return accounts.filter(a => platformSlugs.includes(a.platform));
   }, [accounts, filteredPlatforms]);
 
-  const addAccount = (account: SocialAccount) => {
-    setAccounts(prev => [...prev, account]);
-    setSelectedAccountId(account.id);
+  const addAccount = async (params: {
+    platform: string;
+    account_name: string;
+    url?: string;
+    category?: string;
+    initial_followers?: number;
+    notes?: string;
+  }) => {
+    try {
+      setIsSubmitting(true);
+      const newSocial = await SocialService.createSocial(params);
+      
+      // Add initial follower log if provided
+      if (params.initial_followers !== undefined) {
+        const today = new Date().toISOString().slice(0, 10);
+        await SocialService.addFollowerLog({
+          social_id: newSocial.id,
+          followers: params.initial_followers,
+          logged_date: today,
+        });
+      }
+
+      await refetch();
+      setSelectedAccountId(newSocial.id);
+    } catch (err) {
+      console.error('Failed to add account:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const updateAccount = (id: string, updater: (prev: SocialAccount) => SocialAccount) => {
-    setAccounts(prev => prev.map(a => (a.id === id ? updater(a) : a)));
+  const updateAccount = async (id: string, params: any) => {
+    try {
+      setIsSubmitting(true);
+      await SocialService.updateSocial(id, params);
+      await refetch();
+    } catch (err) {
+      console.error('Failed to update account:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const removeAccount = (id: string) => {
-    setAccounts(prev => prev.filter(a => a.id !== id));
-    if (selectedAccountId === id) setSelectedAccountId(null);
+  const removeAccount = async (id: string) => {
+    try {
+      setIsSubmitting(true);
+      await SocialService.deleteSocial(id);
+      if (selectedAccountId === id) setSelectedAccountId(null);
+      await refetch();
+    } catch (err) {
+      console.error('Failed to delete account:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const removeHistoryEntry = (accountId: string, date: string) => {
-    updateAccount(accountId, (prev) => {
-      const nextHistory = prev.history.filter(h => h.date !== date);
-      const last = nextHistory.length ? nextHistory[nextHistory.length - 1].followers : prev.initialFollowers ?? 0;
-      return { ...prev, history: nextHistory, currentFollowers: last };
-    });
+  const removeHistoryEntry = async (accountId: string, entryId: string) => {
+    try {
+      setIsSubmitting(true);
+      await SocialService.deleteFollowerLog(entryId);
+      await refetch();
+    } catch (err) {
+      console.error('Failed to delete entry:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const todayIso = new Date().toISOString().slice(0, 10);
@@ -413,26 +406,17 @@ export default function SocialsOverlay({ onClose }: SocialsOverlayProps) {
 
     const canSave = name.trim().length > 0 && platform;
 
-    const handleSave = () => {
-      if (!canSave) return;
+    const handleSave = async () => {
+      if (!canSave || isSubmitting) return;
       const initial = initialFollowers ? Number(initialFollowers) : undefined;
-      const current = currentFollowers ? Number(currentFollowers) : undefined;
-      const now = new Date().toISOString();
-      const history: { date: string; followers: number }[] = [];
-      if (initial !== undefined) history.push({ date: now, followers: initial });
-      if (current !== undefined) history.push({ date: now, followers: current });
-
-      addAccount({
-        id: uniqueId(),
-        name: name.trim(),
+      
+      await addAccount({
+        account_name: name.trim(),
         platform,
-        url: url.trim(),
+        url: url.trim() || undefined,
+        category: PLATFORM_CATEGORIES.find(c => c.platforms.some(p => p.slug === platform))?.title,
+        initial_followers: initial,
         notes: notes.trim() || undefined,
-        tags: [],
-        initialFollowers: initial,
-        currentFollowers: current,
-        history,
-        createdAt: now,
       });
       setShowAdd(false);
     };
@@ -534,44 +518,45 @@ export default function SocialsOverlay({ onClose }: SocialsOverlayProps) {
   };
 
   const AddEntryModal = () => {
-    const [date, setDate] = useState(editingHistoryEntry?.date ?? todayIso);
+    const [date, setDate] = useState(editingHistoryEntry?.logged_date ?? todayIso);
     const [followers, setFollowers] = useState<string>(editingHistoryEntry ? String(editingHistoryEntry.followers) : '');
 
     useEffect(() => {
-      setDate(editingHistoryEntry?.date ?? todayIso);
+      setDate(editingHistoryEntry?.logged_date ?? todayIso);
       setFollowers(editingHistoryEntry ? String(editingHistoryEntry.followers) : '');
     }, [editingHistoryEntry]);
 
-    const originalDate = editingHistoryEntry?.date;
+    const originalDate = editingHistoryEntry?.logged_date;
     const isEditing = Boolean(editingHistoryEntry);
 
     const canSave = date && followers.trim() !== '';
 
-    const handleSave = () => {
-      if (!selectedAccount || !canSave) return;
+    const handleSave = async () => {
+      if (!selectedAccount || !canSave || isSubmitting) return;
       const value = Number(followers);
 
-      updateAccount(selectedAccount.id, prev => {
-        let nextHistory = prev.history;
-
-        // If date changed, remove the old entry
-        if (isEditing && originalDate && originalDate !== date) {
-          nextHistory = nextHistory.filter(h => h.date !== originalDate);
+      try {
+        if (isEditing && editingHistoryEntry) {
+          // Update existing log
+          await SocialService.updateFollowerLog(editingHistoryEntry.log_id, {
+            followers: value,
+            logged_date: date,
+          });
+        } else {
+          // Add new log
+          await SocialService.addFollowerLog({
+            social_id: selectedAccount.id,
+            followers: value,
+            logged_date: date,
+          });
         }
 
-        const existing = nextHistory.find(h => h.date === date);
-        nextHistory = existing
-          ? nextHistory.map(h => (h.date === date ? { ...h, followers: value } : h))
-          : [...nextHistory, { date, followers: value }];
-
-        const sorted = [...nextHistory].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-        const nextCurrent = sorted.length ? sorted[sorted.length - 1].followers : prev.currentFollowers ?? prev.initialFollowers ?? 0;
-
-        return { ...prev, history: sorted, currentFollowers: nextCurrent };
-      });
-
-      setEditingHistoryEntry(null);
-      setShowAddEntry(false);
+        await refetch();
+        setEditingHistoryEntry(null);
+        setShowAddEntry(false);
+      } catch (err) {
+        console.error('Failed to save entry:', err);
+      }
     };
 
     const handleCancel = () => {
@@ -605,10 +590,10 @@ export default function SocialsOverlay({ onClose }: SocialsOverlayProps) {
           >
             CANCEL
           </button>
-          {isEditing && selectedAccount && (
+          {isEditing && editingHistoryEntry && (
             <button
-              onClick={() => {
-                removeHistoryEntry(selectedAccount.id, originalDate!);
+              onClick={async () => {
+                await removeHistoryEntry(editingHistoryEntry.account_id, editingHistoryEntry.log_id);
                 handleCancel();
               }}
               style={{
@@ -620,7 +605,7 @@ export default function SocialsOverlay({ onClose }: SocialsOverlayProps) {
           )}
           <button
             onClick={handleSave}
-            disabled={!canSave}
+            disabled={!canSave || isSubmitting}
             style={{
               padding: '6px 12px', border: `1px solid ${canSave ? 'hsl(var(--accent))' : 'hsl(var(--accent-dim))'}`,
               background: 'transparent', color: canSave ? 'hsl(var(--accent))' : 'hsl(var(--text-dim))', cursor: canSave ? 'pointer' : 'not-allowed', fontFamily: "'IBM Plex Mono', monospace", fontSize: 10,
@@ -640,13 +625,25 @@ export default function SocialsOverlay({ onClose }: SocialsOverlayProps) {
     const [url, setUrl] = useState('');
     const [category, setCategory] = useState(PLATFORM_CATEGORIES[0]?.title ?? '');
     const [initialFollowers, setInitialFollowers] = useState<string>('');
-    const [currentFollowers, setCurrentFollowers] = useState<string>('');
     const [notes, setNotes] = useState('');
 
     const initialValue = Number(initialFollowers) || 0;
-    const currentValue = Number(currentFollowers) || 0;
-    const delta = currentValue - initialValue;
-    const percent = initialValue === 0 ? 0 : (delta / initialValue) * 100;
+    const delta = 0; // new account, so delta is 0
+    const percent = 0;
+
+    const handleCreate = async () => {
+      if (!name.trim() || !platform) return;
+      
+      await addAccount({
+        account_name: name.trim(),
+        platform,
+        url: url.trim() || undefined,
+        category: category || undefined,
+        initial_followers: initialValue > 0 ? initialValue : undefined,
+        notes: notes.trim() || undefined,
+      });
+      setShowNewSocial(false);
+    };
 
     return (
       <div style={{ padding: 18, display: 'grid', gap: 12, fontFamily: "'IBM Plex Mono', monospace", fontSize: 11 }}>
@@ -680,38 +677,15 @@ export default function SocialsOverlay({ onClose }: SocialsOverlayProps) {
           <input className="crt-input" value={url} onChange={e => setUrl(e.target.value)} placeholder="https://" />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <div>
-            <div style={{ color: 'hsl(var(--text-dim))', fontSize: 9 }}>INITIAL FOLLOWERS (optional)</div>
-            <input
-              className="crt-input"
-              type="number"
-              value={initialFollowers}
-              onChange={e => setInitialFollowers(e.target.value)}
-              placeholder="0"
-            />
-          </div>
-          <div>
-            <div style={{ color: 'hsl(var(--text-dim))', fontSize: 9 }}>CURRENT FOLLOWERS (optional)</div>
-            <input
-              className="crt-input"
-              type="number"
-              value={currentFollowers}
-              onChange={e => setCurrentFollowers(e.target.value)}
-              placeholder="0"
-            />
-          </div>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <div>
-            <div style={{ color: 'hsl(var(--text-dim))', fontSize: 9 }}>CHANGE</div>
-            <div style={{ fontSize: 12, color: 'hsl(var(--accent))' }}>{formatDelta(delta)}</div>
-          </div>
-          <div>
-            <div style={{ color: 'hsl(var(--text-dim))', fontSize: 9 }}>%</div>
-            <div style={{ fontSize: 12, color: 'hsl(var(--accent))' }}>{initialValue === 0 ? '—' : `${percent.toFixed(1)}%`}</div>
-          </div>
+        <div>
+          <div style={{ color: 'hsl(var(--text-dim))', fontSize: 9 }}>INITIAL FOLLOWERS (optional)</div>
+          <input
+            className="crt-input"
+            type="number"
+            value={initialFollowers}
+            onChange={e => setInitialFollowers(e.target.value)}
+            placeholder="0"
+          />
         </div>
 
         <div>
@@ -720,7 +694,7 @@ export default function SocialsOverlay({ onClose }: SocialsOverlayProps) {
             className="crt-input"
             value={notes}
             onChange={e => setNotes(e.target.value)}
-            placeholder="Add notes or comma-separated tags"
+            placeholder="Add notes"
           />
         </div>
 
@@ -734,9 +708,11 @@ export default function SocialsOverlay({ onClose }: SocialsOverlayProps) {
             CANCEL
           </button>
           <button
-            onClick={() => setShowNewSocial(false)}
+            onClick={handleCreate}
+            disabled={isSubmitting || !name.trim()}
             style={{
-              padding: '6px 12px', border: '1px solid hsl(var(--accent))', background: 'transparent', color: 'hsl(var(--accent))', cursor: 'pointer', fontFamily: "'IBM Plex Mono', monospace", fontSize: 10,
+              padding: '6px 12px', border: '1px solid hsl(var(--accent))', background: 'transparent', color: 'hsl(var(--accent))', cursor: isSubmitting || !name.trim() ? 'not-allowed' : 'pointer', fontFamily: "'IBM Plex Mono', monospace", fontSize: 10,
+              opacity: isSubmitting || !name.trim() ? 0.5 : 1,
             }}
           >
             CREATE
@@ -747,9 +723,9 @@ export default function SocialsOverlay({ onClose }: SocialsOverlayProps) {
   };
 
   const accountCard = (account: SocialAccount) => {
-    const initial = account.initialFollowers ?? 0;
-    const current = account.currentFollowers ?? initial;
-    const delta = current - initial;
+    const initial = account.initial_followers ?? 0;
+    const last = account.history.length > 0 ? account.history[account.history.length - 1].followers : initial;
+    const delta = last - initial;
     const deltaPct = initial > 0 ? (delta / initial) * 100 : 0;
 
     const platform = ALL_PLATFORMS.find(p => p.slug === account.platform);
@@ -767,11 +743,11 @@ export default function SocialsOverlay({ onClose }: SocialsOverlayProps) {
         }}
       >
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, color: 'hsl(var(--accent))' }}>{account.name}</div>
+          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, color: 'hsl(var(--accent))' }}>{account.account_name}</div>
           <div style={{ fontSize: 10, color: 'hsl(var(--text-dim))' }}>{platform?.label ?? account.platform}</div>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 10, color: 'hsl(var(--text-dim))' }}>
-          <span>{formatNumber(current)} followers</span>
+          <span>{formatNumber(last)} followers</span>
           <span>{formatDelta(delta)} ({formatPercent(delta, initial)})</span>
         </div>
         {account.url && (
@@ -792,6 +768,8 @@ export default function SocialsOverlay({ onClose }: SocialsOverlayProps) {
 
         <div style={{ flex: 1 }} />
 
+        {isLoading && <span style={{ fontSize: 10, color: 'hsl(var(--text-dim))' }}>LOADING...</span>}
+
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <div style={{ display: 'flex', gap: 12, padding: 10, border: '1px solid hsl(var(--accent))', borderRadius: 10, background: 'hsl(var(--bg-secondary))', boxShadow: '0 0 0 1px hsl(var(--accent))' }}>
             <div style={{ textAlign: 'right', fontSize: 10, color: 'hsl(var(--text-dim))' }}>
@@ -810,8 +788,10 @@ export default function SocialsOverlay({ onClose }: SocialsOverlayProps) {
 
           <button
             onClick={() => setShowNewSocial(true)}
+            disabled={isSubmitting}
             style={{
-              padding: '6px 14px', fontSize: 10, border: '1px solid hsl(var(--accent))', background: 'transparent', color: 'hsl(var(--accent))', cursor: 'pointer', fontFamily: "'IBM Plex Mono', monospace", letterSpacing: 1,
+              padding: '6px 14px', fontSize: 10, border: '1px solid hsl(var(--accent))', background: 'transparent', color: 'hsl(var(--accent))', cursor: isSubmitting ? 'not-allowed' : 'pointer', fontFamily: "'IBM Plex Mono', monospace", letterSpacing: 1,
+              opacity: isSubmitting ? 0.5 : 1,
             }}
           >
             NEW
@@ -876,16 +856,20 @@ export default function SocialsOverlay({ onClose }: SocialsOverlayProps) {
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <button
                   onClick={() => setShowAddEntry(true)}
+                  disabled={isSubmitting}
                   style={{
-                    padding: '6px 12px', fontSize: 10, border: '1px solid hsl(var(--accent))', background: 'transparent', color: 'hsl(var(--accent))', cursor: 'pointer', fontFamily: "'IBM Plex Mono', monospace", letterSpacing: 1,
+                    padding: '6px 12px', fontSize: 10, border: '1px solid hsl(var(--accent))', background: 'transparent', color: 'hsl(var(--accent))', cursor: isSubmitting ? 'not-allowed' : 'pointer', fontFamily: "'IBM Plex Mono', monospace", letterSpacing: 1,
+                    opacity: isSubmitting ? 0.5 : 1,
                   }}
                 >
                   + ENTRY
                 </button>
                 <button
                   onClick={() => selectedAccount && removeAccount(selectedAccount.id)}
+                  disabled={isSubmitting}
                   style={{
-                    padding: '6px 12px', fontSize: 10, border: '1px solid hsl(0,80%,70%)', background: 'transparent', color: 'hsl(0,80%,70%)', cursor: 'pointer', fontFamily: "'IBM Plex Mono', monospace", letterSpacing: 1,
+                    padding: '6px 12px', fontSize: 10, border: '1px solid hsl(0,80%,70%)', background: 'transparent', color: 'hsl(0,80%,70%)', cursor: isSubmitting ? 'not-allowed' : 'pointer', fontFamily: "'IBM Plex Mono', monospace", letterSpacing: 1,
+                    opacity: isSubmitting ? 0.5 : 1,
                   }}
                 >
                   DELETE
@@ -907,11 +891,13 @@ export default function SocialsOverlay({ onClose }: SocialsOverlayProps) {
                 </div>
                 <div style={{ padding: 12, background: 'hsl(var(--bg-secondary))', border: '1px solid hsl(var(--accent-dim))', borderRadius: 8 }}>
                   <div style={{ fontSize: 10, color: 'hsl(var(--text-dim))' }}>CURRENT FOLLOWERS</div>
-                  <div style={{ fontSize: 14, color: 'hsl(var(--accent))' }}>{formatNumber(selectedAccount.currentFollowers ?? selectedAccount.initialFollowers)}</div>
+                  <div style={{ fontSize: 14, color: 'hsl(var(--accent))' }}>
+                    {formatNumber(selectedAccount.history.length > 0 ? selectedAccount.history[selectedAccount.history.length - 1].followers : selectedAccount.initial_followers)}
+                  </div>
                 </div>
                 <div style={{ padding: 12, background: 'hsl(var(--bg-secondary))', border: '1px solid hsl(var(--accent-dim))', borderRadius: 8 }}>
                   <div style={{ fontSize: 10, color: 'hsl(var(--text-dim))' }}>START FOLLOWERS</div>
-                  <div style={{ fontSize: 14, color: 'hsl(var(--accent))' }}>{formatNumber(selectedAccount.initialFollowers)}</div>
+                  <div style={{ fontSize: 14, color: 'hsl(var(--accent))' }}>{formatNumber(selectedAccount.initial_followers)}</div>
                 </div>
               </div>
 
@@ -935,6 +921,7 @@ export default function SocialsOverlay({ onClose }: SocialsOverlayProps) {
                     {buildSeriesFromHistory(selectedAccount.history).map((entry, idx, all) => {
                       const prev = idx > 0 ? all[idx - 1].value : entry.value;
                       const delta = entry.value - prev;
+                      const logEntry = selectedAccount.history.find(h => h.logged_date === entry.date);
                       return (
                         <div key={`${entry.date}-${idx}`} style={{ display: 'contents' }}>
                           <div>{new Date(entry.date).toLocaleDateString()}</div>
@@ -942,7 +929,12 @@ export default function SocialsOverlay({ onClose }: SocialsOverlayProps) {
                           <div style={{ color: delta >= 0 ? 'hsl(var(--accent))' : 'hsl(0,80%,70%)' }}>{formatDelta(delta)}</div>
                           <div style={{ display: 'flex', gap: 6 }}>
                             <button
-                              onClick={() => handleEditHistoryEntry(entry)}
+                              onClick={() => logEntry && setEditingHistoryEntry({
+                                account_id: selectedAccount.id,
+                                log_id: logEntry.id,
+                                logged_date: entry.date,
+                                followers: entry.value,
+                              }) && setShowAddEntry(true)}
                               style={{
                                 padding: '4px 8px', fontSize: 9, border: '1px solid hsl(var(--accent-dim))', background: 'transparent', color: 'hsl(var(--text-dim))', cursor: 'pointer', fontFamily: "'IBM Plex Mono', monospace", letterSpacing: 1,
                               }}
@@ -951,8 +943,7 @@ export default function SocialsOverlay({ onClose }: SocialsOverlayProps) {
                             </button>
                             <button
                               onClick={() => {
-                                if (!selectedAccount) return;
-                                removeHistoryEntry(selectedAccount.id, entry.date);
+                                if (logEntry) removeHistoryEntry(selectedAccount.id, logEntry.id);
                               }}
                               style={{
                                 padding: '4px 8px', fontSize: 9, border: '1px solid hsl(0,80%,70%)', background: 'transparent', color: 'hsl(0,80%,70%)', cursor: 'pointer', fontFamily: "'IBM Plex Mono', monospace", letterSpacing: 1,

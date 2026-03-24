@@ -7,7 +7,7 @@
 
 export type StatKey = 'body' | 'wire' | 'mind' | 'cool' | 'grit' | 'flow' | 'ghost';
 
-export type MasterLevel = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+export type MasterLevel = number; // unlimited levels
 
 export type StreakTier = 'STANDARD' | 'HOT_STREAK' | 'ON_FIRE' | 'LEGENDARY';
 
@@ -76,17 +76,10 @@ export const MASTER_LEVEL_TITLES: Record<MasterLevel, string> = {
   10: 'ROOT ACCESS',
 };
 
-export const MASTER_LEVEL_THRESHOLDS: Record<MasterLevel, number> = {
-  1: 0,
-  2: 500,
-  3: 1200,
-  4: 2500,
-  5: 4500,
-  6: 7500,
-  7: 12000,
-  8: 18000,
-  9: 26000,
-  10: 36000,
+// Legacy reference — use getLevelFromXP from xpService for all new code
+export const MASTER_LEVEL_THRESHOLDS: Record<number, number> = {
+  0: 0, 1: 1400, 2: 3000, 3: 4800, 4: 6800, 5: 9000,
+  6: 11400, 7: 14000, 8: 16800, 9: 19800, 10: 23000,
 };
 
 export const STREAK_MULTIPLIERS: Record<StreakTier, number> = {
@@ -154,19 +147,17 @@ export const MULTIPLIER_MAP: Record<StreakTier, number> = {
   LEGENDARY:  3.0,
 };
 
-// XP required per stat level (same curve for all stats)
-const STAT_LEVEL_XP = [0, 500, 1200, 2500, 4500, 7500, 12000, 18000, 26000, 36000];
-
+// Shared level calculation — same curve as xpService, no circular import
+const _T = [0,1400,3000,4800,6800,9000,11400,14000,16800,19800,23000,26400,30000,33800,37800,42000,46400,51000,55800,60800,66000,71400,77000,82800,88800,95000,101400,108000,114800,121800,129000,136400,144000,151800,159800,168000,176400,185000,193800,202800,212000,221400,231000,240800,250800,261000,271400,282000,292800,303800,315000,326400,338000,349800,361800,374000,386400,399000,411800,424800,438000];
+function _calcLevel(xp: number) {
+  const x = Math.max(0, xp);
+  if (x >= 438000) { const a = x - 438000; return { level: 60 + Math.floor(a / 13200) + 1, xpInLevel: a % 13200, xpForLevel: 13200 }; }
+  let level = 0;
+  for (let i = _T.length - 1; i >= 0; i--) { if (x >= _T[i]) { level = i; break; } }
+  return { level, xpInLevel: x - _T[level], xpForLevel: level < _T.length - 1 ? _T[level + 1] - _T[level] : 13200 };
+}
 export function getStatLevel(totalXP: number): { level: number; xpInLevel: number; xpForLevel: number } {
-  let level = 1;
-  for (let i = STAT_LEVEL_XP.length - 1; i >= 0; i--) {
-    if (totalXP >= STAT_LEVEL_XP[i]) { level = i + 1; break; }
-  }
-  const xpInLevel  = totalXP - (STAT_LEVEL_XP[level - 1] ?? 0);
-  const xpForLevel = level < STAT_LEVEL_XP.length
-    ? (STAT_LEVEL_XP[level] ?? 0) - (STAT_LEVEL_XP[level - 1] ?? 0)
-    : 99999;
-  return { level, xpInLevel, xpForLevel };
+  return _calcLevel(totalXP);
 }
 
 // ─── HELPER FUNCTIONS ────────────────────────────────────────
@@ -185,26 +176,10 @@ export function getMasterLevel(totalXP: number): {
   xpInLevel: number;
   xpForLevel: number;
 } {
-  let level: MasterLevel = 1;
-  for (let l = 10; l >= 1; l--) {
-    if (totalXP >= MASTER_LEVEL_THRESHOLDS[l as MasterLevel]) {
-      level = l as MasterLevel;
-      break;
-    }
-  }
-  const currentThreshold = MASTER_LEVEL_THRESHOLDS[level];
-  const nextThreshold = level < 10
-    ? MASTER_LEVEL_THRESHOLDS[(level + 1) as MasterLevel]
-    : MASTER_LEVEL_THRESHOLDS[10];
-  const xpInLevel = totalXP - currentThreshold;
-  const xpForLevel = nextThreshold - currentThreshold;
-  return {
-    level,
-    title: MASTER_LEVEL_TITLES[level],
-    progressPercent: level < 10 ? Math.floor((xpInLevel / xpForLevel) * 100) : 100,
-    xpInLevel,
-    xpForLevel,
-  };
+  const { level, xpInLevel, xpForLevel } = _calcLevel(totalXP);
+  const progressPercent = xpForLevel > 0 ? Math.floor((xpInLevel / xpForLevel) * 100) : 0;
+  const title = MASTER_LEVEL_TITLES[level as keyof typeof MASTER_LEVEL_TITLES] ?? `LVL ${level}`;
+  return { level, title, progressPercent, xpInLevel, xpForLevel };
 }
 
 // ─── INTERFACES ──────────────────────────────────────────────
@@ -214,7 +189,7 @@ export interface Operator {
   callsign: string;
   displayName: string | null;
   customClassName: string | null;
-  theme: 'amber' | 'green' | 'dos' | 'light' | 'blood' | 'ice' | 'cyber2077' | 'pasteldream' | 'kawaiikitty' | 'mochimagic' | 'pixelpop' | 'sweetcandy' | 'chibichill' | 'rainbowbubbles' | 'neon' | 'void' | 'plasma' | 'ember' | 'glitch' | 'synth' | 'atari' | 'amiga' | 'c64' | 'mac' | 'sinclair';
+  theme: 'amber' | 'green' | 'dos' | 'blood' | 'ice';
   currentLayout: string;
   bootstrapComplete: boolean;
   createdAt: string;

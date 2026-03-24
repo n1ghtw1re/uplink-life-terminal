@@ -135,7 +135,7 @@ function InlineLogPanel({ skill, onDone }: { skill: Skill; onDone: () => void })
   );
 
   const { data: activeCourses } = useQuery({
-    queryKey: ['courses-active', user?.id],
+    queryKey: ['courses-active'],
     queryFn: async () => {
       const { data } = await supabase
         .from('courses')
@@ -167,14 +167,7 @@ function InlineLogPanel({ skill, onDone }: { skill: Skill; onDone: () => void })
   const logMutation = useMutation({
     mutationFn: logSession,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['operator', user?.id] });
-      queryClient.invalidateQueries({ queryKey: ['stats', user?.id] });
-      queryClient.invalidateQueries({ queryKey: ['skills', user?.id] });
-      queryClient.invalidateQueries({ queryKey: ['xp-recent', user?.id] });
-      queryClient.invalidateQueries({ queryKey: ['xp-log-by-stat'] });
-      queryClient.invalidateQueries({ queryKey: ['skill-sessions', skill.id] });
-      queryClient.invalidateQueries({ queryKey: ['skill', skill.id] });
-      queryClient.invalidateQueries({ queryKey: ['checkins-heatmap', user?.id] });
+      queryClient.invalidateQueries();
       toast({
         title: '✓ SESSION LOGGED',
         description: `${skill.name}  ${duration}min  +${totalXp} XP`,
@@ -479,14 +472,24 @@ export default function SkillDetailDrawer({ skillId, onClose, onOpenLog }: Props
     queryKey: ['skill-sessions', skillId],
     enabled: !!skillId,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('sessions')
-        .select('id, duration_minutes, logged_at, notes, skill_xp_awarded')
-        .eq('skill_id', skillId)
-        .order('logged_at', { ascending: false })
-        .limit(5);
-      if (error) throw error;
-      return data as SessionRow[];
+      const db  = await import('@/lib/db').then(m => m.getDB());
+      const res = await db.query<SessionRow>(
+        `SELECT id, duration_minutes, logged_at, notes, skill_xp as skill_xp_awarded
+         FROM sessions WHERE skill_id = $1 ORDER BY logged_at DESC LIMIT 20;`,
+        [skillId]
+      );
+      return res.rows;
+    },
+  });
+
+  // ── Delete session ───────────────────────────────────────────
+  const deleteSession = useMutation({
+    mutationFn: async (sessionId: string) => {
+      const db = await import('@/lib/db').then(m => m.getDB());
+      await db.exec(`DELETE FROM sessions WHERE id = '${sessionId}'`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['skill-sessions', skillId] });
     },
   });
 
@@ -498,8 +501,7 @@ export default function SkillDetailDrawer({ skillId, onClose, onOpenLog }: Props
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['skill', skillId] });
-      queryClient.invalidateQueries({ queryKey: ['skills', user?.id] });
+      queryClient.invalidateQueries();
       setEditingName(false);
     },
   });
@@ -510,7 +512,7 @@ export default function SkillDetailDrawer({ skillId, onClose, onOpenLog }: Props
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['skills', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['skills'] });
       onClose?.();
     },
   });
@@ -522,9 +524,7 @@ export default function SkillDetailDrawer({ skillId, onClose, onOpenLog }: Props
       await db.exec(`UPDATE skills SET active = ${active} WHERE id = '${skillId}';`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['skill', skillId] });
-      queryClient.invalidateQueries({ queryKey: ['skills'] });
-      queryClient.invalidateQueries({ queryKey: ['lifepath-skills-all'] });
+      queryClient.invalidateQueries();
     },
   });
 
@@ -539,8 +539,7 @@ export default function SkillDetailDrawer({ skillId, onClose, onOpenLog }: Props
       );
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['skill', skillId] });
-      queryClient.invalidateQueries({ queryKey: ['skills'] });
+      queryClient.invalidateQueries();
       setEditingStats(false);
     },
   });
@@ -680,17 +679,22 @@ export default function SkillDetailDrawer({ skillId, onClose, onOpenLog }: Props
         ) : (
           sessions.map(s => {
             const date = new Date(s.logged_at).toLocaleDateString('en-CA').replace(/-/g, '.');
+            const time = new Date(s.logged_at).toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' });
             return (
-              <div key={s.id} style={{
-                display: 'flex', gap: 10,
-                fontFamily: mono, fontSize: 10,
-                marginBottom: 5, alignItems: 'flex-start',
-              }}>
-                <span style={{ color: accentDim, flexShrink: 0 }}>&gt;</span>
-                <span style={{ color: dimText, flexShrink: 0, width: 80 }}>{date}</span>
-                <span style={{ color: accent, flexShrink: 0 }}>{s.duration_minutes} min</span>
-                {s.notes && <span style={{ color: dimText, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.notes}</span>}
-                <span style={{ color: '#44ff88', flexShrink: 0, marginLeft: 'auto' }}>+{s.skill_xp_awarded} XP</span>
+              <div key={s.id} style={{ display: 'flex', gap: 8, fontFamily: mono, fontSize: 10, marginBottom: 6, alignItems: 'center', padding: '4px 6px', background: 'rgba(153,104,0,0.06)', border: '1px solid rgba(153,104,0,0.2)' }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(153,104,0,0.4)'}
+                onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(153,104,0,0.2)'}>
+                <span style={{ color: accentDim, flexShrink: 0 }}>›</span>
+                <span style={{ color: dimText, flexShrink: 0, width: 72 }}>{date}</span>
+                <span style={{ color: dimText, flexShrink: 0, width: 44, fontSize: 9, opacity: 0.6 }}>{time}</span>
+                <span style={{ color: accent, flexShrink: 0 }}>{s.duration_minutes}m</span>
+                {s.notes && <span style={{ color: dimText, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 9 }}>{s.notes}</span>}
+                {!s.notes && <span style={{ flex: 1 }} />}
+                <span style={{ color: '#44ff88', flexShrink: 0 }}>+{s.skill_xp_awarded}</span>
+                <span onClick={() => { if (window.confirm('Delete this session? XP already awarded will not be reversed.')) deleteSession.mutate(s.id); }}
+                  style={{ fontSize: 9, color: 'rgba(153,104,0,0.4)', cursor: 'pointer', flexShrink: 0, padding: '0 2px' }}
+                  onMouseEnter={e => e.currentTarget.style.color = '#ff4400'}
+                  onMouseLeave={e => e.currentTarget.style.color = 'rgba(153,104,0,0.4)'}>×</span>
               </div>
             );
           })
@@ -779,7 +783,7 @@ export default function SkillDetailDrawer({ skillId, onClose, onOpenLog }: Props
           onBlur={async e => {
             await supabase.from('skills').update({ notes: e.target.value.trim() || null }).eq('id', skillId);
             queryClient.invalidateQueries({ queryKey: ['skill', skillId] });
-            queryClient.invalidateQueries({ queryKey: ['skills', user?.id] });
+            queryClient.invalidateQueries({ queryKey: ['skills'] });
           }}
           placeholder="Add notes about this skill..."
           rows={3}

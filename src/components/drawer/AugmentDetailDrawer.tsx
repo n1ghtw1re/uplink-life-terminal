@@ -100,8 +100,7 @@ export default function AugmentDetailDrawer({ augmentId, onClose }: Props) {
       `);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['augment', augmentId] });
-      queryClient.invalidateQueries({ queryKey: ['augments'] });
+      queryClient.invalidateQueries();
       setEditing(false);
       toast({ title: '✓ AUGMENT UPDATED' });
     },
@@ -113,8 +112,7 @@ export default function AugmentDetailDrawer({ augmentId, onClose }: Props) {
       await db.exec(`UPDATE augments SET active = ${active} WHERE id = '${augmentId}';`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['augment', augmentId] });
-      queryClient.invalidateQueries({ queryKey: ['augments'] });
+      queryClient.invalidateQueries();
     },
   });
 
@@ -174,12 +172,7 @@ export default function AugmentDetailDrawer({ augmentId, onClose }: Props) {
           <span style={{ fontSize: 10, color: dim, flexShrink: 0 }}>{xpPct}%</span>
         </div>
         <div style={{ fontSize: 9, color: adim }}>
-          {augment.xp.toLocaleString()} augmentXP
-          {augProgress && (
-            <span style={{ marginLeft: 10, color: dim }}>
-              Overall Augment LVL {augProgress.level} — {augProgress.total_xp.toLocaleString()} XP
-            </span>
-          )}
+          {Number(augment.xp).toLocaleString()} / {xpForLevel.toLocaleString()} XP to LVL {level + 1}
         </div>
       </div>
 

@@ -48,7 +48,7 @@ async function initSchema(db: PGlite) {
     CREATE TABLE IF NOT EXISTS stats (
       stat_key    TEXT PRIMARY KEY,
       xp          INTEGER NOT NULL DEFAULT 0,
-      level       INTEGER NOT NULL DEFAULT 1,
+      level       INTEGER NOT NULL DEFAULT 0,
       streak      INTEGER NOT NULL DEFAULT 0,
       dormant     BOOLEAN NOT NULL DEFAULT FALSE
     );
@@ -59,7 +59,7 @@ async function initSchema(db: PGlite) {
     CREATE TABLE IF NOT EXISTS master_progress (
       id          INTEGER PRIMARY KEY DEFAULT 1,
       total_xp    INTEGER NOT NULL DEFAULT 0,
-      level       INTEGER NOT NULL DEFAULT 1,
+      level       INTEGER NOT NULL DEFAULT 0,
       streak      INTEGER NOT NULL DEFAULT 0,
       shields     INTEGER NOT NULL DEFAULT 0,
       last_checkin TEXT
@@ -69,14 +69,14 @@ async function initSchema(db: PGlite) {
     CREATE TABLE IF NOT EXISTS tool_progress (
       id        INTEGER PRIMARY KEY DEFAULT 1,
       total_xp  INTEGER NOT NULL DEFAULT 0,
-      level     INTEGER NOT NULL DEFAULT 1
+      level     INTEGER NOT NULL DEFAULT 0
     );
     INSERT INTO tool_progress (id) VALUES (1) ON CONFLICT DO NOTHING;
 
     CREATE TABLE IF NOT EXISTS augment_progress (
       id        INTEGER PRIMARY KEY DEFAULT 1,
       total_xp  INTEGER NOT NULL DEFAULT 0,
-      level     INTEGER NOT NULL DEFAULT 1
+      level     INTEGER NOT NULL DEFAULT 0
     );
     INSERT INTO augment_progress (id) VALUES (1) ON CONFLICT DO NOTHING;
 
@@ -96,7 +96,7 @@ async function initSchema(db: PGlite) {
       default_split JSONB NOT NULL DEFAULT '[100]',
       icon          TEXT NOT NULL DEFAULT 'o',
       xp            INTEGER NOT NULL DEFAULT 0,
-      level         INTEGER NOT NULL DEFAULT 1,
+      level         INTEGER NOT NULL DEFAULT 0,
       lifepath_id   TEXT,
       subcategory   TEXT,
       is_preset     BOOLEAN NOT NULL DEFAULT FALSE,
@@ -114,7 +114,7 @@ async function initSchema(db: PGlite) {
       lifepath_id TEXT,
       subcategory TEXT,
       xp          INTEGER NOT NULL DEFAULT 0,
-      level       INTEGER NOT NULL DEFAULT 1,
+      level       INTEGER NOT NULL DEFAULT 0,
       is_preset   BOOLEAN NOT NULL DEFAULT FALSE,
       is_custom   BOOLEAN NOT NULL DEFAULT FALSE,
       active      BOOLEAN NOT NULL DEFAULT TRUE,
@@ -135,7 +135,7 @@ async function initSchema(db: PGlite) {
       name        TEXT NOT NULL,
       category    TEXT,
       xp          INTEGER NOT NULL DEFAULT 0,
-      level       INTEGER NOT NULL DEFAULT 1,
+      level       INTEGER NOT NULL DEFAULT 0,
       is_preset   BOOLEAN NOT NULL DEFAULT FALSE,
       is_custom   BOOLEAN NOT NULL DEFAULT FALSE,
       active      BOOLEAN NOT NULL DEFAULT TRUE,
@@ -402,4 +402,14 @@ async function initSchema(db: PGlite) {
   await db.exec(
     `ALTER TABLE sessions ADD COLUMN IF NOT EXISTS project_ids JSONB NOT NULL DEFAULT '[]'`
   );
+  // Reset level floors to 0 for new level system (safe — only resets if XP is 0)
+  await db.exec(`
+    UPDATE master_progress SET level = 0 WHERE total_xp = 0;
+    UPDATE tool_progress    SET level = 0 WHERE total_xp = 0;
+    UPDATE augment_progress SET level = 0 WHERE total_xp = 0;
+    UPDATE skills           SET level = 0 WHERE xp = 0;
+    UPDATE stats            SET level = 0 WHERE xp = 0;
+    UPDATE tools            SET level = 0 WHERE xp = 0;
+    UPDATE augments         SET level = 0 WHERE xp = 0;
+  `);
 }

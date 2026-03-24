@@ -27,6 +27,7 @@ import StatDetailOverlay from '@/components/overlays/StatDetailOverlay';
 import SkillsPage from '@/components/overlays/SkillsPage';
 import LibraryPage from '@/components/overlays/LibraryPage';
 import CoursesPage from '@/components/overlays/CoursesPage';
+import DailyLogPage from '@/components/overlays/DailyLogPage';
 import SocialsOverlay from '@/components/overlays/SocialsOverlay';
 import LifepathPage from '@/components/overlays/LifepathPage';
 import ToolsPage from '@/components/overlays/ToolsPage';
@@ -79,6 +80,7 @@ const Index = () => {
   const [showChar, setShowChar] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showSocials, setShowSocials] = useState(false);
+  const [showDailyLog, setShowDailyLog] = useState(false);
   const [showLifepath, setShowLifepath] = useState(false);
   const [showTools, setShowTools]         = useState(false);
   const [showAugments, setShowAugments]   = useState(false);
@@ -132,6 +134,7 @@ const Index = () => {
     if (tag === 'INPUT' || tag === 'TEXTAREA') return;
     if (e.key === 'Escape') {
       if (showLifepath) { setShowLifepath(false); return; }
+      if (showDailyLog) { setShowDailyLog(false); return; }
       if (openStatKey) { setOpenStatKey(null); return; }
       if (drawerOpen) { closeDrawer(); return; }
       if (fullscreenWidget) { setFullscreenWidget(null); return; }
@@ -143,7 +146,7 @@ const Index = () => {
     if (e.key === '/') { e.preventDefault(); setShowSearch(true); }
     if (e.key === '[') setSidebarExpanded(false);
     if (e.key === ']') setSidebarExpanded(true);
-  }, [fullscreenWidget, drawerOpen, openStatKey, showLifepath]);
+  }, [fullscreenWidget, drawerOpen, openStatKey, showLifepath, showDailyLog]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKey);
@@ -241,6 +244,7 @@ const Index = () => {
           onOpenProjects={() => setShowProjects(true)}
           onOpenWidgetManager={() => setShowWidgetManager(true)}
           onOpenSocials={() => setShowSocials(true)}
+          onOpenDailyLog={() => setShowDailyLog(true)}
           onOpenCalculatorWidget={() => handleOpenWidgetById('calculator')}
           onOpenUnitConverterWidget={() => handleOpenWidgetById('unitConverter')}
         />
@@ -280,6 +284,7 @@ const Index = () => {
       {showProjects  && <ProjectsPage  onClose={() => setShowProjects(false)} />}
       {showWidgetManager && <WidgetManager activeWidgets={activeWidgets} onRestore={handleRestore} onClose={handleClose} onDismiss={() => setShowWidgetManager(false)} />}
       {showCourses       && <CoursesPage   onClose={() => setShowCourses(false)} />}
+      {showDailyLog      && <DailyLogPage  onClose={() => setShowDailyLog(false)} />}
       {showLibrary       && <LibraryPage   onClose={() => setShowLibrary(false)} />}
       {showSkills        && <SkillsPage    onClose={() => setShowSkills(false)} />}
       {showSocials       && <SocialsOverlay onClose={() => setShowSocials(false)} />}
@@ -289,7 +294,7 @@ const Index = () => {
         headerExtra={<span style={{ fontSize: 10, color: 'hsl(var(--text-dim))' }}>
           {new Date().getFullYear()}.{String(new Date().getMonth()+1).padStart(2,'0')}.{String(new Date().getDate()).padStart(2,'0')}
         </span>}>
-        <QuickLogOverlay onSubmit={() => setShowLog(false)} />
+        <QuickLogOverlay open={showLog} onClose={() => setShowLog(false)} />
       </Modal>
       {showChar && <CharacterSheet onClose={() => setShowChar(false)} onSkillClick={(n: string) => openDrawer('skill', n)} />}
       <DetailDrawer open={drawerOpen} item={drawerItem} onClose={closeDrawer} onOpenLog={() => setShowLog(true)} />

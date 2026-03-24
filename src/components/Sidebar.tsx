@@ -24,6 +24,7 @@ interface SidebarProps {
   onOpenLifepath?: () => void;
   onOpenWidgetManager?: () => void;
   onOpenSocials?: () => void;
+  onOpenDailyLog?: () => void;
   onOpenClockWidget?: () => void;
   onOpenCalculatorWidget?: () => void;
   onOpenUnitConverterWidget?: () => void;
@@ -39,7 +40,7 @@ const sectionMap: Record<string, string> = {
 const Sidebar = ({
   expanded, onToggle, onExpand, theme, onThemeChange,
   onOpenCharSheet, onOpenStat, onOpenSkills, onOpenLibrary, onOpenCourses,
-  onOpenTools, onOpenAugments, onOpenProjects, onOpenLifepath, onOpenWidgetManager, onOpenSocials,
+  onOpenTools, onOpenAugments, onOpenProjects, onOpenLifepath, onOpenWidgetManager, onOpenSocials, onOpenDailyLog,
   onOpenClockWidget, onOpenCalculatorWidget, onOpenUnitConverterWidget,
 }: SidebarProps) => {
   const { user } = useAuth();
@@ -78,6 +79,28 @@ const Sidebar = ({
 
   const handleSystemItem = async (name: string) => {
     if (name === 'LOGOUT') { await supabase.auth.signOut(); window.location.reload(); }
+    if (name === 'RESET XP') {
+      const confirm1 = window.confirm('RESET ALL XP DATA?\n\nThis will clear:\n• All sessions and logs\n• All XP (skills, stats, tools, augments, master)\n• All levels reset to 1\n\nSkills, tools, augments, media, courses and projects will NOT be deleted.\n\nThis cannot be undone.');
+      if (!confirm1) return;
+      const confirm2 = window.confirm('ARE YOU SURE? This will permanently delete all progress data.');
+      if (!confirm2) return;
+      const { getDB } = await import('@/lib/db');
+      const db = await getDB();
+      await db.exec(`
+        DELETE FROM sessions;
+        DELETE FROM xp_log;
+        DELETE FROM checkins;
+        DELETE FROM habit_logs;
+        UPDATE skills SET xp = 0, level = 1;
+        UPDATE stats SET xp = 0, level = 1, streak = 0, dormant = true;
+        UPDATE master_progress SET total_xp = 0, level = 1, streak = 0, shields = 0;
+        UPDATE tool_progress SET total_xp = 0, level = 1;
+        UPDATE augment_progress SET total_xp = 0, level = 1;
+        UPDATE tools SET xp = 0, level = 1;
+        UPDATE augments SET xp = 0, level = 1;
+      `);
+      window.location.reload();
+    }
     if (name === 'EXPORT DATA') {
       try {
         await exportAllData();
@@ -133,10 +156,11 @@ const Sidebar = ({
   ];
 
   const trackingItems = [
+    { icon: '📋', name: 'DAILY LOG', count: undefined },
     { icon: '◎', name: 'GOALS',   count: undefined },
     { icon: '✓', name: 'HABITS',  count: undefined },
-    { icon: '📅', name: 'PLANNER' },
     { icon: '📝', name: 'NOTES' },
+    { icon: '📅', name: 'PLANNER' },
     { icon: '🖥', name: 'TERMINAL' },
     { icon: '👤', name: 'SOCIALS' },
   ];
@@ -146,6 +170,7 @@ const Sidebar = ({
     { icon: '?', name: 'HELP' },
     { icon: '💾', name: 'EXPORT DATA' },
     { icon: '📂', name: 'IMPORT DATA' },
+    { icon: '↺', name: 'RESET XP' },
     { icon: '⏻', name: 'LOGOUT' },
   ];
 
@@ -245,8 +270,8 @@ const Sidebar = ({
           </div>
           {openSection === 'tracking' && trackingItems.map(item => (
             <div key={item.name} className="sidebar-item"
-              style={{ cursor: item.name === 'SOCIALS' ? 'pointer' : undefined }}
-              onClick={() => { if (item.name === 'SOCIALS') onOpenSocials?.(); }}
+              style={{ cursor: (item.name === 'SOCIALS' || item.name === 'DAILY LOG') ? 'pointer' : undefined }}
+              onClick={() => { if (item.name === 'SOCIALS') onOpenSocials?.(); if (item.name === 'DAILY LOG') onOpenDailyLog?.(); }}
             >
               <span>{item.icon} {item.name}</span>
               <span style={{ fontSize: 9, color: 'hsl(var(--text-dim))' }}>{(item as any).count !== undefined ? `(${(item as any).count})` : '—'}</span>
@@ -260,7 +285,7 @@ const Sidebar = ({
           </div>
           {openSection === 'system' && systemItems.map(item => (
             <div key={item.name} className="sidebar-item" onClick={() => handleSystemItem(item.name)}
-              style={{ cursor: item.name === 'LOGOUT' ? 'pointer' : undefined, color: item.name === 'LOGOUT' ? 'hsl(0,80%,55%)' : undefined }}
+              style={{ cursor: (item.name === 'LOGOUT' || item.name === 'RESET XP') ? 'pointer' : undefined, color: item.name === 'LOGOUT' ? 'hsl(0,80%,55%)' : item.name === 'RESET XP' ? '#ff6600' : undefined }}
               onMouseEnter={item.name === 'LOGOUT' ? e => (e.currentTarget.style.color = 'hsl(0,80%,70%)') : undefined}
               onMouseLeave={item.name === 'LOGOUT' ? e => (e.currentTarget.style.color = 'hsl(0,80%,55%)') : undefined}
             >

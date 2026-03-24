@@ -192,6 +192,13 @@ export default function MediaDetailDrawer({ mediaId, onClose }: Props) {
   const [pageInput, setPageInput]             = useState('');
   const [editingProgress, setEditingProgress] = useState(false);
   const [seasonInput, setSeasonInput]         = useState('');
+  const [editing, setEditing]                 = useState(false);
+  const [editTitle, setEditTitle]             = useState('');
+  const [editCreator, setEditCreator]         = useState('');
+  const [editYear, setEditYear]               = useState('');
+  const [editStat, setEditStat]               = useState<StatKey | ''>('');
+  const [editNotes, setEditNotes]             = useState('');
+  const [editLegacy, setEditLegacy]           = useState(false);
 
   // ── Fetch — uses 'media' table (correct schema) ───────────
 
@@ -220,20 +227,22 @@ export default function MediaDetailDrawer({ mediaId, onClose }: Props) {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['media-item', mediaId] });
-      queryClient.invalidateQueries({ queryKey: ['media'] });
+      queryClient.invalidateQueries();
     },
   });
 
   const markFinished = useMutation({
     mutationFn: async () => {
-      if (!user || !item) return;
+      if (!item) return;
+      const db = await import('@/lib/db').then(m => m.getDB());
       const completedAt = new Date().toISOString();
-      await supabase
-        .from('media')
-        .update({ status: 'FINISHED', completed_at: completedAt })
-        .eq('id', mediaId);
 
+      await db.query(
+        `UPDATE media SET status = 'FINISHED', completed_at = $1 WHERE id = $2`,
+        [completedAt, mediaId]
+      );
+
+      // Bonus XP — 50% if legacy, 100% if not
       const baseXP = Math.floor(getXPValue(item.type) * (item.is_legacy ? 0.5 : 1.0));
       const source  = getSourceType(item.type);
 
@@ -252,25 +261,22 @@ export default function MediaDetailDrawer({ mediaId, onClose }: Props) {
       setTimeout(() => setLastXP(null), 3000);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['media-item', mediaId] });
-      queryClient.invalidateQueries({ queryKey: ['media'] });
-      queryClient.invalidateQueries({ queryKey: ['stats'] });
-      queryClient.invalidateQueries({ queryKey: ['operator'] });
-      queryClient.invalidateQueries({ queryKey: ['xp-recent'] });
+      queryClient.invalidateQueries();
     },
   });
 
   const updatePageProgress = useMutation({
     mutationFn: async (currentPage: number) => {
-      const newMeta = { ...(item?.meta ?? {}), page_current: currentPage };
-      await supabase.from('media').update({ meta: newMeta as any }).eq('id', mediaId);
+      const db = await import('@/lib/db').then(m => m.getDB());
+      await db.query(`UPDATE media SET page_current = $1 WHERE id = $2`, [currentPage, mediaId]);
     },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['media-item', mediaId] }),
   });
 
   const updateTVProgress = useMutation({
     mutationFn: async (season: number) => {
-      const newMeta = { ...(item?.meta ?? {}), current_season: season };
-      await supabase.from('media').update({ meta: newMeta as any }).eq('id', mediaId);
+      const db = await import('@/lib/db').then(m => m.getDB());
+      await db.query(`UPDATE media SET current_season = $1 WHERE id = $2`, [season, mediaId]);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['media-item', mediaId] });
@@ -279,9 +285,39 @@ export default function MediaDetailDrawer({ mediaId, onClose }: Props) {
     },
   });
 
+  const saveEdit = useMutation({
+    mutationFn: async () => {
+      const db = await import('@/lib/db').then(m => m.getDB());
+      await db.query(
+        `UPDATE media SET title=$1, creator=$2, year=$3, linked_stat=$4, notes=$5, is_legacy=$6 WHERE id=$7`,
+        [editTitle.trim(), editCreator.trim() || null,
+         editYear ? parseInt(editYear) : null,
+         editStat || null, editNotes.trim() || null,
+         editLegacy, mediaId]
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries();
+      setEditing(false);
+    },
+  });
+
+  const startEdit = () => {
+    if (!item) return;
+    setEditTitle(item.title);
+    setEditCreator(item.creator ?? '');
+    setEditYear(item.year ? String(item.year) : '');
+    setEditStat((item.linked_stat ?? '') as StatKey | '');
+    setEditNotes(item.notes ?? '');
+    setEditLegacy(item.is_legacy);
+    setEditing(true);
+  };
+
   const deleteItem = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from('media').delete().eq('id', mediaId);
+      const db = await import('@/lib/db').then(m => m.getDB());
+      await db.exec(`DELETE FROM media WHERE id = '${mediaId}'`);
+      const error = null;
       if (error) throw error;
     },
     onSuccess: () => {
@@ -556,6 +592,48 @@ export default function MediaDetailDrawer({ mediaId, onClose }: Props) {
         </div>
 
         <div style={{ height: 1, background: 'rgba(153,104,0,0.3)', margin: '20px 0 16px' }} />
+
+        {/* Edit form */}
+        {editing && (
+          <div style={{ border: `1px solid ${accentDim}`, padding: 12, marginBottom: 8, background: bgSec }}>
+            <div style={{ fontSize: 9, color: accentDim, letterSpacing: 2, marginBottom: 8 }}>// EDIT MEDIA</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {[['TITLE', editTitle, setEditTitle], ['CREATOR', editCreator, setEditCreator], ['YEAR', editYear, setEditYear], ['NOTES', editNotes, setEditNotes]].map(([label, val, setter]) => (
+                <div key={label as string}>
+                  <div style={{ fontSize: 9, color: accentDim, letterSpacing: 1, marginBottom: 3 }}>{label as string}</div>
+                  <input value={val as string} onChange={e => (setter as any)(e.target.value)}
+                    style={{ width: '100%', padding: '5px 8px', fontSize: 10, background: bgTer, border: `1px solid ${accentDim}`, color: accent, fontFamily: mono, outline: 'none', boxSizing: 'border-box' as const }} />
+                </div>
+              ))}
+              <div>
+                <div style={{ fontSize: 9, color: accentDim, letterSpacing: 1, marginBottom: 4 }}>LINKED STAT</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  {(['body','wire','mind','cool','grit','flow','ghost'] as StatKey[]).map(k => (
+                    <button key={k} onClick={() => setEditStat(editStat === k ? '' : k)} style={{ padding: '2px 8px', fontSize: 9, fontFamily: mono, cursor: 'pointer', border: `1px solid ${editStat === k ? accent : accentDim}`, background: editStat === k ? 'rgba(255,176,0,0.1)' : 'transparent', color: editStat === k ? accent : dimText }}>{k.toUpperCase()}</button>
+                  ))}
+                </div>
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 9, color: editLegacy ? '#ffaa00' : accentDim, letterSpacing: 1 }}>
+                <span onClick={() => setEditLegacy(v => !v)} style={{ width: 13, height: 13, border: `1px solid ${editLegacy ? '#ffaa00' : accentDim}`, background: editLegacy ? 'rgba(255,170,0,0.15)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9 }}>{editLegacy ? '✓' : ''}</span>
+                LEGACY ENTRY
+              </label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => saveEdit.mutate()} disabled={saveEdit.isPending} style={{ flex: 1, padding: '6px', fontSize: 9, border: `1px solid ${accent}`, background: 'transparent', color: accent, fontFamily: mono, cursor: 'pointer' }}>
+                  {saveEdit.isPending ? 'SAVING...' : '✓ SAVE'}
+                </button>
+                <button onClick={() => setEditing(false)} style={{ flex: 1, padding: '6px', fontSize: 9, border: `1px solid ${accentDim}`, background: 'transparent', color: dimText, fontFamily: mono, cursor: 'pointer' }}>CANCEL</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit button */}
+        <button onClick={editing ? () => setEditing(false) : startEdit}
+          style={{ width: '100%', height: 32, border: `1px solid ${accentDim}`, background: 'transparent', color: editing ? accent : accentDim, fontFamily: mono, fontSize: 10, cursor: 'pointer', marginBottom: 8, letterSpacing: 1 }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = accent; e.currentTarget.style.color = accent; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = accentDim; e.currentTarget.style.color = editing ? accent : accentDim; }}>
+          {editing ? '[ CANCEL EDIT ]' : '[ EDIT ]'}
+        </button>
 
         {!isFinished && (
           <button

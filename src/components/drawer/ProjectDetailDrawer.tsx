@@ -237,8 +237,7 @@ export default function ProjectDetailDrawer({ projectId, onClose }: Props) {
       );
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['project', projectId] });
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries();
       setEditing(false);
       toast({ title: '✓ PROJECT UPDATED' });
     },

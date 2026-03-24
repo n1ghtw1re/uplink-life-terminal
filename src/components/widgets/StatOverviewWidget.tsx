@@ -23,35 +23,34 @@ const StatOverviewWidget = ({ onClose, onFullscreen, isFullscreen, onStatClick }
   const { data: stats } = useStats(user?.id);
   const [showAddSkill, setShowAddSkill] = useState(false);
 
-  const { data: augScore } = useQuery({
-    queryKey: ['augmentation-score', user?.id],
+  const { data: toolProg } = useQuery({
+    queryKey: ['tool-progress'],
     queryFn: async () => {
-      const { data } = await supabase
-        .from('augmentations')
-        .select('proficiency')
-        .eq('user_id', user!.id);
-      if (!data || data.length === 0) return 0;
-      const total = data.reduce((sum, a) => sum + (a.proficiency ?? 1), 0);
-      return Math.min(100, Math.round((total / (data.length * 5)) * 100));
+      const db  = await import('@/lib/db').then(m => m.getDB());
+      const res = await db.query<{ total_xp: number; level: number }>(`SELECT total_xp, level FROM tool_progress WHERE id = 1;`);
+      return res.rows[0] ?? { total_xp: 0, level: 1 };
     },
-    enabled: !!user?.id,
+  });
+
+  const { data: augProg } = useQuery({
+    queryKey: ['augment-progress'],
+    queryFn: async () => {
+      const db  = await import('@/lib/db').then(m => m.getDB());
+      const res = await db.query<{ total_xp: number; level: number }>(`SELECT total_xp, level FROM augment_progress WHERE id = 1;`);
+      return res.rows[0] ?? { total_xp: 0, level: 1 };
+    },
   });
 
   const { data: classData } = useQuery({
-    queryKey: ['class', user?.id],
+    queryKey: ['class'],
     queryFn: async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('custom_class_name')
-        .eq('id', user!.id)
-        .single();
-      return data;
+      const db  = await import('@/lib/db').then(m => m.getDB());
+      const res = await db.query<{ custom_class_name: string | null }>(`SELECT custom_class_name FROM profile WHERE id = 1;`);
+      return res.rows[0] ?? null;
     },
-    enabled: !!user?.id,
   });
 
   const classDisplay = classData?.custom_class_name ?? '---';
-  const augmentation = augScore ?? 0;
 
   return (
     <>
@@ -73,8 +72,8 @@ const StatOverviewWidget = ({ onClose, onFullscreen, isFullscreen, onStatClick }
             ) : (
               <>
                 <span style={{ width: 36, fontSize: 10, color: 'hsl(var(--accent))' }}>LVL {s.level}</span>
-                <ProgressBar value={s.xpInLevel} max={s.xpForLevel} width="100px" height={6} />
-                <span style={{ fontSize: 9, color: 'hsl(var(--text-dim))' }}>STK: {s.streak}d</span>
+                <ProgressBar value={s.xpInLevel} max={s.xpForLevel} width="80px" height={6} />
+                <span style={{ fontSize: 9, color: 'hsl(var(--text-dim))', width: 28, textAlign: 'right' }}>{s.xpForLevel > 0 ? Math.round((s.xpInLevel / s.xpForLevel) * 100) : 0}%</span>
               </>
             )}
           </div>
@@ -100,9 +99,14 @@ const StatOverviewWidget = ({ onClose, onFullscreen, isFullscreen, onStatClick }
               CLASS: <span style={{ color: 'hsl(var(--accent))' }}>{classDisplay}</span>
             </div>
             <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ color: 'hsl(var(--text-dim))' }}>AUGMENTATION:</span>
-              <ProgressBar value={augmentation} max={100} width="80px" height={6} />
-              <span style={{ color: 'hsl(var(--text-dim))', fontSize: 9 }}>{augmentation}/100</span>
+              <span style={{ color: 'hsl(var(--text-dim))' }}>TOOLS:</span>
+              <span style={{ color: 'hsl(var(--accent))', fontSize: 10 }}>LVL {toolProg?.level ?? 1}</span>
+              <span style={{ color: 'hsl(var(--text-dim))', fontSize: 9 }}>{Number(toolProg?.total_xp ?? 0).toLocaleString()} XP</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ color: 'hsl(var(--text-dim))' }}>AUGMENTS:</span>
+              <span style={{ color: 'hsl(var(--accent))', fontSize: 10 }}>LVL {augProg?.level ?? 1}</span>
+              <span style={{ color: 'hsl(var(--text-dim))', fontSize: 9 }}>{Number(augProg?.total_xp ?? 0).toLocaleString()} XP</span>
             </div>
           </div>
         </div>

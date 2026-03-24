@@ -17,7 +17,7 @@ export interface WidgetDef {
   name: string;
   description: string;
   icon: string;
-  category: 'CORE' | 'ARSENAL' | 'TRACKING' | 'FUTURE';
+  category: 'CORE' | 'ARSENAL' | 'TRACKING' | 'UTILITY' | 'FUTURE';
 }
 
 export const WIDGET_REGISTRY: WidgetDef[] = [
@@ -33,15 +33,19 @@ export const WIDGET_REGISTRY: WidgetDef[] = [
   { id: 'augments', name: 'AUGMENTS', icon: '⬡', category: 'ARSENAL', description: 'AI augments with augmentXP progress — filter by cluster and usage' },
   { id: 'projects', name: 'PROJECTS', icon: '◎', category: 'ARSENAL', description: 'Active projects with objective progress bars and status' },
   // Future widgets (greyed out, not yet available)
+  { id: 'clock',        name: 'CLOCK',          icon: '◷', category: 'UTILITY', description: 'Live clock with timer and pomodoro' },
+  { id: 'calculator',   name: 'CALCULATOR',     icon: '⌨', category: 'UTILITY', description: 'CRT-style calculator' },
+  { id: 'unitConverter',name: 'UNIT CONVERTER', icon: '⇄', category: 'UTILITY', description: 'Unit conversion tool' },
   { id: 'goals',    name: 'GOALS',            icon: '◎', category: 'FUTURE',  description: 'Life, mid, and sprint goals — coming soon' },
   { id: 'habits',   name: 'HABIT TRACKER',    icon: '✓', category: 'FUTURE',  description: 'Daily habit streaks and completion — coming soon' },
   { id: 'terminal', name: 'TERMINAL',         icon: '$', category: 'FUTURE',  description: 'Command-line interface for UPLINK — coming soon' },
 ];
 
-const CATEGORIES = ['CORE', 'ARSENAL', 'TRACKING', 'FUTURE'] as const;
+const CATEGORIES = ['CORE', 'ARSENAL', 'UTILITY', 'TRACKING', 'FUTURE'] as const;
 const CATEGORY_LABELS: Record<string, string> = {
   CORE: '// CORE',
   ARSENAL: '// ARSENAL',
+  UTILITY: '// UTILITY',
   TRACKING: '// TRACKING',
   FUTURE: '// COMING SOON',
 };
