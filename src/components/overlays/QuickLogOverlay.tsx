@@ -32,6 +32,22 @@ interface TaggedAugment  { id: string; name: string; category: string; }
 interface TaggedMedia    { id: string; title: string; type: string; status: string; pages?: number; page_current?: number; }
 interface TaggedCourse   { id: string; name: string; sections: { id: string; title: string; completed_at: string | null }[]; }
 interface TaggedProject  { id: string; name: string; objectives: { id: string; title: string; completed_at: string | null }[]; }
+interface SessionTemplate {
+  id: string;
+  skill_id: string;
+  skill_name: string;
+  duration_minutes: number;
+  stat_split: { stat: StatKey; percent: number }[];
+  notes: string | null;
+  is_legacy: boolean;
+  logged_at: string;
+  tool_ids: string[];
+  augment_ids: string[];
+  media_id: string | null;
+  course_id: string | null;
+  project_id: string | null;
+  usage_count?: number;
+}
 
 // ── Small helpers ─────────────────────────────────────────────
 function Label({ children }: { children: React.ReactNode }) {
@@ -235,6 +251,7 @@ export default function QuickLogOverlay({ open, onClose }: Props) {
   // Tool/augment filter
   const [toolTypeFilter, setToolTypeFilter]   = useState<string | null>(null);
   const [augClusterFilter, setAugClusterFilter] = useState<string | null>(null);
+  const [templateTab, setTemplateTab] = useState<'recent' | 'mostUsed'>('recent');
 
   // Data queries
   const { data: allSkills = [] } = useSkills();
@@ -279,6 +296,37 @@ export default function QuickLogOverlay({ open, onClose }: Props) {
     },
   });
 
+  const { data: logTemplates = { recent: [] as SessionTemplate[], mostUsed: [] as SessionTemplate[] } } = useQuery({
+    queryKey: ['quick-log-templates'],
+    queryFn: async () => {
+      const db = await getDB();
+      const recentRes = await db.query<SessionTemplate>(
+        `SELECT id, skill_id, skill_name, duration_minutes, stat_split, notes, is_legacy, logged_at,
+                tool_ids, augment_ids, media_id, course_id, project_id
+         FROM sessions
+         ORDER BY logged_at DESC
+         LIMIT 5;`
+      );
+      const mostUsedRes = await db.query<SessionTemplate>(
+        `WITH ranked AS (
+           SELECT id, skill_id, skill_name, duration_minutes, stat_split, notes, is_legacy, logged_at,
+                  tool_ids, augment_ids, media_id, course_id, project_id,
+                  COUNT(*) OVER (PARTITION BY skill_id) AS usage_count,
+                  ROW_NUMBER() OVER (PARTITION BY skill_id ORDER BY logged_at DESC) AS rn
+           FROM sessions
+         )
+         SELECT id, skill_id, skill_name, duration_minutes, stat_split, notes, is_legacy, logged_at,
+                tool_ids, augment_ids, media_id, course_id, project_id, usage_count
+         FROM ranked
+         WHERE rn = 1
+         ORDER BY usage_count DESC, logged_at DESC
+         LIMIT 5;`
+      );
+      return { recent: recentRes.rows, mostUsed: mostUsedRes.rows };
+    },
+    enabled: open,
+  });
+
   // Reset on close
   useEffect(() => {
     if (!open) return;
@@ -319,6 +367,85 @@ export default function QuickLogOverlay({ open, onClose }: Props) {
     );
     setProject({ id: p.id, name: p.name, objectives: r.rows });
     setCompletedObjectives([]);
+  };
+
+  const parseArray = <T,>(value: unknown): T[] => {
+    if (Array.isArray(value)) return value as T[];
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? (parsed as T[]) : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  };
+
+  const applyTemplate = async (tpl: SessionTemplate) => {
+    const split = parseArray<{ stat: StatKey; percent: number }>(tpl.stat_split);
+    const resolvedSplit = split.length > 0 ? split : [{ stat: 'mind' as StatKey, percent: 100 }];
+    const statKeys = resolvedSplit.map(s => s.stat);
+    const splitPercents = resolvedSplit.map(s => s.percent);
+
+    setSkillId(tpl.skill_id);
+    setSkillName(tpl.skill_name);
+    setSkillStatKeys(statKeys);
+    setSkillDefaultSplit(splitPercents);
+    setStatSplit(resolvedSplit);
+    setDuration(Math.max(1, tpl.duration_minutes || 1));
+    setUseCustom(false);
+    setCustomDuration('');
+    setNotes(tpl.notes ?? '');
+    setIsLegacy(Boolean(tpl.is_legacy));
+    setLogDate(tpl.logged_at ? new Date(tpl.logged_at).toISOString().slice(0, 10) : '');
+
+    const toolIds = parseArray<string>(tpl.tool_ids);
+    setTools(toolIds.map(id => {
+      const match = allTools.find(t => t.id === id);
+      return { id, name: match?.name ?? id, type: match?.type ?? '' };
+    }));
+
+    const augmentIds = parseArray<string>(tpl.augment_ids);
+    setAugments(augmentIds.map(id => {
+      const match = allAugments.find(a => a.id === id);
+      return { id, name: match?.name ?? id, category: match?.category ?? '' };
+    }));
+
+    setMedia(null);
+    setMediaPage('');
+    setMediaFinished(false);
+    if (tpl.media_id) {
+      const db = await getDB();
+      const r = await db.query<{ id: string; title: string; type: string; status: string; pages: number | null; page_current: number | null }>(
+        `SELECT id, title, type, status, pages, page_current FROM media WHERE id = $1 LIMIT 1;`,
+        [tpl.media_id]
+      );
+      const m = r.rows[0];
+      if (m) {
+        setMedia({ id: m.id, title: m.title, type: m.type, status: m.status, pages: m.pages ?? undefined, page_current: m.page_current ?? undefined });
+        setMediaPage(m.page_current != null ? String(m.page_current) : '');
+      }
+    }
+
+    setCourse(null);
+    setCompletedSections([]);
+    setMarkCourseComplete(false);
+    if (tpl.course_id) {
+      const db = await getDB();
+      const courseRes = await db.query<{ id: string; name: string }>(`SELECT id, name FROM courses WHERE id = $1 LIMIT 1;`, [tpl.course_id]);
+      const c = courseRes.rows[0];
+      if (c) await handleSelectCourse({ id: c.id, name: c.name });
+    }
+
+    setProject(null);
+    setCompletedObjectives([]);
+    if (tpl.project_id) {
+      const db = await getDB();
+      const projRes = await db.query<{ id: string; name: string }>(`SELECT id, name FROM projects WHERE id = $1 LIMIT 1;`, [tpl.project_id]);
+      const p = projRes.rows[0];
+      if (p) await handleSelectProject({ id: p.id, name: p.name });
+    }
   };
 
   const effectiveDuration = useCustom ? (parseInt(customDuration) || 0) : duration;
@@ -725,8 +852,80 @@ export default function QuickLogOverlay({ open, onClose }: Props) {
 
             </div>{/* end left column */}
 
-            {/* Right column — XP preview */}
+            {/* Right column — presets + XP preview */}
             <div style={{ padding: '16px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ background: bgT, border: `1px solid ${adim}`, padding: '10px 12px', fontFamily: mono }}>
+                <div style={{ fontSize: 9, color: adim, letterSpacing: 2, marginBottom: 8 }}>// LOG TEMPLATES</div>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                  <button
+                    onClick={() => setTemplateTab('recent')}
+                    style={{
+                      padding: '3px 10px',
+                      fontSize: 9,
+                      fontFamily: mono,
+                      cursor: 'pointer',
+                      border: `1px solid ${templateTab === 'recent' ? acc : adim}`,
+                      background: templateTab === 'recent' ? 'rgba(255,176,0,0.1)' : 'transparent',
+                      color: templateTab === 'recent' ? acc : dim,
+                    }}
+                  >
+                    RECENT
+                  </button>
+                  <button
+                    onClick={() => setTemplateTab('mostUsed')}
+                    style={{
+                      padding: '3px 10px',
+                      fontSize: 9,
+                      fontFamily: mono,
+                      cursor: 'pointer',
+                      border: `1px solid ${templateTab === 'mostUsed' ? acc : adim}`,
+                      background: templateTab === 'mostUsed' ? 'rgba(255,176,0,0.1)' : 'transparent',
+                      color: templateTab === 'mostUsed' ? acc : dim,
+                    }}
+                  >
+                    MOST USED
+                  </button>
+                </div>
+
+                {(templateTab === 'recent' ? logTemplates.recent : logTemplates.mostUsed).length === 0 ? (
+                  <div style={{ fontSize: 9, color: dim }}>No previous logs yet.</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {(templateTab === 'recent' ? logTemplates.recent : logTemplates.mostUsed).map((tpl) => (
+                      <button
+                        key={`${templateTab}-${tpl.id}`}
+                        onClick={() => void applyTemplate(tpl)}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          gap: 8,
+                          width: '100%',
+                          padding: '5px 8px',
+                          fontFamily: mono,
+                          fontSize: 9,
+                          border: `1px solid ${adim}`,
+                          background: 'transparent',
+                          color: dim,
+                          cursor: 'pointer',
+                          textAlign: 'left',
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = acc; e.currentTarget.style.color = acc; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = adim; e.currentTarget.style.color = dim; }}
+                        title={templateTab === 'mostUsed' ? `${tpl.usage_count ?? 0} logs` : new Date(tpl.logged_at).toLocaleString()}
+                      >
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tpl.skill_name}</span>
+                        <span style={{ flexShrink: 0, color: adim }}>
+                          {templateTab === 'mostUsed'
+                            ? `${tpl.usage_count ?? 0}x`
+                            : `${Math.max(1, tpl.duration_minutes || 0)}m`}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <XPPreview
                 duration={effectiveDuration}
                 statSplit={statSplit}

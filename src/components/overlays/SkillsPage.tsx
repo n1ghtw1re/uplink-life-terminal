@@ -148,9 +148,10 @@ function SkillRow({
 
 interface Props {
   onClose: () => void;
+  onOpenLog?: () => void;
 }
 
-export default function SkillsPage({ onClose }: Props) {
+export default function SkillsPage({ onClose, onOpenLog }: Props) {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { data: skills, isLoading } = useSkills(user?.id);
@@ -413,6 +414,7 @@ export default function SkillsPage({ onClose }: Props) {
                 <SkillDetailDrawer
                   skillId={selectedSkillId}
                   onClose={() => setSelectedSkillId(null)}
+                  onOpenLog={onOpenLog}
                 />
               </div>
             </>

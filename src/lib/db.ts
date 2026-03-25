@@ -13,7 +13,7 @@ let _db: PGlite | null = null;
 export async function getDB(): Promise<PGlite> {
   if (_db) return _db;
   // 'idb://' prefix tells PGlite to persist to IndexedDB
-  _db = new PGlite('idb://uplink');
+  _db = new PGlite('idb://uplink-v2');
   await initSchema(_db);
   return _db;
 }
@@ -354,24 +354,16 @@ async function initSchema(db: PGlite) {
 
     CREATE TABLE IF NOT EXISTS notes (
       id         TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      name       TEXT NOT NULL,
       content    TEXT NOT NULL,
+      status     TEXT NOT NULL DEFAULT 'ACTIVE',
       tags       JSONB NOT NULL DEFAULT '[]',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
-    CREATE TABLE IF NOT EXISTS tool_lifepaths (
-      tool_id     TEXT NOT NULL REFERENCES tools(id) ON DELETE CASCADE,
-      lifepath_id TEXT NOT NULL REFERENCES lifepaths(id) ON DELETE CASCADE,
-      PRIMARY KEY (tool_id, lifepath_id)
-    );
-
-    -- ── TOOL LIFEPATHS JUNCTION ─────────────────────────────
-    CREATE TABLE IF NOT EXISTS tool_lifepaths (
-      tool_id      TEXT NOT NULL REFERENCES tools(id) ON DELETE CASCADE,
-      lifepath_id  TEXT NOT NULL REFERENCES lifepaths(id) ON DELETE CASCADE,
-      PRIMARY KEY (tool_id, lifepath_id)
-    );
+    CREATE INDEX IF NOT EXISTS idx_notes_status ON notes(status);
+    CREATE INDEX IF NOT EXISTS idx_notes_created_at ON notes(created_at);
 
     CREATE INDEX IF NOT EXISTS idx_sessions_skill  ON sessions(skill_id);
     CREATE INDEX IF NOT EXISTS idx_sessions_date   ON sessions(logged_at);
@@ -401,6 +393,29 @@ async function initSchema(db: PGlite) {
   );
   await db.exec(
     `ALTER TABLE sessions ADD COLUMN IF NOT EXISTS project_ids JSONB NOT NULL DEFAULT '[]'`
+  );
+  await db.exec(
+    `ALTER TABLE notes ADD COLUMN IF NOT EXISTS name TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE notes ADD COLUMN IF NOT EXISTS status TEXT`
+  );
+  // Update existing rows that don't have name/status
+  await db.exec(
+    `UPDATE notes SET name = 'Untitled' WHERE name IS NULL OR name = ''`
+  );
+  await db.exec(
+    `UPDATE notes SET status = 'ACTIVE' WHERE status IS NULL OR status = ''`
+  );
+  // Now make them NOT NULL
+  await db.exec(
+    `ALTER TABLE notes ALTER COLUMN name SET NOT NULL`
+  );
+  await db.exec(
+    `ALTER TABLE notes ALTER COLUMN status SET NOT NULL`
+  );
+  await db.exec(
+    `ALTER TABLE notes ALTER COLUMN status SET DEFAULT 'ACTIVE'`
   );
   // Reset level floors to 0 for new level system (safe — only resets if XP is 0)
   await db.exec(`

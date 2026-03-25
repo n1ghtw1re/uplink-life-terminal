@@ -20,6 +20,7 @@ import UnitConverterWidget from '@/components/widgets/UnitConverterWidget';
 import ToolsWidget from '@/components/widgets/ToolsWidget';
 import AugmentsWidget from '@/components/widgets/AugmentsWidget';
 import ProjectsWidget from '@/components/widgets/ProjectsWidget';
+import NotesWidget from '@/components/widgets/NotesWidget';
 import QuickLogOverlay from '@/components/overlays/QuickLogOverlay';
 import CharacterSheet from '@/components/overlays/CharacterSheet';
 import SearchOverlay from '@/components/overlays/SearchOverlay';
@@ -28,6 +29,7 @@ import SkillsPage from '@/components/overlays/SkillsPage';
 import LibraryPage from '@/components/overlays/LibraryPage';
 import CoursesPage from '@/components/overlays/CoursesPage';
 import DailyLogPage from '@/components/overlays/DailyLogPage';
+import NotesPage from '@/components/overlays/NotesPage';
 import SocialsOverlay from '@/components/overlays/SocialsOverlay';
 import LifepathPage from '@/components/overlays/LifepathPage';
 import ToolsPage from '@/components/overlays/ToolsPage';
@@ -44,7 +46,7 @@ import { applyThemeClass, normalizeTheme, type ThemeCode } from '@/lib/themes';
 
 type LayoutItem = { i: string; x: number; y: number; w: number; h: number; minW?: number; minH?: number };
 
-const ALL_WIDGET_IDS = ['xp', 'checkin', 'heatmap', 'stats', 'courses', 'media', 'skills', 'tools', 'augments', 'projects', 'clock', 'calculator', 'unitConverter'];
+const ALL_WIDGET_IDS = ['xp', 'checkin', 'heatmap', 'stats', 'courses', 'media', 'skills', 'tools', 'augments', 'projects', 'notes', 'clock', 'calculator', 'unitConverter'];
 const DEFAULT_ACTIVE_WIDGET_IDS = ['xp', 'checkin', 'heatmap', 'stats', 'courses', 'media', 'skills'];
 
 const defaultLayout: LayoutItem[] = [
@@ -67,7 +69,8 @@ const defaultLayout: LayoutItem[] = [
 const widgetNames: Record<string, string> = {
   xp: 'XP & LEVELLING', checkin: 'DAILY CHECK-IN', heatmap: 'STREAK HEATMAP',
   stats: 'STAT OVERVIEW', courses: 'COURSES', media: 'MEDIA LIBRARY',
-  skills: 'SKILLS', clock: 'CLOCK', calculator: 'CALCULATOR', unitConverter: 'UNIT CONVERTER',
+  skills: 'SKILLS', tools: 'TOOLS', augments: 'AUGMENTS', projects: 'PROJECTS', notes: 'NOTES',
+  clock: 'CLOCK', calculator: 'CALCULATOR', unitConverter: 'UNIT CONVERTER',
 };
 
 const Index = () => {
@@ -81,6 +84,7 @@ const Index = () => {
   const [showSearch, setShowSearch] = useState(false);
   const [showSocials, setShowSocials] = useState(false);
   const [showDailyLog, setShowDailyLog] = useState(false);
+  const [showNotesPage, setShowNotesPage] = useState(false);
   const [showLifepath, setShowLifepath] = useState(false);
   const [showTools, setShowTools]         = useState(false);
   const [showAugments, setShowAugments]   = useState(false);
@@ -135,6 +139,7 @@ const Index = () => {
     if (e.key === 'Escape') {
       if (showLifepath) { setShowLifepath(false); return; }
       if (showDailyLog) { setShowDailyLog(false); return; }
+      if (showNotesPage) { setShowNotesPage(false); return; }
       if (openStatKey) { setOpenStatKey(null); return; }
       if (drawerOpen) { closeDrawer(); return; }
       if (fullscreenWidget) { setFullscreenWidget(null); return; }
@@ -146,7 +151,7 @@ const Index = () => {
     if (e.key === '/') { e.preventDefault(); setShowSearch(true); }
     if (e.key === '[') setSidebarExpanded(false);
     if (e.key === ']') setSidebarExpanded(true);
-  }, [fullscreenWidget, drawerOpen, openStatKey, showLifepath, showDailyLog]);
+  }, [fullscreenWidget, drawerOpen, openStatKey, showLifepath, showDailyLog, showNotesPage]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKey);
@@ -204,6 +209,7 @@ const Index = () => {
       case 'tools':    return <ToolsWidget {...props} onOpenTools={() => setShowTools(true)} onToolClick={(id) => openDrawer('tool', id)} />;
       case 'augments': return <AugmentsWidget {...props} onOpenAugments={() => setShowAugments(true)} onAugmentClick={(id) => openDrawer('augment', id)} />;
       case 'projects': return <ProjectsWidget {...props} onOpenProjects={() => setShowProjects(true)} onProjectClick={(id) => openDrawer('project', id)} />;
+      case 'notes':    return <NotesWidget {...props} onNoteClick={(id) => openDrawer('note', id)} />;
       case 'clock':        return <ClockWidget {...props} />;
       case 'calculator':   return <CalculatorWidget {...props} />;
       case 'unitConverter':return <UnitConverterWidget {...props} />;
@@ -245,6 +251,8 @@ const Index = () => {
           onOpenWidgetManager={() => setShowWidgetManager(true)}
           onOpenSocials={() => setShowSocials(true)}
           onOpenDailyLog={() => setShowDailyLog(true)}
+          onOpenNotes={() => setShowNotesPage(true)}
+          onOpenClockWidget={() => handleOpenWidgetById('clock')}
           onOpenCalculatorWidget={() => handleOpenWidgetById('calculator')}
           onOpenUnitConverterWidget={() => handleOpenWidgetById('unitConverter')}
         />
@@ -285,8 +293,9 @@ const Index = () => {
       {showWidgetManager && <WidgetManager activeWidgets={activeWidgets} onRestore={handleRestore} onClose={handleClose} onDismiss={() => setShowWidgetManager(false)} />}
       {showCourses       && <CoursesPage   onClose={() => setShowCourses(false)} />}
       {showDailyLog      && <DailyLogPage  onClose={() => setShowDailyLog(false)} />}
+      {showNotesPage     && <NotesPage     onClose={() => setShowNotesPage(false)} />}
       {showLibrary       && <LibraryPage   onClose={() => setShowLibrary(false)} />}
-      {showSkills        && <SkillsPage    onClose={() => setShowSkills(false)} />}
+      {showSkills        && <SkillsPage    onClose={() => setShowSkills(false)} onOpenLog={() => { setShowSkills(false); setShowLog(true); }} />}
       {showSocials       && <SocialsOverlay onClose={() => setShowSocials(false)} />}
       {openStatKey       && <StatDetailOverlay statKey={openStatKey} onClose={() => setOpenStatKey(null)} onNavigate={(key) => setOpenStatKey(key)} />}
 

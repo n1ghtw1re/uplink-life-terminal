@@ -25,6 +25,7 @@ interface SidebarProps {
   onOpenWidgetManager?: () => void;
   onOpenSocials?: () => void;
   onOpenDailyLog?: () => void;
+  onOpenNotes?: () => void;
   onOpenClockWidget?: () => void;
   onOpenCalculatorWidget?: () => void;
   onOpenUnitConverterWidget?: () => void;
@@ -40,7 +41,7 @@ const sectionMap: Record<string, string> = {
 const Sidebar = ({
   expanded, onToggle, onExpand, theme, onThemeChange,
   onOpenCharSheet, onOpenStat, onOpenSkills, onOpenLibrary, onOpenCourses,
-  onOpenTools, onOpenAugments, onOpenProjects, onOpenLifepath, onOpenWidgetManager, onOpenSocials, onOpenDailyLog,
+  onOpenTools, onOpenAugments, onOpenProjects, onOpenLifepath, onOpenWidgetManager, onOpenSocials, onOpenDailyLog, onOpenNotes,
   onOpenClockWidget, onOpenCalculatorWidget, onOpenUnitConverterWidget,
 }: SidebarProps) => {
   const { user } = useAuth();
@@ -159,8 +160,7 @@ const Sidebar = ({
     { icon: '📋', name: 'DAILY LOG', count: undefined },
     { icon: '◎', name: 'GOALS',   count: undefined },
     { icon: '✓', name: 'HABITS',  count: undefined },
-    { icon: '📝', name: 'NOTES' },
-    { icon: '📅', name: 'PLANNER' },
+    { icon: '', name: 'PLANNER' },
     { icon: '🖥', name: 'TERMINAL' },
     { icon: '👤', name: 'SOCIALS' },
   ];
@@ -178,6 +178,7 @@ const Sidebar = ({
     { icon: '◷', name: 'CLOCK',          action: () => onOpenClockWidget?.() },
     { icon: '⌨', name: 'CALCULATOR',     action: () => onOpenCalculatorWidget?.() },
     { icon: '⇄', name: 'UNIT CONVERTER', action: () => onOpenUnitConverterWidget?.() },
+    { icon: '📝', name: 'NOTES',          action: () => onOpenNotes?.() },
   ];
 
   const sortedThemeOptions = useMemo<ThemeCode[]>(
@@ -270,8 +271,12 @@ const Sidebar = ({
           </div>
           {openSection === 'tracking' && trackingItems.map(item => (
             <div key={item.name} className="sidebar-item"
-              style={{ cursor: (item.name === 'SOCIALS' || item.name === 'DAILY LOG') ? 'pointer' : undefined }}
-              onClick={() => { if (item.name === 'SOCIALS') onOpenSocials?.(); if (item.name === 'DAILY LOG') onOpenDailyLog?.(); }}
+              style={{ cursor: (item.name === 'SOCIALS' || item.name === 'DAILY LOG' || item.name === 'NOTES') ? 'pointer' : undefined }}
+              onClick={() => {
+                if (item.name === 'SOCIALS') onOpenSocials?.();
+                if (item.name === 'DAILY LOG') onOpenDailyLog?.();
+                if (item.name === 'NOTES') onOpenNotes?.();
+              }}
             >
               <span>{item.icon} {item.name}</span>
               <span style={{ fontSize: 9, color: 'hsl(var(--text-dim))' }}>{(item as any).count !== undefined ? `(${(item as any).count})` : '—'}</span>
@@ -303,7 +308,9 @@ const Sidebar = ({
           {openSection === 'utility' && utilityItems.map(item => (
             <div key={item.name} className="sidebar-item" onClick={() => item.action?.()} style={{ cursor: 'pointer' }}>
               <span>{item.icon} {item.name}</span>
-              <span style={{ fontSize: 9, color: 'hsl(var(--text-dim))' }}>WIDGET</span>
+              {item.name !== 'NOTES' && (
+                <span style={{ fontSize: 9, color: 'hsl(var(--text-dim))' }}>WIDGET</span>
+              )}
             </div>
           ))}
 

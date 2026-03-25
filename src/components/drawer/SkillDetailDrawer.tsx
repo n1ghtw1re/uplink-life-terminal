@@ -5,10 +5,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { useOperator } from '@/hooks/useOperator';
-import { logSession } from '@/services/sessionService';
-import { STAT_META, StatKey, getStreakTier, STREAK_MULTIPLIERS, getStatLevel } from '@/types';
-import { toast } from '@/hooks/use-toast';
+import { STAT_META, StatKey, getStatLevel } from '@/types';
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -50,17 +47,6 @@ const accentDim = 'hsl(var(--accent-dim))';
 const dimText   = 'hsl(var(--text-dim))';
 const bgSec     = 'hsl(var(--bg-secondary))';
 const bgTer     = 'hsl(var(--bg-tertiary))';
-
-const DURATION_PRESETS = [
-  { label: '15m', value: 15 },
-  { label: '30m', value: 30 },
-  { label: '45m', value: 45 },
-  { label: '1h',  value: 60 },
-  { label: '2h',  value: 120 },
-];
-
-const BASE_XP_PER_HOUR = 100;
-const LEGACY_RATE = 0.5;
 
 // ── Sub-components ────────────────────────────────────────────
 
@@ -117,324 +103,6 @@ function DeleteConfirm({ onConfirm, onCancel }: { onConfirm: () => void; onCance
   );
 }
 
-// ── Inline Log Panel ──────────────────────────────────────────
-
-function InlineLogPanel({ skill, onDone }: { skill: Skill; onDone: () => void }) {
-  const { user } = useAuth();
-  const { data: op } = useOperator(user?.id);
-  const queryClient = useQueryClient();
-
-  const [duration, setDuration]     = useState(60);
-  const [activePreset, setActivePreset] = useState<number | null>(60);
-  const [notes, setNotes]           = useState('');
-  const [isLegacy, setIsLegacy]     = useState(false);
-  const [logYesterday, setLogYesterday] = useState(false);
-  const [tagCourseId, setTagCourseId] = useState('');
-  const [split, setSplit]           = useState<number[]>(
-    skill.default_split?.length === 2 ? skill.default_split : [50, 50]
-  );
-
-  const { data: activeCourses } = useQuery({
-    queryKey: ['courses-active'],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('courses')
-        .select('id, name')
-        .eq('user_id', user!.id)
-        .eq('status', 'ACTIVE');
-      return data ?? [];
-    },
-    enabled: !!user?.id,
-  });
-
-  const statKeys = (skill.stat_keys ?? []) as StatKey[];
-  const hasDualStat = statKeys.length === 2;
-
-  // XP preview
-  const streak     = op?.streak ?? 0;
-  const streakTier = getStreakTier(streak);
-  const mult       = isLegacy ? 1.0 : (STREAK_MULTIPLIERS[streakTier] ?? 1.0);
-  const legacyFactor = isLegacy ? LEGACY_RATE : 1.0;
-  const base       = Math.floor((duration / 60) * BASE_XP_PER_HOUR);
-  const skillXp    = Math.round(base * mult * legacyFactor);
-  const statTotal  = Math.round(base * 0.6 * mult * legacyFactor);
-  const masterXp   = Math.round(base * 0.3 * mult * legacyFactor);
-  const statXps    = hasDualStat
-    ? [Math.round(statTotal * split[0] / 100), Math.round(statTotal * split[1] / 100)]
-    : [statTotal];
-  const totalXp    = skillXp + statTotal + masterXp;
-
-  const logMutation = useMutation({
-    mutationFn: logSession,
-    onSuccess: () => {
-      queryClient.invalidateQueries();
-      toast({
-        title: '✓ SESSION LOGGED',
-        description: `${skill.name}  ${duration}min  +${totalXp} XP`,
-      });
-      onDone();
-    },
-    onError: (err) => {
-      toast({ title: 'ERROR', description: String(err) });
-    },
-  });
-
-  const handleSubmit = () => {
-    if (!user) return;
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-
-    const statSplit = hasDualStat
-      ? [
-          { stat: statKeys[0], percent: split[0] },
-          { stat: statKeys[1], percent: split[1] },
-        ]
-      : [{ stat: statKeys[0], percent: 100 }];
-
-    logMutation.mutate({
-      userId: user.id,
-      skillId: skill.id,
-      skillName: skill.name,
-      durationMinutes: duration,
-      statSplit,
-      notes: notes || undefined,
-      isLegacy,
-      loggedAt: logYesterday ? yesterday : undefined,
-    });
-  };
-
-  const handleSplitChange = (idx: number, val: number) => {
-    const clamped = Math.max(10, Math.min(90, val));
-    const next = [...split];
-    next[idx] = clamped;
-    next[1 - idx] = 100 - clamped;
-    setSplit(next);
-  };
-
-  return (
-    <div style={{
-      margin: '0 0 8px',
-      border: '1px solid hsl(var(--accent-dim))',
-      background: 'hsl(var(--bg-secondary))',
-      padding: '14px 14px 12px',
-    }}>
-
-      {/* Duration */}
-      <div style={{ marginBottom: 12 }}>
-        <div style={{ fontFamily: mono, fontSize: 9, color: accentDim, letterSpacing: 2, marginBottom: 6 }}>
-          DURATION
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-          {DURATION_PRESETS.map(p => (
-            <button
-              key={p.value}
-              onClick={() => { setDuration(p.value); setActivePreset(p.value); }}
-              style={{
-                height: 26,
-                padding: '0 8px',
-                background: activePreset === p.value ? 'rgba(255,176,0,0.12)' : 'transparent',
-                border: `1px solid ${activePreset === p.value ? accent : 'rgba(153,104,0,0.4)'}`,
-                color: activePreset === p.value ? accent : dimText,
-                fontFamily: mono, fontSize: 10, cursor: 'pointer',
-              }}
-            >{p.label}</button>
-          ))}
-          <span style={{ color: dimText, fontSize: 10, margin: '0 2px' }}>or</span>
-          <input
-            type="text" inputMode="numeric"
-            value={duration}
-            onChange={e => {
-              const v = e.target.value.replace(/\D/g, '');
-              setDuration(Number(v) || 1);
-              setActivePreset(null);
-            }}
-            style={{
-              width: 44, textAlign: 'center',
-              background: bgTer,
-              border: '1px solid hsl(var(--accent-dim))',
-              color: accent, fontFamily: mono, fontSize: 11,
-              padding: '3px 4px', outline: 'none',
-            }}
-          />
-          <span style={{ color: dimText, fontSize: 10 }}>min</span>
-        </div>
-      </div>
-
-      {/* Stat split — only for dual-stat skills */}
-      {hasDualStat && (
-        <div style={{ marginBottom: 12 }}>
-          <div style={{ fontFamily: mono, fontSize: 9, color: accentDim, letterSpacing: 2, marginBottom: 6 }}>
-            STAT SPLIT
-          </div>
-          {statKeys.map((k, i) => (
-            <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <span style={{ fontSize: 10, color: accent, width: 56, flexShrink: 0 }}>
-                {STAT_META[k]?.icon} {k.toUpperCase()}
-              </span>
-              <input
-                type="range" min={10} max={90}
-                value={split[i]}
-                onChange={e => handleSplitChange(i, Number(e.target.value))}
-                style={{ flex: 1, accentColor: 'hsl(var(--accent))' }}
-              />
-              <span style={{ fontSize: 10, color: dimText, width: 30, textAlign: 'right', flexShrink: 0 }}>
-                {split[i]}%
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Notes */}
-      <div style={{ marginBottom: 12 }}>
-        <div style={{ fontFamily: mono, fontSize: 9, color: accentDim, letterSpacing: 2, marginBottom: 6 }}>
-          NOTES
-        </div>
-        <input
-          type="text"
-          value={notes}
-          onChange={e => setNotes(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') handleSubmit(); }}
-          placeholder="notes for this session..."
-          maxLength={100}
-          style={{
-            width: '100%', background: bgTer,
-            border: '1px solid hsl(var(--accent-dim))',
-            color: accent, fontFamily: mono, fontSize: 11,
-            padding: '5px 8px', outline: 'none', boxSizing: 'border-box',
-          }}
-        />
-      </div>
-
-      {/* Tag to */}
-      <div style={{ marginBottom: 12 }}>
-        <div style={{ fontFamily: mono, fontSize: 9, color: accentDim, letterSpacing: 2, marginBottom: 6 }}>
-          TAG TO
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <div style={{ flex: 1, position: 'relative' }}>
-            <select
-              value={tagCourseId}
-              onChange={e => setTagCourseId(e.target.value)}
-              style={{
-                width: '100%', appearance: 'none',
-                background: bgTer, border: `1px solid ${tagCourseId ? accentDim : 'rgba(153,104,0,0.3)'}`,
-                color: tagCourseId ? accent : dimText,
-                fontFamily: mono, fontSize: 10,
-                padding: '5px 24px 5px 8px', outline: 'none', cursor: 'pointer',
-              }}
-            >
-              <option value="">course</option>
-              {(activeCourses ?? []).map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-            <span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', color: dimText, fontSize: 8, pointerEvents: 'none' }}>▾</span>
-          </div>
-          <div style={{ flex: 1, position: 'relative' }}>
-            <select disabled style={{
-              width: '100%', appearance: 'none',
-              background: bgTer, border: '1px solid rgba(153,104,0,0.2)',
-              color: 'rgba(153,104,0,0.3)', fontFamily: mono, fontSize: 10,
-              padding: '5px 24px 5px 8px', outline: 'none', cursor: 'not-allowed',
-            }}>
-              <option>no active projects</option>
-            </select>
-            <span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', color: 'rgba(153,104,0,0.3)', fontSize: 8, pointerEvents: 'none' }}>▾</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Options row */}
-      <div style={{ display: 'flex', gap: 16, marginBottom: 12 }}>
-        {[
-          { label: 'LEGACY', value: isLegacy, set: setIsLegacy },
-          { label: 'YESTERDAY', value: logYesterday, set: setLogYesterday },
-        ].map(opt => (
-          <div
-            key={opt.label}
-            onClick={() => opt.set(!opt.value)}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}
-          >
-            <div style={{
-              width: 12, height: 12,
-              border: `1px solid ${opt.value ? accent : 'rgba(153,104,0,0.4)'}`,
-              background: opt.value ? 'rgba(255,176,0,0.15)' : 'transparent',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 8, color: accent,
-            }}>
-              {opt.value ? '×' : ''}
-            </div>
-            <span style={{ fontFamily: mono, fontSize: 9, color: opt.value ? accent : dimText, letterSpacing: 1 }}>
-              {opt.label}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      {/* XP preview + submit */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 12,
-        borderTop: '1px solid rgba(153,104,0,0.3)', paddingTop: 10,
-      }}>
-        {/* XP numbers */}
-        <div style={{ flex: 1 }}>
-          <div style={{ fontFamily: mono, fontSize: 9, color: accentDim, letterSpacing: 1, marginBottom: 3 }}>
-            XP PREVIEW
-          </div>
-          <div style={{ fontFamily: mono, fontSize: 9, color: dimText, lineHeight: 1.7 }}>
-            <span style={{ color: accent }}>+{skillXp}</span> skill ·{' '}
-            <span style={{ color: accent }}>+{statTotal}</span>{' '}
-            {hasDualStat
-              ? `${statKeys[0].toUpperCase()} / ${statKeys[1].toUpperCase()}`
-              : statKeys[0]?.toUpperCase()} ·{' '}
-            <span style={{ color: accent }}>+{masterXp}</span> master
-          </div>
-          <div style={{ fontFamily: vt, fontSize: 15, color: 'hsl(var(--accent-bright))', marginTop: 2 }}>
-            TOTAL +{totalXp} XP
-            {mult > 1 && (
-              <span style={{ fontFamily: mono, fontSize: 9, color: accentDim, marginLeft: 8 }}>
-                {mult.toFixed(1)}×
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Buttons */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
-          <button
-            onClick={handleSubmit}
-            disabled={logMutation.isPending}
-            style={{
-              height: 34, padding: '0 16px',
-              border: `1px solid ${accent}`,
-              background: 'transparent', color: accent,
-              fontFamily: mono, fontSize: 10, cursor: 'pointer',
-              letterSpacing: 1, opacity: logMutation.isPending ? 0.5 : 1,
-              transition: 'all 150ms',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.background = accent; e.currentTarget.style.color = 'hsl(var(--bg-primary))'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = accent; }}
-          >
-            {logMutation.isPending ? 'LOGGING...' : '>> LOG SESSION'}
-          </button>
-          <button
-            onClick={onDone}
-            style={{
-              height: 26, padding: '0 16px',
-              border: '1px solid rgba(153,104,0,0.4)',
-              background: 'transparent', color: dimText,
-              fontFamily: mono, fontSize: 9, cursor: 'pointer',
-            }}
-          >
-            CANCEL
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ── Main ──────────────────────────────────────────────────────
 
 export default function SkillDetailDrawer({ skillId, onClose, onOpenLog }: Props) {
@@ -444,7 +112,6 @@ export default function SkillDetailDrawer({ skillId, onClose, onOpenLog }: Props
   const [showDelete, setShowDelete]   = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue]     = useState('');
-  const [showLog, setShowLog]         = useState(false);
   const [editingStats, setEditingStats] = useState(false);
   const [editPrimary, setEditPrimary]   = useState<StatKey>('body');
   const [editSecondary, setEditSecondary] = useState<StatKey | ''>('');
@@ -651,26 +318,25 @@ export default function SkillDetailDrawer({ skillId, onClose, onOpenLog }: Props
         scrollbarColor: `${accentDim} ${bgSec}`,
       }}>
 
-        {/* ── Log session — inline panel ── */}
+        {/* ── Log session — open Quick Log overlay ── */}
         <SectionLabel label="LOG SESSION" />
-        {showLog ? (
-          <InlineLogPanel skill={skill} onDone={() => setShowLog(false)} />
-        ) : (
-          <button
-            onClick={() => setShowLog(true)}
-            style={{
-              width: '100%', height: 36,
-              border: `1px solid ${accent}`,
-              background: 'transparent', color: accent,
-              fontFamily: mono, fontSize: 11,
-              cursor: 'pointer', marginBottom: 4, letterSpacing: 1,
-            }}
-            onMouseEnter={e => { e.currentTarget.style.background = accent; e.currentTarget.style.color = 'hsl(var(--bg-primary))'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = accent; }}
-          >
-            [ &gt;&gt; LOG SESSION ]
-          </button>
-        )}
+        <button
+          onClick={() => {
+            onOpenLog?.();
+            onClose?.();
+          }}
+          style={{
+            width: '100%', height: 36,
+            border: `1px solid ${accent}`,
+            background: 'transparent', color: accent,
+            fontFamily: mono, fontSize: 11,
+            cursor: 'pointer', marginBottom: 4, letterSpacing: 1,
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = accent; e.currentTarget.style.color = 'hsl(var(--bg-primary))'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = accent; }}
+        >
+          [ &gt;&gt; LOG SESSION ]
+        </button>
 
         {/* ── Recent sessions ── */}
         <SectionLabel label="RECENT SESSIONS" />

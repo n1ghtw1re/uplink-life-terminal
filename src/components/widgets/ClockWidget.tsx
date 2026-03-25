@@ -13,6 +13,10 @@ type PomodoroPhase = 'WORK' | 'BREAK';
 
 const TIMER_PRESETS = [5, 10, 15, 25, 45, 60];
 
+const POMODORO_BREAK_SOUND_SRC = '/music/peace_orchestra.mp3';
+const POMODORO_VOLUME_STORAGE_KEY = 'uplink-pomodoro-volume';
+const POMODORO_WORK_MIN_STORAGE_KEY = 'uplink-pomodoro-work-minutes';
+
 const formatTime = (seconds: number) => {
   const mins = Math.floor(seconds / 60);
   const secs = seconds % 60;
@@ -36,12 +40,66 @@ const ClockWidget = ({ onClose, onFullscreen, isFullscreen, isFocused }: WidgetP
   const [pomodoroRunning, setPomodoroRunning] = useState(false);
   const [pomodoroPhase, setPomodoroPhase] = useState<PomodoroPhase>('WORK');
   const [pomodoroCycles, setPomodoroCycles] = useState(0);
+  const [pomodoroWorkMinutes, setPomodoroWorkMinutes] = useState(() => {
+    try {
+      const raw = localStorage.getItem(POMODORO_WORK_MIN_STORAGE_KEY);
+      if (raw == null) return 25;
+      const n = Number(raw);
+      return Number.isFinite(n) ? Math.min(60, Math.max(0, Math.round(n))) : 25;
+    } catch {
+      return 25;
+    }
+  });
   const [pomodoroNotify, setPomodoroNotify] = useState(true);
   const [pomodoroGlitch, setPomodoroGlitch] = useState(true);
+  const [pomodoroVolume, setPomodoroVolume] = useState(() => {
+    try {
+      const raw = localStorage.getItem(POMODORO_VOLUME_STORAGE_KEY);
+      if (raw == null) return 0.7;
+      const n = Number(raw);
+      return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0.7;
+    } catch {
+      return 0.7;
+    }
+  });
 
   const [notification, setNotification] = useState<string | null>(null);
   const [glitchActive, setGlitchActive] = useState(false);
   const glitchTimeoutRef = useRef<number | null>(null);
+  const pomodoroBreakAudioRef = useRef<HTMLAudioElement | null>(null);
+  const pomodoroVolumeRef = useRef(pomodoroVolume);
+
+  useEffect(() => {
+    pomodoroVolumeRef.current = pomodoroVolume;
+    try {
+      localStorage.setItem(POMODORO_VOLUME_STORAGE_KEY, String(pomodoroVolume));
+    } catch {
+      /* ignore */
+    }
+    const a = pomodoroBreakAudioRef.current;
+    if (a) a.volume = pomodoroVolume;
+  }, [pomodoroVolume]);
+
+  useEffect(() => {
+    const audio = new Audio(POMODORO_BREAK_SOUND_SRC);
+    audio.preload = 'auto';
+    audio.volume = pomodoroVolumeRef.current;
+    pomodoroBreakAudioRef.current = audio;
+    return () => {
+      audio.pause();
+      pomodoroBreakAudioRef.current = null;
+    };
+  }, []);
+
+  const playPomodoroCompleteSound = () => {
+    const v = pomodoroVolumeRef.current;
+    if (v <= 0) return;
+    const audio = pomodoroBreakAudioRef.current;
+    if (!audio) return;
+    audio.volume = Math.min(1, Math.max(0, v));
+    audio.currentTime = 0;
+    void audio.play().catch(() => {});
+  };
 
   const triggerNotification = (message: string, popup: boolean, glitch: boolean) => {
     setNotification(popup ? message : null);
@@ -97,12 +155,29 @@ const ClockWidget = ({ onClose, onFullscreen, isFullscreen, isFocused }: WidgetP
   }, [stopwatchRunning]);
 
   useEffect(() => {
+    try {
+      localStorage.setItem(POMODORO_WORK_MIN_STORAGE_KEY, String(pomodoroWorkMinutes));
+    } catch {
+      /* ignore */
+    }
+  }, [pomodoroWorkMinutes]);
+
+  useEffect(() => {
+    if (pomodoroRunning) return;
+    if (pomodoroPhase !== 'WORK') return;
+    setPomodoroSecondsLeft(pomodoroWorkMinutes * 60);
+  }, [pomodoroWorkMinutes, pomodoroRunning, pomodoroPhase]);
+
+  useEffect(() => {
     if (!pomodoroRunning) return;
     const id = window.setInterval(() => {
       setPomodoroSecondsLeft((prev) => {
         if (prev <= 1) {
           const nextPhase: PomodoroPhase = pomodoroPhase === 'WORK' ? 'BREAK' : 'WORK';
-          if (pomodoroPhase === 'WORK') setPomodoroCycles((c) => c + 1);
+          if (pomodoroPhase === 'WORK') {
+            setPomodoroCycles((c) => c + 1);
+          }
+          queueMicrotask(() => playPomodoroCompleteSound());
           setPomodoroPhase(nextPhase);
 
           if (pomodoroNotify || pomodoroGlitch) {
@@ -110,13 +185,13 @@ const ClockWidget = ({ onClose, onFullscreen, isFullscreen, isFocused }: WidgetP
             triggerNotification(message, pomodoroNotify, pomodoroGlitch);
           }
 
-          return nextPhase === 'WORK' ? 25 * 60 : 5 * 60;
+          return nextPhase === 'WORK' ? pomodoroWorkMinutes * 60 : 5 * 60;
         }
         return prev - 1;
       });
     }, 1000);
     return () => window.clearInterval(id);
-  }, [pomodoroRunning, pomodoroPhase, pomodoroNotify, pomodoroGlitch]);
+  }, [pomodoroRunning, pomodoroPhase, pomodoroNotify, pomodoroGlitch, pomodoroWorkMinutes]);
 
   const timerProgress = useMemo(() => {
     const total = Math.max(1, timerDurationMin * 60);
@@ -312,12 +387,28 @@ const ClockWidget = ({ onClose, onFullscreen, isFullscreen, isFocused }: WidgetP
               onClick={() => {
                 setPomodoroRunning(false);
                 setPomodoroPhase('WORK');
-                setPomodoroSecondsLeft(25 * 60);
+                setPomodoroSecondsLeft(pomodoroWorkMinutes * 60);
                 setPomodoroCycles(0);
               }}
             >
               RESET
             </button>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 10, color: 'hsl(var(--text-dim))', minWidth: 72 }}>WORK LENGTH</span>
+            <input
+              type="range"
+              min={0}
+              max={60}
+              step={1}
+              value={pomodoroWorkMinutes}
+              onChange={(e) => setPomodoroWorkMinutes(Number(e.target.value))}
+              aria-label="Pomodoro work duration in minutes"
+              style={{ flex: 1, minWidth: 80, accentColor: 'hsl(var(--accent))' }}
+            />
+            <span style={{ fontSize: 9, color: 'hsl(var(--text-dim))', width: 38, fontVariantNumeric: 'tabular-nums' }}>
+              {pomodoroWorkMinutes}m
+            </span>
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 10, alignItems: 'center' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: 'hsl(var(--text-dim))' }}>
@@ -329,8 +420,23 @@ const ClockWidget = ({ onClose, onFullscreen, isFullscreen, isFocused }: WidgetP
               Glitch
             </label>
           </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 10, color: 'hsl(var(--text-dim))', minWidth: 72 }}>BREAK SOUND</span>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={Math.round(pomodoroVolume * 100)}
+              onChange={(e) => setPomodoroVolume(Number(e.target.value) / 100)}
+              aria-label="Pomodoro break sound volume"
+              style={{ flex: 1, minWidth: 80, accentColor: 'hsl(var(--accent))' }}
+            />
+            <span style={{ fontSize: 9, color: 'hsl(var(--text-dim))', width: 28, fontVariantNumeric: 'tabular-nums' }}>
+              {Math.round(pomodoroVolume * 100)}%
+            </span>
+          </div>
           <div style={{ fontSize: 10, marginTop: 8, color: 'hsl(var(--text-dim))' }}>
-            Structured work/rest cycles for focus and discipline. Work 25:00, break 05:00.
+            Structured work/rest cycles for focus and discipline. Work is adjustable (0-60m), break is fixed at 05:00. Sound plays on each phase completion.
           </div>
         </div>
       )}

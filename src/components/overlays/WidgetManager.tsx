@@ -36,6 +36,7 @@ export const WIDGET_REGISTRY: WidgetDef[] = [
   { id: 'clock',        name: 'CLOCK',          icon: '◷', category: 'UTILITY', description: 'Live clock with timer and pomodoro' },
   { id: 'calculator',   name: 'CALCULATOR',     icon: '⌨', category: 'UTILITY', description: 'CRT-style calculator' },
   { id: 'unitConverter',name: 'UNIT CONVERTER', icon: '⇄', category: 'UTILITY', description: 'Unit conversion tool' },
+  { id: 'notes',        name: 'NOTES',           icon: '📝', category: 'UTILITY', description: 'Personal notes and documentation' },
   { id: 'goals',    name: 'GOALS',            icon: '◎', category: 'FUTURE',  description: 'Life, mid, and sprint goals — coming soon' },
   { id: 'habits',   name: 'HABIT TRACKER',    icon: '✓', category: 'FUTURE',  description: 'Daily habit streaks and completion — coming soon' },
   { id: 'terminal', name: 'TERMINAL',         icon: '$', category: 'FUTURE',  description: 'Command-line interface for UPLINK — coming soon' },
