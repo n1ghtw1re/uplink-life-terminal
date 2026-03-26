@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getDB } from '@/lib/db';
-import { getLevelFromXP } from '@/services/xpService';
+import { getLevelFromXP, getXPDisplayValues } from '@/services/xpService';
 import { toast } from '@/hooks/use-toast';
 
 const mono  = "'IBM Plex Mono', monospace";
@@ -66,10 +66,13 @@ export default function ToolDetailDrawer({ toolId, onClose }: Props) {
     enabled: !!toolId,
     queryFn: async () => {
       const db  = await getDB();
-      const res = await db.query<{ id: string; skill_name: string; duration_minutes: number; logged_at: string; total_tool_xp: number }>(`
-        SELECT id, skill_name, duration_minutes, logged_at, total_tool_xp
-        FROM sessions WHERE tool_ids::text LIKE '%${toolId}%'
-        ORDER BY logged_at DESC LIMIT 8;
+      const res = await db.query<{ id: string; skill_name: string; duration_minutes: number; logged_at: string; tool_xp: number }>(`
+        SELECT s.id, s.skill_name, s.duration_minutes, s.logged_at,
+               COALESCE(x.amount, 0) as tool_xp
+        FROM sessions s
+        LEFT JOIN xp_log x ON x.source_id = s.id AND x.tier = 'tool' AND x.entity_id = '${toolId}'
+        WHERE s.tool_ids::text LIKE '%${toolId}%'
+        ORDER BY s.logged_at DESC LIMIT 8;
       `);
       return res.rows;
     },
@@ -169,7 +172,7 @@ export default function ToolDetailDrawer({ toolId, onClose }: Props) {
           <span style={{ fontSize: 10, color: dim, flexShrink: 0 }}>{xpPct}%</span>
         </div>
         <div style={{ fontSize: 9, color: adim }}>
-          {Number(tool.xp).toLocaleString()} / {xpForLevel.toLocaleString()} XP to LVL {level + 1}
+          {getXPDisplayValues(Number(tool.xp)).totalXP.toLocaleString()} / {getXPDisplayValues(Number(tool.xp)).totalXPToNextLevel.toLocaleString()} XP to LVL {level + 1}
         </div>
       </div>
 
@@ -227,7 +230,7 @@ export default function ToolDetailDrawer({ toolId, onClose }: Props) {
               <span style={{ color: dim, flexShrink: 0, width: 80 }}>{date}</span>
               <span style={{ color: acc, flex: 1 }}>{s.skill_name}</span>
               <span style={{ color: dim, flexShrink: 0 }}>{s.duration_minutes}m</span>
-              <span style={{ color: green, flexShrink: 0 }}>+{s.total_tool_xp} XP</span>
+              <span style={{ color: green, flexShrink: 0 }}>+{s.tool_xp} XP</span>
             </div>
           );
         })}

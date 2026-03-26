@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { STAT_META, StatKey, getStatLevel } from '@/types';
+import { getXPDisplayValues } from '@/services/xpService';
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -306,7 +307,7 @@ export default function SkillDetailDrawer({ skillId, onClose, onOpenLog }: Props
           <span style={{ fontSize: 10, color: dimText, flexShrink: 0 }}>{xpPct}%</span>
         </div>
         <div style={{ fontSize: 9, color: accentDim }}>
-          {xpInLevel.toLocaleString()} / {xpForLevel.toLocaleString()} XP to LVL {skill.level + 1}
+          {getXPDisplayValues(skill.xp).totalXP.toLocaleString()} / {getXPDisplayValues(skill.xp).totalXPToNextLevel.toLocaleString()} XP to LVL {skill.level + 1}
         </div>
       </div>
 

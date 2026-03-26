@@ -4,7 +4,7 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getDB } from '@/lib/db';
-import { getLevelFromXP } from '@/services/xpService';
+import { getLevelFromXP, getXPDisplayValues } from '@/services/xpService';
 import { useTools, ToolOption } from '@/hooks/useTools';
 import Modal from '@/components/Modal';
 import AddToolModal from '@/components/modals/AddToolModal';
@@ -347,7 +347,7 @@ function ToolDrawerContent({ tool, onClose, onUpdated }: { tool: ToolOption; onC
           </div>
           <span style={{ fontSize: 10, color: dim }}>{pct}%</span>
         </div>
-        <div style={{ fontSize: 9, color: adim }}>{xpInLevel.toLocaleString()} / {xpForLevel.toLocaleString()} XP</div>
+        <div style={{ fontSize: 9, color: adim }}>{getXPDisplayValues(tool.xp).totalXP.toLocaleString()} / {getXPDisplayValues(tool.xp).totalXPToNextLevel.toLocaleString()} XP</div>
       </div>
 
       {/* Body */}

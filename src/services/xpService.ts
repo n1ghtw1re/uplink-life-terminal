@@ -37,6 +37,24 @@ export function getLevelFromXP(xp: number) {
 }
 
 
+// Returns values for the "X / Y XP" display label
+// totalXP = raw XP, totalXPToNextLevel = cumulative XP threshold for next level
+export function getXPDisplayValues(xp: number) {
+  const totalXP = Math.max(0, xp);
+  if (totalXP >= THRESHOLDS[60]) {
+    const above = totalXP - THRESHOLDS[60];
+    const levelsAbove = Math.floor(above / FLAT_COST);
+    const totalXPToNextLevel = THRESHOLDS[60] + (levelsAbove + 1) * FLAT_COST;
+    return { totalXP, totalXPToNextLevel };
+  }
+  let level = 0;
+  for (let i = THRESHOLDS.length - 1; i >= 0; i--) {
+    if (totalXP >= THRESHOLDS[i]) { level = i; break; }
+  }
+  const totalXPToNextLevel = level < THRESHOLDS.length - 1 ? THRESHOLDS[level + 1] : THRESHOLDS[60] + FLAT_COST;
+  return { totalXP, totalXPToNextLevel };
+}
+
 const levelCase = (col: string) => `
   CASE
     WHEN ${col} >= 438000 THEN (60 + FLOOR((${col} - 438000) / 13200) + 1)::int

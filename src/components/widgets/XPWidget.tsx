@@ -1,6 +1,7 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { useOperator } from '@/hooks/useOperator';
 import { useQuery } from '@tanstack/react-query';
+import { getXPDisplayValues } from '@/services/xpService';
 import { supabase } from '@/integrations/supabase/client';
 import { getStreakTier } from '@/types';
 import WidgetWrapper from '../WidgetWrapper';
@@ -64,7 +65,7 @@ const XPWidget = ({ onClose, onFullscreen, isFullscreen }: WidgetProps) => {
       </div>
       <ProgressBar value={xpInLevel} max={xpForLevel} />
       <div style={{ fontSize: 10, color: 'hsl(var(--text-dim))', marginTop: 4, marginBottom: 10 }}>
-        {xpInLevel.toLocaleString()} / {xpForLevel.toLocaleString()} XP
+        {getXPDisplayValues(totalXP).totalXP.toLocaleString()} / {getXPDisplayValues(totalXP).totalXPToNextLevel.toLocaleString()} XP
       </div>
 
       {recentXP && recentXP.length > 0 ? (
