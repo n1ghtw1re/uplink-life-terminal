@@ -1,231 +1,453 @@
 // ============================================================
 // src/components/drawer/SessionDetailDrawer.tsx
-// Drawer showing full details of a logged session
+// Shows full session detail with edit (XP diff) and delete (XP reversal)
 // ============================================================
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getDB } from '@/lib/db';
+import { getLevelFromXP, XP_PER_MINUTE, LEGACY_RATE, SKILL_SHARE, STAT_SHARE, MASTER_SHARE } from '@/services/xpService';
 
-// ── Types ─────────────────────────────────────────────────────
+const mono = "'IBM Plex Mono', monospace";
+const vt   = "'VT323', monospace";
+const acc  = 'hsl(var(--accent))';
+const dim  = 'hsl(var(--text-dim))';
+const adim = 'hsl(var(--accent-dim))';
+const bgS  = 'hsl(var(--bg-secondary))';
+const bgT  = 'hsl(var(--bg-tertiary))';
+const red  = '#ff4400';
+const green = '#44ff88';
 
-interface Session {
+const levelCase = (col: string) => `
+  CASE
+    WHEN ${col} >= 438000 THEN (60 + FLOOR((${col} - 438000) / 13200) + 1)::int
+    WHEN ${col} >= 424800 THEN 59 WHEN ${col} >= 411800 THEN 58
+    WHEN ${col} >= 399000 THEN 57 WHEN ${col} >= 386400 THEN 56
+    WHEN ${col} >= 374000 THEN 55 WHEN ${col} >= 361800 THEN 54
+    WHEN ${col} >= 349800 THEN 53 WHEN ${col} >= 338000 THEN 52
+    WHEN ${col} >= 326400 THEN 51 WHEN ${col} >= 315000 THEN 50
+    WHEN ${col} >= 303800 THEN 49 WHEN ${col} >= 292800 THEN 48
+    WHEN ${col} >= 282000 THEN 47 WHEN ${col} >= 271400 THEN 46
+    WHEN ${col} >= 261000 THEN 45 WHEN ${col} >= 250800 THEN 44
+    WHEN ${col} >= 240800 THEN 43 WHEN ${col} >= 231000 THEN 42
+    WHEN ${col} >= 221400 THEN 41 WHEN ${col} >= 212000 THEN 40
+    WHEN ${col} >= 202800 THEN 39 WHEN ${col} >= 193800 THEN 38
+    WHEN ${col} >= 185000 THEN 37 WHEN ${col} >= 176400 THEN 36
+    WHEN ${col} >= 168000 THEN 35 WHEN ${col} >= 159800 THEN 34
+    WHEN ${col} >= 151800 THEN 33 WHEN ${col} >= 144000 THEN 32
+    WHEN ${col} >= 136400 THEN 31 WHEN ${col} >= 129000 THEN 30
+    WHEN ${col} >= 121800 THEN 29 WHEN ${col} >= 114800 THEN 28
+    WHEN ${col} >= 108000 THEN 27 WHEN ${col} >= 101400 THEN 26
+    WHEN ${col} >= 95000 THEN 25  WHEN ${col} >= 88800 THEN 24
+    WHEN ${col} >= 82800 THEN 23  WHEN ${col} >= 77000 THEN 22
+    WHEN ${col} >= 71400 THEN 21  WHEN ${col} >= 66000 THEN 20
+    WHEN ${col} >= 60800 THEN 19  WHEN ${col} >= 55800 THEN 18
+    WHEN ${col} >= 51000 THEN 17  WHEN ${col} >= 46400 THEN 16
+    WHEN ${col} >= 42000 THEN 15  WHEN ${col} >= 37800 THEN 14
+    WHEN ${col} >= 33800 THEN 13  WHEN ${col} >= 30000 THEN 12
+    WHEN ${col} >= 26400 THEN 11  WHEN ${col} >= 23000 THEN 10
+    WHEN ${col} >= 19800 THEN 9   WHEN ${col} >= 16800 THEN 8
+    WHEN ${col} >= 14000 THEN 7   WHEN ${col} >= 11400 THEN 6
+    WHEN ${col} >= 9000 THEN 5    WHEN ${col} >= 6800 THEN 4
+    WHEN ${col} >= 4800 THEN 3    WHEN ${col} >= 3000 THEN 2
+    WHEN ${col} >= 1400 THEN 1    ELSE 0
+  END`;
+
+interface SessionData {
   id: string;
   skill_id: string;
   skill_name: string;
   duration_minutes: number;
-  stat_split: string | null;
+  stat_split: { stat: string; percent: number }[];
   notes: string | null;
   is_legacy: boolean;
   logged_at: string;
   skill_xp: number;
   master_xp: number;
-  tool_ids: string | null;
+  tool_ids: string[];
   total_tool_xp: number;
-  augment_ids: string | null;
+  augment_ids: string[];
   total_augment_xp: number;
-  media_id: string | null;
   course_id: string | null;
+  media_id: string | null;
   project_id: string | null;
 }
 
-// ── Styles ────────────────────────────────────────────────────
-
-const mono = "'IBM Plex Mono', monospace";
-const acc  = 'hsl(var(--accent))';
-const dim  = 'hsl(var(--text-dim))';
-const adim = 'hsl(var(--accent-dim))';
-const bgP  = 'hsl(var(--bg-primary))';
-const bgS  = 'hsl(var(--bg-secondary))';
-const bgT  = 'hsl(var(--bg-tertiary))';
-
-// ── Utilities ─────────────────────────────────────────────────
-
-function formatDate(dateStr: string): string {
-  try {
-    const d = new Date(dateStr);
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    const h = String(d.getHours()).padStart(2, '0');
-    const min = String(d.getMinutes()).padStart(2, '0');
-    return `${y}-${m}-${day} ${h}:${min}`;
-  } catch {
-    return dateStr;
-  }
+interface XPLogRow {
+  id: string;
+  tier: string;
+  entity_id: string;
+  amount: number;
 }
 
-function formatDuration(minutes: number): string {
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
-}
-
-// ── Sub-components ────────────────────────────────────────────
-
-function StatRow({ label, value }: { label: string; value: string | number | null }) {
-  return (
-    <div style={{
-      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-      padding: '6px 0', fontSize: 10, borderBottom: `1px solid ${adim}`,
-    }}>
-      <span style={{ color: dim }}>{label}</span>
-      <span style={{ color: acc, fontFamily: mono }}>{value ?? '—'}</span>
-    </div>
+// ── XP reversal helper ────────────────────────────────────────
+async function reverseSessionXP(db: Awaited<ReturnType<typeof getDB>>, sessionId: string) {
+  const logs = await db.query<XPLogRow>(
+    `SELECT id, tier, entity_id, amount FROM xp_log WHERE source_id = $1 AND source = 'session';`,
+    [sessionId]
   );
-}
 
-// ── Main ──────────────────────────────────────────────────────
+  for (const log of logs.rows) {
+    const amt = Number(log.amount);
+    if (amt <= 0) continue;
 
-interface Props {
-  sessionId: string;
-}
-
-export default function SessionDetailDrawer({ sessionId }: Props) {
-  const { data: session, isLoading } = useQuery({
-    queryKey: ['session-detail', sessionId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('sessions')
-        .select('*')
-        .eq('id', sessionId)
-        .single();
-      if (error) throw error;
-      return data as Session;
-    },
-  });
-
-  if (isLoading) {
-    return (
-      <div style={{
-        height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: dim, fontSize: 11,
-      }}>
-        Loading...
-      </div>
-    );
-  }
-
-  if (!session) {
-    return (
-      <div style={{
-        height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: dim, fontSize: 11,
-      }}>
-        Session not found
-      </div>
-    );
-  }
-
-  let statSplit: Record<string, number> = {};
-  if (session.stat_split) {
-    try {
-      const parsed = JSON.parse(session.stat_split);
-      if (Array.isArray(parsed)) {
-        // Convert from [{stat: 'body', percent: 50}, ...] format
-        parsed.forEach(item => {
-          if (item.stat && item.percent) {
-            statSplit[item.stat] = item.percent;
-          }
-        });
-      }
-    } catch (e) {
-      // Silent fail
+    if (log.tier === 'skill') {
+      await db.exec(`
+        UPDATE skills SET xp = GREATEST(0, xp - ${amt}), level = ${levelCase(`GREATEST(0, xp - ${amt})`)} WHERE id = '${log.entity_id}';
+      `);
+    } else if (log.tier === 'stat') {
+      await db.exec(`
+        UPDATE stats SET xp = GREATEST(0, xp - ${amt}), level = ${levelCase(`GREATEST(0, xp - ${amt})`)} WHERE stat_key = '${log.entity_id}';
+      `);
+    } else if (log.tier === 'master') {
+      await db.exec(`
+        UPDATE master_progress SET total_xp = GREATEST(0, total_xp - ${amt}), level = ${levelCase(`GREATEST(0, total_xp - ${amt})`)} WHERE id = 1;
+      `);
+    } else if (log.tier === 'tool') {
+      await db.exec(`
+        UPDATE tools SET xp = GREATEST(0, xp - ${amt}), level = ${levelCase(`GREATEST(0, xp - ${amt})`)} WHERE id = '${log.entity_id}';
+        UPDATE tool_progress SET total_xp = GREATEST(0, total_xp - ${amt}), level = ${levelCase(`GREATEST(0, total_xp - ${amt})`)} WHERE id = 1;
+      `);
+    } else if (log.tier === 'augment') {
+      await db.exec(`
+        UPDATE augments SET xp = GREATEST(0, xp - ${amt}), level = ${levelCase(`GREATEST(0, xp - ${amt})`)} WHERE id = '${log.entity_id}';
+        UPDATE augment_progress SET total_xp = GREATEST(0, total_xp - ${amt}), level = ${levelCase(`GREATEST(0, total_xp - ${amt})`)} WHERE id = 1;
+      `);
     }
   }
 
-  const toolIds = session.tool_ids 
-    ? (typeof session.tool_ids === 'string' ? JSON.parse(session.tool_ids) : session.tool_ids)
-    : [];
-  const augmentIds = session.augment_ids
-    ? (typeof session.augment_ids === 'string' ? JSON.parse(session.augment_ids) : session.augment_ids)
-    : [];
+  // Remove log entries
+  await db.exec(`DELETE FROM xp_log WHERE source_id = '${sessionId}' AND source = 'session';`);
+}
+
+// ── Award new XP helper ───────────────────────────────────────
+async function awardNewSessionXP(
+  db: Awaited<ReturnType<typeof getDB>>,
+  session: SessionData,
+  newDuration: number,
+  newNotes: string | null,
+  newLegacy: boolean
+) {
+  const factor   = newLegacy ? LEGACY_RATE : 1.0;
+  const base     = newDuration * XP_PER_MINUTE * factor;
+  const skillXP  = Math.floor(base * SKILL_SHARE);
+  const statBase = Math.floor(base * STAT_SHARE);
+  const masterXP = Math.floor(base * MASTER_SHARE);
+  const statXPMap = session.stat_split.map(s => ({
+    stat: s.stat,
+    amount: Math.floor(statBase * s.percent / 100),
+  }));
+  const toolCount = session.tool_ids.length;
+  const augCount  = session.augment_ids.length;
+  const perTool   = toolCount > 0 ? Math.floor(base / toolCount) : 0;
+  const perAug    = augCount  > 0 ? Math.floor(base / augCount)  : 0;
+  const now       = new Date().toISOString();
+  const uid       = () => crypto.randomUUID();
+
+  // Skill
+  await db.exec(`UPDATE skills SET xp = xp + ${skillXP}, level = ${levelCase(`xp + ${skillXP}`)} WHERE id = '${session.skill_id}';`);
+
+  // Stats
+  for (const { stat, amount } of statXPMap) {
+    if (amount > 0) await db.exec(`UPDATE stats SET xp = xp + ${amount}, level = ${levelCase(`xp + ${amount}`)}, dormant = false WHERE stat_key = '${stat}';`);
+  }
+
+  // Master
+  await db.exec(`UPDATE master_progress SET total_xp = total_xp + ${masterXP}, level = ${levelCase(`total_xp + ${masterXP}`)} WHERE id = 1;`);
+
+  // Tools
+  for (const toolId of session.tool_ids) {
+    if (perTool > 0) {
+      await db.exec(`
+        UPDATE tools SET xp = xp + ${perTool}, level = ${levelCase(`xp + ${perTool}`)} WHERE id = '${toolId}';
+        UPDATE tool_progress SET total_xp = total_xp + ${perTool}, level = ${levelCase(`total_xp + ${perTool}`)} WHERE id = 1;
+      `);
+    }
+  }
+
+  // Augments
+  for (const augId of session.augment_ids) {
+    if (perAug > 0) {
+      await db.exec(`
+        UPDATE augments SET xp = xp + ${perAug}, level = ${levelCase(`xp + ${perAug}`)} WHERE id = '${augId}';
+        UPDATE augment_progress SET total_xp = total_xp + ${perAug}, level = ${levelCase(`total_xp + ${perAug}`)} WHERE id = 1;
+      `);
+    }
+  }
+
+  // Update session record
+  const totalToolXP = perTool * toolCount;
+  const totalAugXP  = perAug  * augCount;
+  await db.query(
+    `UPDATE sessions SET duration_minutes=$1, skill_xp=$2, master_xp=$3,
+     total_tool_xp=$4, total_augment_xp=$5, notes=$6, is_legacy=$7
+     WHERE id=$8`,
+    [newDuration, skillXP, masterXP, totalToolXP, totalAugXP, newNotes, newLegacy, session.id]
+  );
+
+  // New XP log entries
+  const logEntries = [
+    `('${uid()}', 'session', '${session.id}', 'skill',  '${session.skill_id}', ${skillXP}, '${now}')`,
+    `('${uid()}', 'session', '${session.id}', 'master', 'master',              ${masterXP}, '${now}')`,
+    ...statXPMap.filter(s => s.amount > 0).map(s =>
+      `('${uid()}', 'session', '${session.id}', 'stat', '${s.stat}', ${s.amount}, '${now}')`),
+    ...session.tool_ids.filter(() => perTool > 0).map(id =>
+      `('${uid()}', 'session', '${session.id}', 'tool', '${id}', ${perTool}, '${now}')`),
+    ...session.augment_ids.filter(() => perAug > 0).map(id =>
+      `('${uid()}', 'session', '${session.id}', 'augment', '${id}', ${perAug}, '${now}')`),
+  ];
+
+  if (logEntries.length > 0) {
+    await db.exec(`INSERT INTO xp_log (id, source, source_id, tier, entity_id, amount, logged_at) VALUES ${logEntries.join(',')};`);
+  }
+}
+
+// ── Component ─────────────────────────────────────────────────
+
+interface Props {
+  sessionId: string;
+  onDeleted?: () => void;
+}
+
+export default function SessionDetailDrawer({ sessionId, onDeleted }: Props) {
+  const queryClient = useQueryClient();
+  const [editing, setEditing]         = useState(false);
+  const [editDuration, setEditDuration] = useState('');
+  const [editNotes, setEditNotes]     = useState('');
+  const [editLegacy, setEditLegacy]   = useState(false);
+  const [showDelete, setShowDelete]   = useState(false);
+
+  const { data: session, isLoading } = useQuery({
+    queryKey: ['session-detail', sessionId],
+    queryFn: async () => {
+      const db  = await getDB();
+      const res = await db.query<{
+        id: string; skill_id: string; skill_name: string;
+        duration_minutes: number; stat_split: string;
+        notes: string | null; is_legacy: boolean; logged_at: string;
+        skill_xp: number; master_xp: number;
+        tool_ids: string; total_tool_xp: number;
+        augment_ids: string; total_augment_xp: number;
+        course_id: string | null; media_id: string | null; project_id: string | null;
+      }>(
+        `SELECT id, skill_id, skill_name, duration_minutes, stat_split,
+                notes, is_legacy, logged_at, skill_xp, master_xp,
+                tool_ids, total_tool_xp, augment_ids, total_augment_xp,
+                course_id, media_id, project_id
+         FROM sessions WHERE id = $1;`,
+        [sessionId]
+      );
+      if (!res.rows[0]) return null;
+      const r = res.rows[0];
+      return {
+        ...r,
+        stat_split:   typeof r.stat_split   === 'string' ? JSON.parse(r.stat_split)   : (r.stat_split   ?? []),
+        tool_ids:     typeof r.tool_ids     === 'string' ? JSON.parse(r.tool_ids)     : (r.tool_ids     ?? []),
+        augment_ids:  typeof r.augment_ids  === 'string' ? JSON.parse(r.augment_ids)  : (r.augment_ids  ?? []),
+      } as SessionData;
+    },
+  });
+
+  const startEdit = () => {
+    if (!session) return;
+    setEditDuration(String(session.duration_minutes));
+    setEditNotes(session.notes ?? '');
+    setEditLegacy(session.is_legacy);
+    setEditing(true);
+  };
+
+  const saveEdit = useMutation({
+    mutationFn: async () => {
+      if (!session) return;
+      const newDuration = parseInt(editDuration);
+      if (!newDuration || newDuration <= 0) throw new Error('Invalid duration');
+      const db = await getDB();
+      // 1. Reverse old XP
+      await reverseSessionXP(db, session.id);
+      // 2. Award new XP
+      await awardNewSessionXP(db, session, newDuration, editNotes.trim() || null, editLegacy);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries();
+      setEditing(false);
+    },
+  });
+
+  const deleteSession = useMutation({
+    mutationFn: async () => {
+      if (!session) return;
+      const db = await getDB();
+      // 1. Reverse all XP
+      await reverseSessionXP(db, session.id);
+      // 2. Delete session record
+      await db.exec(`DELETE FROM sessions WHERE id = '${session.id}';`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries();
+      onDeleted?.();
+    },
+  });
+
+  if (isLoading) return (
+    <div style={{ padding: 24, color: dim, fontFamily: mono, fontSize: 11 }}>Loading...</div>
+  );
+  if (!session) return (
+    <div style={{ padding: 24, color: dim, fontFamily: mono, fontSize: 11 }}>Session not found.</div>
+  );
+
+  const date = new Date(session.logged_at).toLocaleDateString('en-CA');
+  const time = new Date(session.logged_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  const hrs  = Math.floor(session.duration_minutes / 60);
+  const mins = session.duration_minutes % 60;
+  const durLabel = hrs > 0 ? (mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`) : `${mins}m`;
+
+  const totalMainXP = session.skill_xp + session.master_xp;
+  const perToolXP   = session.tool_ids.length > 0 ? Math.floor(session.total_tool_xp / session.tool_ids.length) : 0;
+  const perAugXP    = session.augment_ids.length > 0 ? Math.floor(session.total_augment_xp / session.augment_ids.length) : 0;
 
   return (
-    <div style={{
-      height: '100%', display: 'flex', flexDirection: 'column',
-      background: bgP, borderLeft: `1px solid ${adim}`,
-      overflowY: 'auto', color: acc, fontFamily: mono,
-    }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: bgS, overflow: 'hidden' }}>
+
       {/* Header */}
-      <div style={{
-        padding: '16px', borderBottom: `1px solid ${adim}`, flexShrink: 0,
-      }}>
-        <div style={{ fontSize: 9, color: adim, letterSpacing: 1, marginBottom: 4 }}>SESSION DETAILS</div>
-        <div style={{ fontSize: 12, fontWeight: 600 }}>{session.skill_name}</div>
-        <div style={{ fontSize: 9, color: dim, marginTop: 4 }}>{formatDate(session.logged_at)}</div>
+      <div style={{ padding: '16px 20px 12px', borderBottom: `1px solid rgba(153,104,0,0.3)`, flexShrink: 0 }}>
+        <div style={{ fontFamily: vt, fontSize: 22, color: acc, marginBottom: 2 }}>
+          {session.skill_name.toUpperCase()}
+        </div>
+        <div style={{ fontFamily: mono, fontSize: 9, color: dim, letterSpacing: 1 }}>
+          {date}  {time}  ·  {durLabel}
+          {session.is_legacy && <span style={{ color: '#ffaa00', marginLeft: 8 }}>[LEGACY]</span>}
+        </div>
       </div>
 
-      {/* Content */}
-      <div style={{ flex: 1, padding: '12px 16px', overflowY: 'auto' }}>
-        
-        {/* Core info */}
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 9, color: adim, letterSpacing: 1, marginBottom: 8 }}>CORE</div>
-          <StatRow label="Duration" value={formatDuration(session.duration_minutes)} />
-          <StatRow label="Skill ID" value={session.skill_id} />
-          <StatRow label="Legacy" value={session.is_legacy ? 'YES' : 'NO'} />
-        </div>
+      {/* Scrollable body */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
 
-        {/* XP Earned */}
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 9, color: adim, letterSpacing: 1, marginBottom: 8 }}>XP EARNED</div>
-          <StatRow label="Skill XP" value={session.skill_xp} />
-          <StatRow label="Master XP" value={session.master_xp} />
-          {session.total_tool_xp > 0 && (
-            <StatRow label="Tool XP" value={`${session.total_tool_xp} (${toolIds.length} tool${toolIds.length !== 1 ? 's' : ''})`} />
-          )}
-          {session.total_augment_xp > 0 && (
-            <StatRow label="Augment XP" value={`${session.total_augment_xp} (${augmentIds.length} aug${augmentIds.length !== 1 ? 's' : ''})`} />
-          )}
-        </div>
-
-        {/* Stat split */}
-        {Object.keys(statSplit).length > 0 && (
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 9, color: adim, letterSpacing: 1, marginBottom: 8 }}>STAT SPLIT</div>
-            {Object.entries(statSplit).map(([stat, percent]) => (
-              <StatRow key={stat} label={stat.toUpperCase()} value={`${percent}%`} />
-            ))}
+        {/* XP breakdown */}
+        <div style={{ fontSize: 9, color: adim, letterSpacing: 2, marginBottom: 8 }}>// XP AWARDED</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: mono, fontSize: 10 }}>
+            <span style={{ color: dim }}>SKILL XP</span>
+            <span style={{ color: green }}>+{session.skill_xp}</span>
           </div>
-        )}
-
-        {/* Linked items */}
-        {(session.media_id || session.course_id || session.project_id || toolIds.length > 0 || augmentIds.length > 0) && (
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 9, color: adim, letterSpacing: 1, marginBottom: 8 }}>LINKED ITEMS</div>
-            {session.media_id && (
-              <StatRow label="Media ID" value={session.media_id} />
-            )}
-            {session.course_id && (
-              <StatRow label="Course ID" value={session.course_id} />
-            )}
-            {session.project_id && (
-              <StatRow label="Project ID" value={session.project_id} />
-            )}
-            {toolIds.length > 0 && (
-              <StatRow label="Tool IDs" value={`${toolIds.length} tool${toolIds.length !== 1 ? 's' : ''}`} />
-            )}
-            {augmentIds.length > 0 && (
-              <StatRow label="Augment IDs" value={`${augmentIds.length} aug${augmentIds.length !== 1 ? 's' : ''}`} />
-            )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: mono, fontSize: 10 }}>
+            <span style={{ color: dim }}>MASTER XP</span>
+            <span style={{ color: green }}>+{session.master_xp}</span>
           </div>
-        )}
+          {session.stat_split.map(s => (
+            <div key={s.stat} style={{ display: 'flex', justifyContent: 'space-between', fontFamily: mono, fontSize: 10 }}>
+              <span style={{ color: dim }}>{s.stat.toUpperCase()} STAT  ({s.percent}%)</span>
+              <span style={{ color: green }}>+{Math.floor(session.master_xp * s.percent / 100)}</span>
+            </div>
+          ))}
+          {session.tool_ids.length > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: mono, fontSize: 10 }}>
+              <span style={{ color: dim }}>TOOL XP (×{session.tool_ids.length})</span>
+              <span style={{ color: '#4af' }}>+{perToolXP} each</span>
+            </div>
+          )}
+          {session.augment_ids.length > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: mono, fontSize: 10 }}>
+              <span style={{ color: dim }}>AUGMENT XP (×{session.augment_ids.length})</span>
+              <span style={{ color: '#a4f' }}>+{perAugXP} each</span>
+            </div>
+          )}
+        </div>
 
         {/* Notes */}
-        {session.notes && (
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 9, color: adim, letterSpacing: 1, marginBottom: 8 }}>NOTES</div>
-            <div style={{
-              fontSize: 10, color: acc, padding: '8px',
-              background: bgT, border: `1px solid ${adim}`,
-              whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-              minHeight: 60, maxHeight: 120, overflowY: 'auto',
-            }}>
+        {session.notes && !editing && (
+          <>
+            <div style={{ fontSize: 9, color: adim, letterSpacing: 2, marginBottom: 6 }}>// NOTES</div>
+            <div style={{ fontFamily: mono, fontSize: 10, color: dim, marginBottom: 16, lineHeight: 1.6 }}>
               {session.notes}
+            </div>
+          </>
+        )}
+
+        {/* Edit form */}
+        {editing && (
+          <div style={{ border: `1px solid ${adim}`, padding: 12, marginBottom: 12, background: bgT }}>
+            <div style={{ fontSize: 9, color: adim, letterSpacing: 2, marginBottom: 10 }}>// EDIT SESSION</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+              <div>
+                <div style={{ fontSize: 9, color: adim, letterSpacing: 1, marginBottom: 4 }}>DURATION (minutes)</div>
+                <input
+                  type="number" min="1" value={editDuration}
+                  onChange={e => setEditDuration(e.target.value)}
+                  style={{ width: '100%', padding: '5px 8px', fontSize: 11, background: bgS, border: `1px solid ${adim}`, color: acc, fontFamily: mono, outline: 'none', boxSizing: 'border-box' as const }}
+                />
+                <div style={{ fontSize: 9, color: adim, marginTop: 4 }}>
+                  Changing duration recalculates ALL XP for this session.
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: 9, color: adim, letterSpacing: 1, marginBottom: 4 }}>NOTES</div>
+                <textarea
+                  value={editNotes} onChange={e => setEditNotes(e.target.value)} rows={3}
+                  style={{ width: '100%', padding: '5px 8px', fontSize: 10, background: bgS, border: `1px solid ${adim}`, color: acc, fontFamily: mono, outline: 'none', resize: 'vertical' as const, boxSizing: 'border-box' as const }}
+                />
+              </div>
+
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 9, color: editLegacy ? '#ffaa00' : adim, letterSpacing: 1 }}>
+                <span onClick={() => setEditLegacy(v => !v)} style={{ width: 13, height: 13, border: `1px solid ${editLegacy ? '#ffaa00' : adim}`, background: editLegacy ? 'rgba(255,170,0,0.15)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9 }}>
+                  {editLegacy ? '✓' : ''}
+                </span>
+                LEGACY ENTRY (50% XP)
+              </label>
+
+              <div style={{ fontSize: 9, color: '#ffaa00', padding: '6px 8px', border: '1px solid rgba(255,170,0,0.3)', background: 'rgba(255,170,0,0.05)' }}>
+                ⚠ Old XP will be reversed, new XP awarded based on updated duration.
+              </div>
+
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => saveEdit.mutate()} disabled={saveEdit.isPending}
+                  style={{ flex: 1, padding: '7px', fontSize: 9, border: `1px solid ${acc}`, background: 'transparent', color: acc, fontFamily: mono, cursor: 'pointer', letterSpacing: 1 }}>
+                  {saveEdit.isPending ? 'SAVING...' : '✓ SAVE CHANGES'}
+                </button>
+                <button onClick={() => setEditing(false)}
+                  style={{ flex: 1, padding: '7px', fontSize: 9, border: `1px solid ${adim}`, background: 'transparent', color: dim, fontFamily: mono, cursor: 'pointer' }}>
+                  CANCEL
+                </button>
+              </div>
             </div>
           </div>
         )}
+      </div>
 
+      {/* Actions */}
+      <div style={{ padding: '12px 20px 16px', borderTop: `1px solid rgba(153,104,0,0.3)`, flexShrink: 0 }}>
+        <div style={{ display: 'flex', gap: 8, marginBottom: showDelete ? 10 : 0 }}>
+          <button onClick={editing ? () => setEditing(false) : startEdit}
+            style={{ flex: 1, height: 32, border: `1px solid ${editing ? acc : adim}`, background: 'transparent', color: editing ? acc : adim, fontFamily: mono, fontSize: 9, cursor: 'pointer', letterSpacing: 1 }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = acc; e.currentTarget.style.color = acc; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = editing ? acc : adim; e.currentTarget.style.color = editing ? acc : adim; }}>
+            {editing ? '[ CANCEL ]' : '[ EDIT ]'}
+          </button>
+          <button onClick={() => setShowDelete(v => !v)}
+            style={{ flex: 1, height: 32, border: `1px solid rgba(153,104,0,0.4)`, background: 'transparent', color: dim, fontFamily: mono, fontSize: 9, cursor: 'pointer', letterSpacing: 1 }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = red; e.currentTarget.style.color = red; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(153,104,0,0.4)'; e.currentTarget.style.color = dim; }}>
+            [ DELETE ]
+          </button>
+        </div>
+
+        {showDelete && (
+          <div style={{ border: `1px solid ${red}`, padding: '10px 12px', background: 'rgba(255,68,0,0.06)' }}>
+            <div style={{ fontFamily: mono, fontSize: 10, color: red, marginBottom: 8 }}>
+              DELETE SESSION? All XP will be reversed. This cannot be undone.
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => deleteSession.mutate()} disabled={deleteSession.isPending}
+                style={{ flex: 1, height: 28, background: 'transparent', border: `1px solid ${red}`, color: red, fontFamily: mono, fontSize: 9, cursor: 'pointer' }}>
+                {deleteSession.isPending ? 'DELETING...' : '[ CONFIRM DELETE ]'}
+              </button>
+              <button onClick={() => setShowDelete(false)}
+                style={{ flex: 1, height: 28, background: 'transparent', border: `1px solid ${adim}`, color: dim, fontFamily: mono, fontSize: 9, cursor: 'pointer' }}>
+                [ CANCEL ]
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
