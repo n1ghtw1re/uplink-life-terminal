@@ -21,6 +21,7 @@ interface Props {
   statKey: StatKey;
   onClose: () => void;
   onNavigate?: (key: StatKey) => void;
+  onOpenLog?: () => void;
 }
 
 // ── Shared primitives ─────────────────────────────────────────
@@ -98,9 +99,36 @@ function Badge({ label, success }: { label: string; success?: boolean }) {
   );
 }
 
+// ── Activity entry types ─────────────────────────────────────
+interface SessionActivity {
+  type: 'session';
+  id: string;
+  session_id: string;
+  skill_name: string;
+  duration_minutes: number;
+  amount: number;
+  logged_at: string;
+  notes: string | null;
+  source_label: string;
+}
+
+interface BonusActivity {
+  type: 'bonus';
+  id: string;
+  source: string;
+  source_id: string;
+  amount: number;
+  logged_at: string;
+  notes: string | null;
+  source_label: string;
+  drawer_type: 'session' | null;
+}
+
+type ActivityEntry = SessionActivity | BonusActivity;
+
 // ── Main component ────────────────────────────────────────────
 
-export default function StatDetailOverlay({ statKey, onClose, onNavigate }: Props) {
+export default function StatDetailOverlay({ statKey, onClose, onNavigate, onOpenLog }: Props) {
   const [innerDrawer, setInnerDrawer] = useState<{ type: string; id: string } | null>(null);
   const [collapsedSkills, setCollapsedSkills]     = useState(false);
   const [collapsedActivity, setCollapsedActivity] = useState(false);
@@ -128,10 +156,12 @@ export default function StatDetailOverlay({ statKey, onClose, onNavigate }: Prop
   const skills = (allSkills ?? []).filter(s => s.statKeys.includes(statKey));
 
   const { data: recentActivity } = useQuery({
-    queryKey: ['sessions-by-stat', statKey],
+    queryKey: ['activity-by-stat', statKey],
     queryFn: async () => {
       const db = await getDB();
-      const res = await db.query<{
+      const activities: ActivityEntry[] = [];
+
+      const sessionRes = await db.query<{
         id: string;
         skill_id: string;
         skill_name: string;
@@ -154,14 +184,106 @@ export default function StatDetailOverlay({ statKey, onClose, onNavigate }: Prop
         [statKey]
       );
 
-      return res.rows
-        .filter((row) => {
-          const split = Array.isArray(row.stat_split)
-            ? row.stat_split
-            : JSON.parse((row.stat_split as string) || '[]');
-          return split.some((s) => s.stat === statKey);
-        })
-        .slice(0, 15);
+      const filteredSessions = sessionRes.rows.filter((row) => {
+        const split = Array.isArray(row.stat_split)
+          ? row.stat_split
+          : JSON.parse((row.stat_split as string) || '[]');
+        return split.some((s) => s.stat === statKey);
+      });
+
+      for (const row of filteredSessions) {
+        if (Number(row.stat_amount || 0) > 0) {
+          activities.push({
+            type: 'session',
+            id: crypto.randomUUID(),
+            session_id: row.id,
+            skill_name: row.skill_name,
+            duration_minutes: row.duration_minutes,
+            amount: Number(row.stat_amount || 0),
+            logged_at: row.logged_at,
+            notes: row.notes,
+            source_label: 'SESSION',
+          });
+        }
+      }
+
+      const bonusRes = await db.query<{
+        id: string;
+        source: string;
+        source_id: string;
+        amount: number;
+        notes: string | null;
+        logged_at: string;
+      }>(
+        `SELECT id, source, source_id, amount, notes, logged_at
+         FROM xp_log
+         WHERE tier = 'stat'
+           AND entity_id = $1
+           AND source IN ('course_section', 'course_complete', 'book_complete', 'comic_complete', 'film_complete', 'documentary_complete', 'tv_complete', 'album_complete', 'game_complete')
+         ORDER BY logged_at DESC
+         LIMIT 50;`,
+        [statKey]
+      );
+
+      const mediaSources = ['book_complete', 'comic_complete', 'film_complete', 'documentary_complete', 'tv_complete', 'album_complete', 'game_complete'];
+      const sourceLabels: Record<string, string> = {
+        'course_section': 'MODULE',
+        'course_complete': 'COURSE',
+        'book_complete': 'BOOK',
+        'comic_complete': 'COMIC',
+        'film_complete': 'FILM',
+        'documentary_complete': 'DOC',
+        'tv_complete': 'TV',
+        'album_complete': 'ALBUM',
+        'game_complete': 'GAME',
+      };
+
+      for (const row of bonusRes.rows) {
+        const isMedia = mediaSources.includes(row.source);
+        
+        let sessionId: string | null = null;
+        
+        if (isMedia) {
+          const sessionRes = await db.query<{ id: string }>(
+            `SELECT id FROM sessions WHERE media_id = $1 LIMIT 1;`,
+            [row.source_id]
+          );
+          sessionId = sessionRes.rows[0]?.id ?? null;
+        } else if (row.source === 'course_complete') {
+          const sessionRes = await db.query<{ id: string }>(
+            `SELECT id FROM sessions WHERE course_id = $1 LIMIT 1;`,
+            [row.source_id]
+          );
+          sessionId = sessionRes.rows[0]?.id ?? null;
+        } else {
+          const sectionRes = await db.query<{ course_id: string }>(
+            `SELECT course_id FROM course_sections WHERE id = $1;`,
+            [row.source_id]
+          );
+          if (sectionRes.rows[0]?.course_id) {
+            const sessionRes = await db.query<{ id: string }>(
+              `SELECT id FROM sessions WHERE course_id = $1 LIMIT 1;`,
+              [sectionRes.rows[0].course_id]
+            );
+            sessionId = sessionRes.rows[0]?.id ?? null;
+          }
+        }
+        
+        activities.push({
+          type: 'bonus',
+          id: row.id,
+          source: row.source,
+          source_id: sessionId || row.source_id,
+          amount: Number(row.amount),
+          logged_at: row.logged_at,
+          notes: row.notes,
+          source_label: sourceLabels[row.source] || row.source.toUpperCase(),
+          drawer_type: sessionId ? 'session' : null,
+        });
+      }
+
+      activities.sort((a, b) => new Date(b.logged_at).getTime() - new Date(a.logged_at).getTime());
+      return activities.slice(0, 20);
     },
   });
 
@@ -575,8 +697,27 @@ export default function StatDetailOverlay({ statKey, onClose, onNavigate }: Prop
           ) : (
             <div style={{ display: 'grid', gap: 3 }}>
               {recentActivity.map(entry => {
-                const sourceLabel = 'SESSION';
-                const label = entry.notes || entry.skill_name;
+                const isSession = entry.type === 'session';
+                const isBonus = entry.type === 'bonus';
+                const bonusEntry = entry as BonusActivity;
+                const label = isSession
+                  ? (entry as SessionActivity).notes || (entry as SessionActivity).skill_name
+                  : bonusEntry.notes || bonusEntry.source_label;
+                
+                const handleClick = () => {
+                  console.log('[Activity] Click:', { isSession, entry });
+                  if (isSession) {
+                    const sessionId = (entry as SessionActivity).session_id;
+                    console.log('[Activity] Opening session:', sessionId);
+                    setInnerDrawer({ type: 'session', id: sessionId });
+                  } else if (bonusEntry.drawer_type === 'session') {
+                    console.log('[Activity] Opening bonus session:', bonusEntry.source_id);
+                    setInnerDrawer({ type: 'session', id: bonusEntry.source_id });
+                  } else {
+                    console.log('[Activity] No drawer_type for bonus entry');
+                  }
+                };
+                
                 return (
                   <div key={entry.id} style={{
                     display: 'flex',
@@ -584,35 +725,36 @@ export default function StatDetailOverlay({ statKey, onClose, onNavigate }: Prop
                     gap: 12,
                     padding: '6px 14px 6px 12px',
                     fontFamily: "'IBM Plex Mono', monospace",
-                    borderLeft: '2px solid hsl(var(--accent-dim))',
+                    borderLeft: `2px solid ${isBonus ? '#44ff88' : 'hsl(var(--accent-dim))'}`,
                     cursor: 'pointer',
+                    opacity: isBonus ? 0.85 : 1,
                   }}
-                    onClick={() => setInnerDrawer({ type: 'session', id: entry.id })}
+                    onClick={handleClick}
                     onMouseEnter={e => {
-                      e.currentTarget.style.background = 'rgba(255,176,0,0.04)';
-                      e.currentTarget.style.borderLeftColor = 'hsl(var(--accent))';
+                      e.currentTarget.style.background = isBonus ? 'rgba(68,255,136,0.06)' : 'rgba(255,176,0,0.04)';
+                      e.currentTarget.style.borderLeftColor = isBonus ? '#88ffbb' : 'hsl(var(--accent))';
                     }}
                     onMouseLeave={e => {
                       e.currentTarget.style.background = 'transparent';
-                      e.currentTarget.style.borderLeftColor = 'hsl(var(--accent-dim))';
+                      e.currentTarget.style.borderLeftColor = isBonus ? '#44ff88' : 'hsl(var(--accent-dim))';
                     }}
                   >
                     <span style={{
                       fontSize: 10,
                       color: 'hsl(var(--accent))',
-                      width: 70,
+                      width: 50,
                       flexShrink: 0,
                     }}>
-                      {entry.duration_minutes}m
+                      {isSession ? `${(entry as SessionActivity).duration_minutes}m` : '---'}
                     </span>
                     <span style={{
                       fontSize: 10,
-                      color: 'hsl(var(--accent-bright))',
+                      color: isBonus ? '#44ff88' : 'hsl(var(--accent-bright))',
                       width: 64,
                       flexShrink: 0,
                       textAlign: 'right',
                     }}>
-                      +{Number(entry.stat_amount || 0)} XP
+                      +{entry.amount} XP
                     </span>
                     <span style={{
                       fontSize: 11,
@@ -625,7 +767,8 @@ export default function StatDetailOverlay({ statKey, onClose, onNavigate }: Prop
                       {label}
                     </span>
                     <span style={{ fontSize: 9, color: 'hsl(var(--text-dim))', flexShrink: 0, letterSpacing: 1 }}>
-                      {sourceLabel}
+                      {entry.source_label}
+                      {isBonus && <span style={{ color: '#44ff88' }}> [BONUS]</span>}
                     </span>
                     <span style={{ fontSize: 10, color: 'hsl(var(--text-dim))', width: 76, textAlign: 'right', flexShrink: 0 }}>
                       {formatTimeAgo(entry.logged_at)}
@@ -844,7 +987,11 @@ export default function StatDetailOverlay({ statKey, onClose, onNavigate }: Prop
                   <CourseDetailDrawer courseId={innerDrawer.id} />
                 )}
                 {innerDrawer.type === 'skill' && (
-                  <SkillDetailDrawer skillId={innerDrawer.id} onClose={() => setInnerDrawer(null)} />
+                  <SkillDetailDrawer
+                    skillId={innerDrawer.id}
+                    onClose={() => setInnerDrawer(null)}
+                    onOpenLog={onOpenLog}
+                  />
                 )}
                 {innerDrawer.type === 'session' && (
                   <SessionDetailDrawer sessionId={innerDrawer.id} onDeleted={() => setInnerDrawer(null)} onClose={() => setInnerDrawer(null)} />

@@ -208,6 +208,7 @@ async function initSchema(db: PGlite) {
       provider          TEXT,
       subject           TEXT,
       linked_stats      JSONB NOT NULL DEFAULT '[]',
+      default_split     JSONB NOT NULL DEFAULT '[100]',
       linked_skill_ids  JSONB NOT NULL DEFAULT '[]',
       linked_tool_ids   JSONB NOT NULL DEFAULT '[]',
       linked_augment_ids JSONB NOT NULL DEFAULT '[]',

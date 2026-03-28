@@ -31,7 +31,7 @@ const STAT_KEYS: StatKey[] = ['body','wire','mind','cool','grit','flow','ghost']
 interface TaggedTool     { id: string; name: string; type: string; }
 interface TaggedAugment  { id: string; name: string; category: string; }
 interface TaggedMedia    { id: string; title: string; type: string; status: string; pages?: number; page_current?: number; }
-interface TaggedCourse   { id: string; name: string; sections: { id: string; title: string; completed_at: string | null }[]; }
+interface TaggedCourse   { id: string; name: string; sections: { id: string; title: string; completed_at: string | null }[]; linked_skill_id?: string; linked_skill_name?: string; linked_stats?: string[]; }
 interface TaggedProject  { id: string; name: string; objectives: { id: string; title: string; completed_at: string | null }[]; }
 interface SessionTemplate {
   id: string;
@@ -165,19 +165,46 @@ function TagSection({ label, color, hasItems, children }: { label: string; color
 }
 
 // ── XP Preview panel ──────────────────────────────────────────
-function XPPreview({ duration, statSplit, toolIds, augIds, isLegacy, toolNames, augNames }: {
+function XPPreview({ duration, statSplit, toolIds, augIds, isLegacy, toolNames, augNames, media, mediaFinished, course, completedSections, markCourseComplete }: {
   duration: number; statSplit: { stat: string; percent: number }[];
   toolIds: string[]; augIds: string[]; isLegacy: boolean;
   toolNames: Record<string, string>; augNames: Record<string, string>;
+  media?: TaggedMedia | null; mediaFinished?: boolean;
+  course?: TaggedCourse | null; completedSections?: string[]; markCourseComplete?: boolean;
 }) {
   if (!duration || statSplit.length === 0) return null;
   const p = previewXP({ durationMinutes: duration, statSplit, toolIds, augmentIds: augIds, isLegacy });
+
+  const MEDIA_BONUS: Record<string, number> = { book: 100, comic: 50, film: 40, documentary: 50, tv: 75, album: 30, game: 60 };
+  const mediaBonus = media && mediaFinished ? Math.floor((MEDIA_BONUS[media.type] ?? 40) * (isLegacy ? 0.5 : 1)) : 0;
+  
+  const sectionCount = completedSections?.length ?? 0;
+  const hasLinkedSkill = !!course?.linked_skill_id;
+  const basePerModule = Math.floor(100 * (isLegacy ? 0.5 : 1));
+  const coursePrimaryStat = course?.linked_stats?.[0];
+  
+  const sectionSkill = hasLinkedSkill ? Math.floor(basePerModule * 0.5) : 0;
+  const sectionStat = hasLinkedSkill ? Math.floor(basePerModule * 0.25) : Math.floor(basePerModule * 0.5);
+  const sectionMaster = hasLinkedSkill ? Math.floor(basePerModule * 0.25) : Math.floor(basePerModule * 0.5);
+  
+  const totalModuleSkill = sectionSkill * sectionCount;
+  const totalModuleStat = sectionStat * sectionCount;
+  const totalModuleMaster = sectionMaster * sectionCount;
+  const totalModuleXP = totalModuleSkill + totalModuleStat + totalModuleMaster;
+  
+  const completeSkill = hasLinkedSkill ? Math.floor(basePerModule * 0.5) : 0;
+  const completeStat = hasLinkedSkill ? Math.floor(basePerModule * 0.25) : Math.floor(basePerModule * 0.5);
+  const completeMaster = hasLinkedSkill ? Math.floor(basePerModule * 0.25) : Math.floor(basePerModule * 0.5);
+  
+  const totalCompleteXP = markCourseComplete ? (completeSkill + completeStat + completeMaster) : 0;
+  const totalBonus = mediaBonus + totalModuleXP + totalCompleteXP;
+
   return (
     <div style={{ background: bgT, border: `1px solid ${adim}`, padding: '10px 12px', fontFamily: mono }}>
       <div style={{ fontSize: 9, color: adim, letterSpacing: 2, marginBottom: 8 }}>// XP PREVIEW</div>
 
       {/* Main XP */}
-      <div style={{ marginBottom: toolIds.length > 0 || augIds.length > 0 ? 8 : 0 }}>
+      <div style={{ marginBottom: toolIds.length > 0 || augIds.length > 0 || totalBonus > 0 ? 8 : 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
           <span style={{ fontSize: 9, color: adim }}>MAIN XP</span>
           <span style={{ fontFamily: vt, fontSize: 16, color: acc }}>{p.skillXP + p.masterXP + p.statXP.reduce((a, s) => a + s.amount, 0)}</span>
@@ -227,6 +254,44 @@ function XPPreview({ duration, statSplit, toolIds, augIds, isLegacy, toolNames, 
                 <span>{(augNames[id] ?? id).toUpperCase()}</span><span style={{ color: purple }}>+{p.perAugmentXP}</span>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Completion Bonus XP */}
+      {totalBonus > 0 && (
+        <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${adim}` }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+            <span style={{ fontSize: 9, color: green }}>COMPLETION BONUS</span>
+            <span style={{ fontFamily: vt, fontSize: 16, color: green }}>+{totalBonus}</span>
+          </div>
+          <div style={{ paddingLeft: 8 }}>
+            {mediaBonus > 0 && (
+              <div style={{ fontSize: 9, color: dim, display: 'flex', justifyContent: 'space-between' }}>
+                <span>{media?.type.toUpperCase()} COMPLETE</span><span style={{ color: green }}>+{mediaBonus}</span>
+              </div>
+            )}
+            {totalModuleXP > 0 && (
+              <div style={{ fontSize: 9, color: dim, display: 'flex', justifyContent: 'space-between' }}>
+                <span>{sectionCount} MODULE(S)</span><span style={{ color: green }}>+{totalModuleXP}</span>
+              </div>
+            )}
+            {markCourseComplete && totalCompleteXP > 0 && (
+              <div style={{ fontSize: 9, color: dim, display: 'flex', justifyContent: 'space-between' }}>
+                <span>COURSE COMPLETE</span><span style={{ color: green }}>+{totalCompleteXP}</span>
+              </div>
+            )}
+            {(totalModuleXP > 0 || totalCompleteXP > 0) && (
+              <div style={{ marginTop: 4, fontSize: 9, color: adim, borderTop: `1px dashed rgba(153,104,0,0.3)`, paddingTop: 4 }}>
+                {hasLinkedSkill && (
+                  <>→ {course.linked_skill_name} SKILL +{totalModuleSkill}{markCourseComplete && <> +{completeSkill}</>}</>
+                )}
+                {course.linked_stats?.[0] && (
+                  <>| {course.linked_stats[0].toUpperCase()} +{totalModuleStat}{markCourseComplete && <> +{completeStat}</>}</>
+                )}
+                | MASTER +{totalModuleMaster}{markCourseComplete && <> +{completeMaster}</>}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -379,7 +444,39 @@ export default function QuickLogOverlay({ open, onClose }: Props) {
     const r  = await db.query<{ id: string; title: string; completed_at: string | null }>(
       `SELECT id, title, completed_at FROM course_sections WHERE course_id = $1 ORDER BY sort_order;`, [c.id]
     );
-    setCourse({ id: c.id, name: c.name, sections: r.rows });
+    
+    const courseRes = await db.query<{ linked_skill_ids: string; linked_stats: string }>(
+      `SELECT linked_skill_ids, linked_stats FROM courses WHERE id = $1;`, [c.id]
+    );
+    
+    let linked_skill_id: string | undefined;
+    let linked_skill_name: string | undefined;
+    let linked_stats: string[] = [];
+    
+    if (courseRes.rows[0]?.linked_skill_ids) {
+      try {
+        const raw = courseRes.rows[0].linked_skill_ids;
+        const skillIds = Array.isArray(raw) ? raw : JSON.parse(raw);
+        if (skillIds && skillIds.length > 0) {
+          linked_skill_id = skillIds[0];
+          const skillRes = await db.query<{ name: string }>(
+            `SELECT name FROM skills WHERE id = $1;`, [linked_skill_id]
+          );
+          if (skillRes.rows[0]) {
+            linked_skill_name = skillRes.rows[0].name;
+          }
+        }
+      } catch { /* ignore parse errors */ }
+    }
+    
+    if (courseRes.rows[0]?.linked_stats) {
+      try {
+        const raw = courseRes.rows[0].linked_stats;
+        linked_stats = Array.isArray(raw) ? raw : JSON.parse(raw);
+      } catch { linked_stats = []; }
+    }
+    
+    setCourse({ id: c.id, name: c.name, sections: r.rows, linked_skill_id, linked_skill_name, linked_stats });
     setCompletedSections([]);
   };
 
@@ -651,21 +748,48 @@ export default function QuickLogOverlay({ open, onClose }: Props) {
 
       // Course section completions
       if (course && completedSections.length > 0) {
-        const totalSections = course.sections.length || 1;
-        const sectionBonus  = Math.floor(totalSections * 100 * (isLegacy ? 0.5 : 1));
+        const sectionBonus = Math.floor(100 * (isLegacy ? 0.5 : 1));
+        const hasLinkedSkill = !!course.linked_skill_id;
+        const coursePrimaryStat = course.linked_stats?.[0];
+        
         for (const secId of completedSections) {
           await db.query(`UPDATE course_sections SET completed_at = $1 WHERE id = $2;`, [new Date().toISOString(), secId]);
-          if (statSplit.length > 0) {
-            const sec = course.sections.find(s => s.id === secId);
-            await awardBonusXP({ source: 'course_section', sourceId: secId, statKey: statSplit[0].stat, amount: sectionBonus, notes: `${course.name} — ${sec?.title ?? ''}` });
+          const sec = course.sections.find(s => s.id === secId);
+          
+          if (hasLinkedSkill && course.linked_skill_id) {
+            const skillBonus = Math.floor(sectionBonus * 0.5);
+            const statBonus = Math.floor(sectionBonus * 0.25);
+            const masterBonus = Math.floor(sectionBonus * 0.25);
+            await awardBonusXP({ source: 'course_section', sourceId: secId, skillId: course.linked_skill_id, amount: skillBonus, notes: `${course.name} — ${sec?.title ?? ''} [SKILL]` });
+            if (coursePrimaryStat) await awardBonusXP({ source: 'course_section', sourceId: secId, statKey: coursePrimaryStat, amount: statBonus, notes: `${course.name} — ${sec?.title ?? ''} [STAT]` });
+            await awardBonusXP({ source: 'course_section', sourceId: secId, amount: masterBonus, notes: `${course.name} — ${sec?.title ?? ''} [MASTER]` });
+          } else if (coursePrimaryStat) {
+            const statBonus = Math.floor(sectionBonus * 0.5);
+            const masterBonus = Math.floor(sectionBonus * 0.5);
+            await awardBonusXP({ source: 'course_section', sourceId: secId, statKey: coursePrimaryStat, amount: statBonus, notes: `${course.name} — ${sec?.title ?? ''}` });
+            await awardBonusXP({ source: 'course_section', sourceId: secId, amount: masterBonus, notes: `${course.name} — ${sec?.title ?? ''}` });
           }
         }
       }
       if (course && markCourseComplete) {
         await db.exec(`UPDATE courses SET status = 'COMPLETE', progress = 100, completed_at = '${new Date().toISOString()}' WHERE id = '${course.id}';`);
-        const totalSections = course.sections.length || 1;
-        const courseBonus   = Math.floor(totalSections * 100 * (isLegacy ? 0.5 : 1));
-        if (statSplit.length > 0) await awardBonusXP({ source: 'course_complete', sourceId: course.id, statKey: statSplit[0].stat, amount: courseBonus, notes: `${course.name} — complete` });
+        const courseBonus = Math.floor(100 * (isLegacy ? 0.5 : 1));
+        const hasLinkedSkill = !!course.linked_skill_id;
+        const coursePrimaryStat = course.linked_stats?.[0];
+        
+        if (hasLinkedSkill && course.linked_skill_id) {
+          const skillBonus = Math.floor(courseBonus * 0.5);
+          const statBonus = Math.floor(courseBonus * 0.25);
+          const masterBonus = Math.floor(courseBonus * 0.25);
+          await awardBonusXP({ source: 'course_complete', sourceId: course.id, skillId: course.linked_skill_id, amount: skillBonus, notes: `${course.name} — complete [SKILL]` });
+          if (coursePrimaryStat) await awardBonusXP({ source: 'course_complete', sourceId: course.id, statKey: coursePrimaryStat, amount: statBonus, notes: `${course.name} — complete [STAT]` });
+          await awardBonusXP({ source: 'course_complete', sourceId: course.id, amount: masterBonus, notes: `${course.name} — complete [MASTER]` });
+        } else if (coursePrimaryStat) {
+          const statBonus = Math.floor(courseBonus * 0.5);
+          const masterBonus = Math.floor(courseBonus * 0.5);
+          await awardBonusXP({ source: 'course_complete', sourceId: course.id, statKey: coursePrimaryStat, amount: statBonus, notes: `${course.name} — complete` });
+          await awardBonusXP({ source: 'course_complete', sourceId: course.id, amount: masterBonus, notes: `${course.name} — complete` });
+        }
       }
 
       // Project objectives
@@ -1117,6 +1241,11 @@ export default function QuickLogOverlay({ open, onClose }: Props) {
                 isLegacy={isLegacy}
                 toolNames={toolNames}
                 augNames={augNames}
+                media={media}
+                mediaFinished={mediaFinished}
+                course={course}
+                completedSections={completedSections}
+                markCourseComplete={markCourseComplete}
               />
               {!skillId && (
                 <div style={{ fontSize: 9, color: adim, textAlign: 'center', marginTop: 20, lineHeight: 1.8 }}>

@@ -12,9 +12,27 @@ export type MasterLevel = number; // unlimited levels
 export type StreakTier = 'STANDARD' | 'HOT_STREAK' | 'ON_FIRE' | 'LEGENDARY';
 
 export type ClassId =
-  | 'NETRUNNER' | 'TECHIE' | 'EDGERUNNER' | 'SOLO' | 'NOMAD' | 'MEDTECH'
-  | 'FIXER' | 'EXEC' | 'ROCKERBOY' | 'AGITATOR' | 'WITCH' | 'SIGNAL'
-  | 'PROPHET' | 'AGITPROP' | 'HERALD';
+  | 'OPERATOR'
+  | 'PRACTITIONER'
+  | 'PERFORMER'
+  | 'LABORER'
+  | 'ARTIST'
+  | 'MONK'
+  | 'ANALYST'
+  | 'COMMUNICATOR'
+  | 'TECHNICIAN'
+  | 'DESIGNER'
+  | 'OBSERVER'
+  | 'SCHOLAR'
+  | 'STUDENT'
+  | 'ARCHITECT'
+  | 'PHILOSOPHER'
+  | 'PROFESSIONAL'
+  | 'DIRECTOR'
+  | 'GUIDE'
+  | 'BUILDER'
+  | 'SURVIVOR'
+  | 'VISIONARY';
 
 export type MediaType = 'book' | 'comic' | 'film' | 'documentary' | 'tv' | 'album';
 

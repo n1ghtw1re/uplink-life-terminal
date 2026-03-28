@@ -64,7 +64,6 @@ const defaultLayout: LayoutItem[] = [
   { i: 'projects',  x: 8, y: 8, w: 4, h: 4, minW: 2, minH: 2 },
   { i: 'clock', x: 8, y: 7, w: 4, h: 4, minW: 2, minH: 2 },
   { i: 'calculator', x: 0, y: 9, w: 4, h: 4, minW: 2, minH: 2 },
-  { i: 'tools',         x: 0, y: 8, w: 4, h: 4, minW: 2, minH: 2 },
   { i: 'unitConverter', x: 4, y: 9, w: 4, h: 4, minW: 2, minH: 2 },
 ];
 
@@ -104,6 +103,10 @@ const Index = () => {
   });
   const [fullscreenWidget, setFullscreenWidget] = useState<string | null>(null);
   const [focusedWidget, setFocusedWidget] = useState<string | null>(null);
+  const [minimizedWidgets, setMinimizedWidgets] = useState<Record<string, boolean>>(() => {
+    try { const s = localStorage.getItem('uplink-minimized-widgets'); return s ? JSON.parse(s) : {}; }
+    catch { return {}; }
+  });
   const [gridSize, setGridSize] = useState({ width: 0, height: 0 });
   const [openStatKey, setOpenStatKey] = useState<StatKey | null>(null);
   const [showSkills, setShowSkills] = useState(false);
@@ -169,6 +172,12 @@ const Index = () => {
   const handleClose = (id: string) => {
     if (fullscreenWidget === id) setFullscreenWidget(null);
     setFocusedWidget(prev => prev === id ? null : prev);
+    setMinimizedWidgets(prev => {
+      const next = { ...prev };
+      delete next[id];
+      localStorage.setItem('uplink-minimized-widgets', JSON.stringify(next));
+      return next;
+    });
     setLayout(prev => { const n = prev.filter(i => i.i !== id); localStorage.setItem('uplink-layout', JSON.stringify(n)); return n; });
     setActiveWidgets(prev => { const n = prev.filter(w => w !== id); localStorage.setItem('uplink-active-widgets', JSON.stringify(n)); return n; });
   };
@@ -184,11 +193,35 @@ const Index = () => {
             return { x: col, y: row };
       return { x: 0, y: maxY };
     };
+    setMinimizedWidgets(prev => {
+      const next = { ...prev };
+      delete next[id];
+      localStorage.setItem('uplink-minimized-widgets', JSON.stringify(next));
+      return next;
+    });
     setLayout(prev => { const { x, y } = findSlot(prev); const n = [...prev, { ...def, i: id, x, y }]; localStorage.setItem('uplink-layout', JSON.stringify(n)); return n; });
     setActiveWidgets(prev => { const n = [...prev, id]; localStorage.setItem('uplink-active-widgets', JSON.stringify(n)); return n; });
   };
 
   const handleFullscreen = (id: string) => setFullscreenWidget(prev => prev === id ? null : id);
+
+  const handleMinimize = (id: string, minimized: boolean) => {
+    setMinimizedWidgets(prev => {
+      const next = { ...prev, [id]: minimized };
+      localStorage.setItem('uplink-minimized-widgets', JSON.stringify(next));
+      return next;
+    });
+
+    setLayout(prev => {
+      const next = prev.map(item => {
+        if (item.i !== id) return item;
+        const defaultHeight = defaultLayout.find(d => d.i === id)?.h ?? 4;
+        return { ...item, h: minimized ? (item.minH ?? 2) : defaultHeight };
+      });
+      localStorage.setItem('uplink-layout', JSON.stringify(next));
+      return next;
+    });
+  };
 
   const handleOpenWidgetById = (id: string) => {
     setFocusedWidget(id);
@@ -203,7 +236,14 @@ const Index = () => {
   const closedWidgets = ALL_WIDGET_IDS.filter(id => !activeWidgets.includes(id));
 
   const renderWidget = (id: string, isFs: boolean) => {
-    const props = { onClose: () => handleClose(id), onFullscreen: () => handleFullscreen(id), isFullscreen: isFs, isFocused: focusedWidget === id };
+    const props = { 
+      onClose: () => handleClose(id), 
+      onFullscreen: () => handleFullscreen(id), 
+      onMinimize: (m: boolean) => handleMinimize(id, m),
+      isFullscreen: isFs, 
+      isFocused: focusedWidget === id,
+      isMinimized: minimizedWidgets[id],
+    };
     switch (id) {
       case 'xp':           return <XPWidget {...props} />;
       case 'checkin':      return <CheckinWidget {...props} />;
@@ -307,7 +347,14 @@ const Index = () => {
       {showLibrary       && <LibraryPage   onClose={() => setShowLibrary(false)} />}
       {showSkills        && <SkillsPage    onClose={() => setShowSkills(false)} onOpenLog={() => { setShowSkills(false); setShowLog(true); }} />}
       {showSocials       && <SocialsOverlay onClose={() => setShowSocials(false)} />}
-      {openStatKey       && <StatDetailOverlay statKey={openStatKey} onClose={() => setOpenStatKey(null)} onNavigate={(key) => setOpenStatKey(key)} />}
+      {openStatKey       && (
+        <StatDetailOverlay
+          statKey={openStatKey}
+          onClose={() => setOpenStatKey(null)}
+          onNavigate={(key) => setOpenStatKey(key)}
+          onOpenLog={() => setShowLog(true)}
+        />
+      )}
 
       <Modal open={showLog} onClose={() => setShowLog(false)} title="QUICK LOG" width={720}
         headerExtra={<span style={{ fontSize: 10, color: 'hsl(var(--text-dim))' }}>

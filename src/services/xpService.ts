@@ -217,17 +217,17 @@ export async function awardSessionXP(params: {
 
 export async function awardBonusXP(params: {
   source: string; sourceId: string; skillId?: string;
-  statKey?: string; amount: number; notes?: string;
+  statKey?: string; amount: number; notes?: string; tier?: 'skill' | 'stat' | 'master';
 }) {
   const db  = await getDB();
-  const { source, sourceId, skillId, statKey, amount, notes } = params;
+  const { source, sourceId, skillId, statKey, amount, notes, tier: forcedTier } = params;
   const now = new Date().toISOString();
-  const tier = skillId ? 'skill' : statKey ? 'stat' : 'master';
+  const tier = forcedTier ?? (skillId ? 'skill' : statKey ? 'stat' : 'master');
   const entityId = skillId ?? statKey ?? 'master';
 
   if (skillId) await db.exec(`UPDATE skills SET xp = xp + ${amount} WHERE id = '${skillId}';`);
   if (statKey) await db.exec(`UPDATE stats  SET xp = xp + ${amount} WHERE stat_key = '${statKey}';`);
-  await db.exec(`UPDATE master_progress SET total_xp = total_xp + ${amount} WHERE id = 1;`);
+  if (tier === 'master' || forcedTier) await db.exec(`UPDATE master_progress SET total_xp = total_xp + ${amount} WHERE id = 1;`);
   await db.exec(`
     INSERT INTO xp_log (id, source, source_id, tier, entity_id, amount, notes, logged_at)
     VALUES ('${uid()}', '${source}', '${sourceId}', '${tier}', '${entityId}', ${amount}, ${notes ? `'${notes.replace(/'/g, "''")}'` : 'NULL'}, '${now}');

@@ -71,6 +71,7 @@ interface SessionData {
   course_id: string | null;
   media_id: string | null;
   project_id: string | null;
+  bonusXP: BonusXPEntry[];
 }
 
 interface XPLogRow {
@@ -80,43 +81,121 @@ interface XPLogRow {
   amount: number;
 }
 
+interface BonusXPEntry {
+  source: string;
+  source_id: string;
+  amount: number;
+  notes: string | null;
+  tier: string;
+  entity_id: string;
+}
+
+function getBonusLabel(entry: BonusXPEntry): string {
+  if (entry.tier === 'skill') {
+    const skillName = entry.notes?.replace(/\s*\[SKILL\]\s*$/, '') || 'SKILL';
+    return `${skillName.toUpperCase()} (SKILL)`;
+  }
+  if (entry.tier === 'stat') {
+    const baseName = entry.notes?.replace(/\s*\[STAT\]\s*$/, '') || 'STAT';
+    return `${baseName.toUpperCase()} (STAT)`;
+  }
+  if (entry.tier === 'master') {
+    return 'MASTER (BONUS)';
+  }
+  const labels: Record<string, string> = {
+    'book_complete': 'BOOK COMPLETE',
+    'comic_complete': 'COMIC COMPLETE',
+    'film_complete': 'FILM COMPLETE',
+    'documentary_complete': 'DOCUMENTARY COMPLETE',
+    'tv_complete': 'TV COMPLETE',
+    'album_complete': 'ALBUM COMPLETE',
+    'game_complete': 'GAME COMPLETE',
+    'course_section': 'MODULE COMPLETE',
+    'course_complete': 'COURSE COMPLETE',
+  };
+  return labels[entry.source] ?? entry.source.toUpperCase().replace(/_/g, ' ');
+}
+
 // ── XP reversal helper ────────────────────────────────────────
+async function reverseXPEntry(db: Awaited<ReturnType<typeof getDB>>, log: XPLogRow) {
+  const amt = Number(log.amount);
+  if (amt <= 0) return;
+
+  if (log.tier === 'skill') {
+    await db.exec(`
+      UPDATE skills SET xp = GREATEST(0, xp - ${amt}), level = ${levelCase(`GREATEST(0, xp - ${amt})`)} WHERE id = '${log.entity_id}';
+    `);
+  } else if (log.tier === 'stat') {
+    await db.exec(`
+      UPDATE stats SET xp = GREATEST(0, xp - ${amt}), level = ${levelCase(`GREATEST(0, xp - ${amt})`)} WHERE stat_key = '${log.entity_id}';
+    `);
+  } else if (log.tier === 'master') {
+    await db.exec(`
+      UPDATE master_progress SET total_xp = GREATEST(0, total_xp - ${amt}), level = ${levelCase(`GREATEST(0, total_xp - ${amt})`)} WHERE id = 1;
+    `);
+  } else if (log.tier === 'tool') {
+    await db.exec(`
+      UPDATE tools SET xp = GREATEST(0, xp - ${amt}), level = ${levelCase(`GREATEST(0, xp - ${amt})`)} WHERE id = '${log.entity_id}';
+      UPDATE tool_progress SET total_xp = GREATEST(0, total_xp - ${amt}), level = ${levelCase(`GREATEST(0, total_xp - ${amt})`)} WHERE id = 1;
+    `);
+  } else if (log.tier === 'augment') {
+    await db.exec(`
+      UPDATE augments SET xp = GREATEST(0, xp - ${amt}), level = ${levelCase(`GREATEST(0, xp - ${amt})`)} WHERE id = '${log.entity_id}';
+      UPDATE augment_progress SET total_xp = GREATEST(0, total_xp - ${amt}), level = ${levelCase(`GREATEST(0, total_xp - ${amt})`)} WHERE id = 1;
+    `);
+  }
+}
+
 async function reverseSessionXP(db: Awaited<ReturnType<typeof getDB>>, sessionId: string) {
+  const sessionRes = await db.query<{ course_id: string | null; media_id: string | null }>(
+    `SELECT course_id, media_id FROM sessions WHERE id = $1;`,
+    [sessionId]
+  );
+
   const logs = await db.query<XPLogRow>(
     `SELECT id, tier, entity_id, amount FROM xp_log WHERE source_id = $1 AND source = 'session';`,
     [sessionId]
   );
-
   for (const log of logs.rows) {
-    const amt = Number(log.amount);
-    if (amt <= 0) continue;
+    await reverseXPEntry(db, log);
+  }
 
-    if (log.tier === 'skill') {
-      await db.exec(`
-        UPDATE skills SET xp = GREATEST(0, xp - ${amt}), level = ${levelCase(`GREATEST(0, xp - ${amt})`)} WHERE id = '${log.entity_id}';
-      `);
-    } else if (log.tier === 'stat') {
-      await db.exec(`
-        UPDATE stats SET xp = GREATEST(0, xp - ${amt}), level = ${levelCase(`GREATEST(0, xp - ${amt})`)} WHERE stat_key = '${log.entity_id}';
-      `);
-    } else if (log.tier === 'master') {
-      await db.exec(`
-        UPDATE master_progress SET total_xp = GREATEST(0, total_xp - ${amt}), level = ${levelCase(`GREATEST(0, total_xp - ${amt})`)} WHERE id = 1;
-      `);
-    } else if (log.tier === 'tool') {
-      await db.exec(`
-        UPDATE tools SET xp = GREATEST(0, xp - ${amt}), level = ${levelCase(`GREATEST(0, xp - ${amt})`)} WHERE id = '${log.entity_id}';
-        UPDATE tool_progress SET total_xp = GREATEST(0, total_xp - ${amt}), level = ${levelCase(`GREATEST(0, total_xp - ${amt})`)} WHERE id = 1;
-      `);
-    } else if (log.tier === 'augment') {
-      await db.exec(`
-        UPDATE augments SET xp = GREATEST(0, xp - ${amt}), level = ${levelCase(`GREATEST(0, xp - ${amt})`)} WHERE id = '${log.entity_id}';
-        UPDATE augment_progress SET total_xp = GREATEST(0, total_xp - ${amt}), level = ${levelCase(`GREATEST(0, total_xp - ${amt})`)} WHERE id = 1;
-      `);
+  if (sessionRes.rows[0]?.course_id) {
+    const courseId = sessionRes.rows[0].course_id;
+    const sectionsRes = await db.query<{ id: string }>(
+      `SELECT id FROM course_sections WHERE course_id = $1;`, [courseId]
+    );
+    const sectionIds = sectionsRes.rows.map(s => `'${s.id}'`).join(',');
+    
+    if (sectionIds) {
+      const sectionLogs = await db.query<XPLogRow>(
+        `SELECT id, tier, entity_id, amount FROM xp_log WHERE source_id IN (${sectionIds}) AND source IN ('course_section','course_complete');`
+      );
+      for (const log of sectionLogs.rows) {
+        await reverseXPEntry(db, log);
+      }
+    }
+
+    const courseLogs = await db.query<XPLogRow>(
+      `SELECT id, tier, entity_id, amount FROM xp_log WHERE source_id = $1 AND source = 'course_complete';`,
+      [courseId]
+    );
+    for (const log of courseLogs.rows) {
+      await reverseXPEntry(db, log);
     }
   }
 
-  // Remove log entries
+  if (sessionRes.rows[0]?.media_id) {
+    const mediaId = sessionRes.rows[0].media_id;
+    const mediaLogs = await db.query<XPLogRow>(
+      `SELECT id, tier, entity_id, amount FROM xp_log WHERE source_id = $1 AND source IN ('book_complete','comic_complete','film_complete','documentary_complete','tv_complete','album_complete','game_complete');`,
+      [mediaId]
+    );
+    for (const log of mediaLogs.rows) {
+      await reverseXPEntry(db, log);
+    }
+  }
+
   await db.exec(`DELETE FROM xp_log WHERE source_id = '${sessionId}' AND source = 'session';`);
 }
 
@@ -240,12 +319,50 @@ export default function SessionDetailDrawer({ sessionId, onDeleted, onClose }: P
       );
       if (!res.rows[0]) return null;
       const r = res.rows[0];
-      return {
+
+      const sessionData = {
         ...r,
         stat_split:   typeof r.stat_split   === 'string' ? JSON.parse(r.stat_split)   : (r.stat_split   ?? []),
         tool_ids:     typeof r.tool_ids     === 'string' ? JSON.parse(r.tool_ids)     : (r.tool_ids     ?? []),
         augment_ids:  typeof r.augment_ids  === 'string' ? JSON.parse(r.augment_ids)  : (r.augment_ids  ?? []),
       } as SessionData;
+
+      const bonusXP: BonusXPEntry[] = [];
+
+      if (r.media_id) {
+        const mediaBonusRes = await db.query<BonusXPEntry>(
+          `SELECT source, source_id, tier, entity_id, amount, notes FROM xp_log
+           WHERE source_id = $1 AND source IN ('book_complete','comic_complete','film_complete','documentary_complete','tv_complete','album_complete','game_complete')
+           ORDER BY logged_at;`,
+          [r.media_id]
+        );
+        bonusXP.push(...mediaBonusRes.rows);
+      }
+
+      if (r.course_id) {
+        const sectionsRes = await db.query<{ id: string }>(
+          `SELECT id FROM course_sections WHERE course_id = $1;`,
+          [r.course_id]
+        );
+        const sectionIds = sectionsRes.rows.map(s => `'${s.id}'`).join(',');
+        if (sectionIds) {
+          const sectionBonusRes = await db.query<BonusXPEntry>(
+            `SELECT source, source_id, tier, entity_id, amount, notes FROM xp_log
+             WHERE source_id IN (${sectionIds}) AND source IN ('course_section','course_complete')
+             ORDER BY logged_at;`
+          );
+          bonusXP.push(...sectionBonusRes.rows);
+        }
+        const courseBonusRes = await db.query<BonusXPEntry>(
+          `SELECT source, source_id, tier, entity_id, amount, notes FROM xp_log
+           WHERE source_id = $1 AND source = 'course_complete'
+           ORDER BY logged_at;`,
+          [r.course_id]
+        );
+        bonusXP.push(...courseBonusRes.rows);
+      }
+
+      return { ...sessionData, bonusXP };
     },
   });
 
@@ -412,6 +529,17 @@ export default function SessionDetailDrawer({ sessionId, onDeleted, onClose }: P
             <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: mono, fontSize: 10 }}>
               <span style={{ color: dim }}>AUGMENT XP (×{session.augment_ids.length})</span>
               <span style={{ color: '#a4f' }}>+{perAugXP} each</span>
+            </div>
+          )}
+          {session.bonusXP && session.bonusXP.length > 0 && (
+            <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid rgba(153,104,0,0.3)` }}>
+              <div style={{ fontSize: 9, color: green, marginBottom: 4 }}>COMPLETION BONUS</div>
+              {session.bonusXP.map((bonus, idx) => (
+                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontFamily: mono, fontSize: 10 }}>
+                  <span style={{ color: bonus.tier === 'skill' ? '#4af' : bonus.tier === 'master' ? '#a4f' : dim }}>{getBonusLabel(bonus)}</span>
+                  <span style={{ color: green }}>+{bonus.amount}</span>
+                </div>
+              ))}
             </div>
           )}
         </div>

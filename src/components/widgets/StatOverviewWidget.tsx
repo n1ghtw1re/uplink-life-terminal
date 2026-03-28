@@ -4,8 +4,8 @@
 import { useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useStats } from '@/hooks/useStats';
+import { useClass } from '@/hooks/useClass';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import WidgetWrapper from '../WidgetWrapper';
 import ProgressBar from '../ProgressBar';
 
@@ -26,6 +26,7 @@ const dim = 'hsl(var(--text-dim))';
 const StatOverviewWidget = ({ onClose, onFullscreen, isFullscreen, onStatClick }: WidgetProps) => {
   const { user } = useAuth();
   const { data: stats } = useStats(user?.id);
+  const { data: resolvedClass } = useClass(user?.id);
   const [sortKey, setSortKey] = useState<SortKey>('level');
 
   const { data: toolProg } = useQuery({
@@ -46,16 +47,7 @@ const StatOverviewWidget = ({ onClose, onFullscreen, isFullscreen, onStatClick }
     },
   });
 
-  const { data: classData } = useQuery({
-    queryKey: ['class'],
-    queryFn: async () => {
-      const db  = await import('@/lib/db').then(m => m.getDB());
-      const res = await db.query<{ custom_class_name: string | null }>(`SELECT custom_class_name FROM profile WHERE id = 1;`);
-      return res.rows[0] ?? null;
-    },
-  });
-
-  const classDisplay = classData?.custom_class_name ?? '---';
+  const classDisplay = resolvedClass?.name.toUpperCase() ?? '---';
   const sortedStats = useMemo(() => {
     const allStats = [...(stats ?? [])];
     if (sortKey === 'alpha') {

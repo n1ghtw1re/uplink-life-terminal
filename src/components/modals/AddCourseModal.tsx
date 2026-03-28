@@ -1,10 +1,11 @@
 // ============================================================
 // src/components/modals/AddCourseModal.tsx
 // ============================================================
-import { useState, useEffect } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { StatKey, STAT_META } from '@/types';
 import { toast } from '@/hooks/use-toast';
+import { getDB } from '@/lib/db';
 
 const STAT_KEYS: StatKey[] = ['body', 'wire', 'mind', 'cool', 'grit', 'flow', 'ghost'];
 
@@ -12,10 +13,94 @@ interface Props {
   onClose: () => void;
 }
 
+// ── Skill Search Component ───────────────────────────────────
+function SkillSearch({ selectedId, onSelect }: { selectedId: string | null; onSelect: (id: string | null) => void }) {
+  const [search, setSearch] = useState('');
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const mono = "'IBM Plex Mono', monospace";
+  const acc = 'hsl(var(--accent))';
+  const adim = 'hsl(var(--accent-dim))';
+  const dim = 'hsl(var(--text-dim))';
+  const bgS = 'hsl(var(--bg-secondary))';
+  const bgT = 'hsl(var(--bg-tertiary))';
+
+  const { data: allSkills = [] } = useQuery({
+    queryKey: ['skills-for-course-link'],
+    queryFn: async () => {
+      const db = await getDB();
+      const res = await db.query<{ id: string; name: string; stat_keys: string }>(
+        `SELECT id, name, stat_keys FROM skills WHERE active = true ORDER BY name;`
+      );
+      return res.rows;
+    },
+  });
+
+  const selectedSkill = allSkills.find(s => s.id === selectedId);
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return allSkills.slice(0, 12);
+    return allSkills.filter(s => s.name.toLowerCase().includes(search.toLowerCase())).slice(0, 12);
+  }, [search, allSkills]);
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      {selectedSkill ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px', background: bgS, border: `1px solid ${acc}` }}>
+          <span style={{ fontSize: 10, color: acc, flex: 1, fontFamily: mono }}>{selectedSkill.name}</span>
+          <span
+            onClick={() => onSelect(null)}
+            style={{ fontSize: 9, color: adim, cursor: 'pointer' }}
+            onMouseEnter={e => (e.currentTarget.style.color = '#ff4400')}
+            onMouseLeave={e => (e.currentTarget.style.color = adim)}
+          >×</span>
+        </div>
+      ) : (
+        <input
+          value={search}
+          onChange={e => { setSearch(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          placeholder="Search skills..."
+          style={{ width: '100%', padding: '5px 8px', fontSize: 10, background: bgS, border: `1px solid ${open ? acc : adim}`, color: acc, fontFamily: mono, outline: 'none', boxSizing: 'border-box' as const }}
+        />
+      )}
+      {open && filtered.length > 0 && (
+        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: bgS, border: `1px solid ${adim}`, zIndex: 200, maxHeight: 160, overflowY: 'auto' as const, boxShadow: '0 4px 12px rgba(0,0,0,0.5)', marginTop: 2 }}>
+          {filtered.map(s => {
+            let stats: string[] = [];
+            try {
+              const raw = s.stat_keys;
+              if (Array.isArray(raw)) {
+                stats = raw;
+              } else if (typeof raw === 'string') {
+                stats = JSON.parse(raw || '[]');
+              }
+            } catch { stats = []; }
+            return (
+              <div key={s.id} onMouseDown={() => { onSelect(s.id); setSearch(''); setOpen(false); }}
+                style={{ padding: '6px 10px', fontSize: 10, cursor: 'pointer', color: dim, background: 'transparent', display: 'flex', justifyContent: 'space-between', fontFamily: mono, borderBottom: `1px solid rgba(153,104,0,0.15)` }}
+                onMouseEnter={e => { e.currentTarget.style.background = bgT; e.currentTarget.style.color = acc; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = dim; }}>
+                <span>{s.name}</span>
+                <span style={{ fontSize: 9, opacity: 0.5 }}>{stats.join('/').toUpperCase()}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── Reusable linked-item picker ───────────────────────────────
-import { getDB } from '@/lib/db';
-
 function LinkedIdsInput({ label, tableName, nameField, subField, selectedIds, onChange }: {
   label: string; tableName: string; nameField: string; subField: string;
   selectedIds: string[]; onChange: (ids: string[]) => void;
@@ -130,16 +215,26 @@ export default function AddCourseModal({ onClose }: Props) {
   const [isOngoing, setIsOngoing]   = useState(false);
   const [saving, setSaving]         = useState(false);
 
-  const [linkedStats, setLinkedStats]         = useState<StatKey[]>([]);
+  const [primaryStat, setPrimaryStat]   = useState<StatKey>('mind');
+  const [secondaryStat, setSecondaryStat] = useState<StatKey | ''>('');
+  const [split, setSplit]               = useState(50);
+  const [linkedSkillId, setLinkedSkillId] = useState<string | null>(null);
   const [linkedToolIds, setLinkedToolIds]     = useState<string[]>([]);
   const [linkedAugmentIds, setLinkedAugmentIds] = useState<string[]>([]);
   const [linkedMediaIds, setLinkedMediaIds]   = useState<string[]>([]);
   const [modules, setModules]               = useState<string[]>(['']);
 
-  const toggleStat = (k: StatKey) =>
-    setLinkedStats(prev =>
-      prev.includes(k) ? prev.filter(s => s !== k) : [...prev, k]
-    );
+  const hasDual = secondaryStat !== '';
+
+  const getLinkedStats = (): StatKey[] => {
+    if (hasDual) return [primaryStat, secondaryStat as StatKey];
+    return [primaryStat];
+  };
+
+  const getDefaultSplit = (): number[] => {
+    if (hasDual) return [split, 100 - split];
+    return [100];
+  };
 
 
   const updateModule = (i: number, val: string) =>
@@ -160,17 +255,24 @@ export default function AddCourseModal({ onClose }: Props) {
       const courseId = crypto.randomUUID();
       const now = new Date().toISOString();
 
+      await db.exec(`ALTER TABLE courses ADD COLUMN IF NOT EXISTS default_split JSONB NOT NULL DEFAULT '[100]';`);
+
+      const linkedStats = getLinkedStats();
+      const defaultSplit = getDefaultSplit();
+
       await db.query(
         `INSERT INTO courses
-          (id, name, provider, subject, url, notes, linked_stats, linked_tool_ids,
+          (id, name, provider, subject, url, notes, linked_stats, default_split, linked_skill_ids, linked_tool_ids,
            linked_augment_ids, linked_media_ids, status, progress, cert_earned,
            is_legacy, is_ongoing, created_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
         [
           courseId, name.trim(),
           provider.trim() || null, subject.trim() || null,
           url.trim() || null, notes.trim() || null,
           JSON.stringify(linkedStats),
+          JSON.stringify(defaultSplit),
+          JSON.stringify(linkedSkillId ? [linkedSkillId] : []),
           JSON.stringify(linkedToolIds),
           JSON.stringify(linkedAugmentIds),
           JSON.stringify(linkedMediaIds),
@@ -269,29 +371,68 @@ export default function AddCourseModal({ onClose }: Props) {
         />
       </div>
 
-      {/* Linked stats — compact toggle row */}
+      {/* Primary stat */}
       <div>
-        <div className="crt-field-label">LINKED STATS</div>
-        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-          {STAT_KEYS.map(k => {
-            const on = linkedStats.includes(k);
-            return (
-              <button
-                key={k}
-                className="topbar-btn"
-                onClick={() => toggleStat(k)}
-                style={{
-                  fontSize: 10,
-                  padding: '3px 8px',
-                  border: `1px solid ${on ? 'hsl(var(--accent))' : 'hsl(var(--accent-dim))'}`,
-                  color: on ? 'hsl(var(--accent-bright))' : 'hsl(var(--text-dim))',
-                  boxShadow: on ? '0 0 5px rgba(255,176,0,0.25)' : 'none',
-                }}
-              >
-                {STAT_META[k].icon} {STAT_META[k].name}
-              </button>
-            );
-          })}
+        <div className="crt-field-label">PRIMARY STAT <span style={{ color: 'hsl(var(--accent))' }}>*</span></div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {STAT_KEYS.map(k => (
+            <button key={k} className="topbar-btn" style={{
+              border: `1px solid ${primaryStat === k ? 'hsl(var(--accent))' : 'hsl(var(--accent-dim))'}`,
+              color: primaryStat === k ? 'hsl(var(--accent-bright))' : 'hsl(var(--text-dim))',
+              boxShadow: primaryStat === k ? '0 0 6px rgba(255,176,0,0.3)' : 'none',
+            }} onClick={() => { setPrimaryStat(k); if (secondaryStat === k) setSecondaryStat(''); }}>
+              {STAT_META[k].icon} {STAT_META[k].name}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Secondary stat */}
+      <div>
+        <div className="crt-field-label">SECONDARY STAT <span style={{ opacity: 0.5 }}>(optional)</span></div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <button className="topbar-btn" style={{
+            border: `1px solid ${secondaryStat === '' ? 'hsl(var(--accent))' : 'hsl(var(--accent-dim))'}`,
+            color: secondaryStat === '' ? 'hsl(var(--accent-bright))' : 'hsl(var(--text-dim))',
+          }} onClick={() => setSecondaryStat('')}>NONE</button>
+          {STAT_KEYS.filter(k => k !== primaryStat).map(k => (
+            <button key={k} className="topbar-btn" style={{
+              border: `1px solid ${secondaryStat === k ? 'hsl(var(--accent))' : 'hsl(var(--accent-dim))'}`,
+              color: secondaryStat === k ? 'hsl(var(--accent-bright))' : 'hsl(var(--text-dim))',
+              boxShadow: secondaryStat === k ? '0 0 6px rgba(255,176,0,0.3)' : 'none',
+            }} onClick={() => setSecondaryStat(k)}>
+              {STAT_META[k].icon} {STAT_META[k].name}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Split slider */}
+      {hasDual && (
+        <div>
+          <div className="crt-field-label">DEFAULT STAT SPLIT</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 10, color: 'hsl(var(--accent))', width: 80 }}>
+              {STAT_META[secondaryStat as StatKey].icon} {STAT_META[secondaryStat as StatKey].name}
+            </span>
+            <input type="range" className="ql-split-slider" min={10} max={90} step={5}
+              value={split} onChange={e => setSplit(Number(e.target.value))} style={{ flex: 1 }} />
+            <span style={{ fontSize: 10, color: 'hsl(var(--accent))', width: 80, textAlign: 'right' }}>
+              {STAT_META[primaryStat].icon} {STAT_META[primaryStat].name}
+            </span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: 'hsl(var(--text-dim))', marginTop: 4 }}>
+            <span>{100 - split}%</span><span>{split}%</span>
+          </div>
+        </div>
+      )}
+
+      {/* ── Linked Skill ── */}
+      <div>
+        <div className="crt-field-label">LINKED SKILL <span style={{ opacity: 0.5 }}>(optional — bonus XP goes to this skill)</span></div>
+        <SkillSearch selectedId={linkedSkillId} onSelect={setLinkedSkillId} />
+        <div style={{ fontSize: 9, color: 'hsl(var(--text-dim))', marginTop: 4 }}>
+          If set, completion bonus XP splits 50% to this skill, 25% to stats, 25% to master.
         </div>
       </div>
 
