@@ -22,7 +22,6 @@ import AugmentsWidget from '@/components/widgets/AugmentsWidget';
 import ProjectsWidget from '@/components/widgets/ProjectsWidget';
 import NotesWidget from '@/components/widgets/NotesWidget';
 import QuickLogOverlay from '@/components/overlays/QuickLogOverlay';
-import CharacterSheet from '@/components/overlays/CharacterSheet';
 import SearchOverlay from '@/components/overlays/SearchOverlay';
 import StatDetailOverlay from '@/components/overlays/StatDetailOverlay';
 import SkillsPage from '@/components/overlays/SkillsPage';
@@ -35,6 +34,9 @@ import LifepathPage from '@/components/overlays/LifepathPage';
 import ToolsPage from '@/components/overlays/ToolsPage';
 import AugmentsPage from '@/components/overlays/AugmentsPage';
 import ProjectsPage from '@/components/overlays/ProjectsPage';
+import CharacterSheet from '@/components/overlays/CharacterSheet';
+import ClassDocsPage from '@/components/overlays/ClassDocsPage';
+import XpDocsPage from '@/components/overlays/XpDocsPage';
 import WidgetManager from '@/components/overlays/WidgetManager';
 import FirstBootWizard from '@/components/wizard/FirstBootWizard';
 import DetailDrawer from '@/components/drawer/DetailDrawer';
@@ -80,7 +82,6 @@ const Index = () => {
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [theme, setTheme] = useState<ThemeCode>(() => normalizeTheme(localStorage.getItem('uplink-theme')));
   const [showLog, setShowLog] = useState(false);
-  const [showChar, setShowChar] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showSocials, setShowSocials] = useState(false);
   const [showDailyLog, setShowDailyLog] = useState(false);
@@ -108,6 +109,9 @@ const Index = () => {
   const [showSkills, setShowSkills] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
   const [showCourses, setShowCourses] = useState(false);
+  const [showCharacterSheet, setShowCharacterSheet] = useState(false);
+  const [showClassDocs, setShowClassDocs] = useState(false);
+  const [showXpDocs, setShowXpDocs] = useState(false);
   const [showWidgetManager, setShowWidgetManager] = useState(false);
 
   const sidebarWidth = sidebarExpanded ? 220 : 48;
@@ -137,21 +141,23 @@ const Index = () => {
     const tag = (e.target as HTMLElement).tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA') return;
     if (e.key === 'Escape') {
+      if (showXpDocs) { setShowXpDocs(false); return; }
+      if (showClassDocs) { setShowClassDocs(false); return; }
+      if (showCharacterSheet) { setShowCharacterSheet(false); return; }
       if (showLifepath) { setShowLifepath(false); return; }
       if (showDailyLog) { setShowDailyLog(false); return; }
       if (showNotesPage) { setShowNotesPage(false); return; }
       if (openStatKey) { setOpenStatKey(null); return; }
       if (drawerOpen) { closeDrawer(); return; }
       if (fullscreenWidget) { setFullscreenWidget(null); return; }
-      setShowLog(false); setShowChar(false); setShowSearch(false); setShowCheckin(false);
+      setShowLog(false); setShowSearch(false); setShowCheckin(false);
       return;
     }
     if (e.key === ' ') { e.preventDefault(); setShowLog(true); }
-    if (e.key === 'c' || e.key === 'C') setShowChar(true);
     if (e.key === '/') { e.preventDefault(); setShowSearch(true); }
     if (e.key === '[') setSidebarExpanded(false);
     if (e.key === ']') setSidebarExpanded(true);
-  }, [fullscreenWidget, drawerOpen, openStatKey, showLifepath, showDailyLog, showNotesPage]);
+  }, [fullscreenWidget, drawerOpen, openStatKey, showXpDocs, showClassDocs, showCharacterSheet, showLifepath, showDailyLog, showNotesPage]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKey);
@@ -203,8 +209,8 @@ const Index = () => {
       case 'checkin':      return <CheckinWidget {...props} />;
       case 'heatmap':      return <HeatmapWidget {...props} />;
       case 'stats':        return <StatOverviewWidget {...props} onStatClick={(k: string) => setOpenStatKey(k as StatKey)} />;
-      case 'courses':      return <CoursesWidget {...props} onCourseClick={(id) => openDrawer('course', id)} />;
-      case 'media':        return <MediaWidget {...props} onMediaClick={(id) => openDrawer('book', id)} />;
+      case 'courses':      return <CoursesWidget {...props} onOpenCourses={() => setShowCourses(true)} onCourseClick={(id) => openDrawer('course', id)} />;
+      case 'media':        return <MediaWidget {...props} onOpenLibrary={() => setShowLibrary(true)} onMediaClick={(id) => openDrawer('book', id)} />;
       case 'skills':       return <SkillsWidget {...props} onOpenSkills={() => setShowSkills(true)} onSkillClick={(id) => openDrawer('skill', id)} />;
       case 'tools':    return <ToolsWidget {...props} onOpenTools={() => setShowTools(true)} onToolClick={(id) => openDrawer('tool', id)} />;
       case 'augments': return <AugmentsWidget {...props} onOpenAugments={() => setShowAugments(true)} onAugmentClick={(id) => openDrawer('augment', id)} />;
@@ -228,7 +234,6 @@ const Index = () => {
       <TopBar
         onOpenLog={() => setShowLog(true)}
         onOpenCheckin={() => setShowCheckin(true)}
-        onOpenCharSheet={() => setShowChar(true)}
         onOpenSearch={() => setShowSearch(true)}
       />
 
@@ -239,7 +244,7 @@ const Index = () => {
           onExpand={() => setSidebarExpanded(true)}
           theme={theme}
           onThemeChange={handleThemeChange}
-          onOpenCharSheet={() => setShowChar(true)}
+          onOpenCharacterSheet={() => setShowCharacterSheet(true)}
           onOpenStat={(statKey) => setOpenStatKey(statKey)}
           onOpenSkills={() => setShowSkills(true)}
           onOpenLibrary={() => setShowLibrary(true)}
@@ -248,6 +253,8 @@ const Index = () => {
           onOpenTools={() => setShowTools(true)}
           onOpenAugments={() => setShowAugments(true)}
           onOpenProjects={() => setShowProjects(true)}
+          onOpenClassDocs={() => setShowClassDocs(true)}
+          onOpenXpDocs={() => setShowXpDocs(true)}
           onOpenWidgetManager={() => setShowWidgetManager(true)}
           onOpenSocials={() => setShowSocials(true)}
           onOpenDailyLog={() => setShowDailyLog(true)}
@@ -287,6 +294,9 @@ const Index = () => {
       </div>
 
       {showLifepath      && <LifepathPage  onClose={() => setShowLifepath(false)} />}
+      {showXpDocs && <XpDocsPage onClose={() => setShowXpDocs(false)} />}
+      {showClassDocs && <ClassDocsPage onClose={() => setShowClassDocs(false)} />}
+      {showCharacterSheet && <CharacterSheet onClose={() => setShowCharacterSheet(false)} />}
       {showTools     && <ToolsPage     onClose={() => setShowTools(false)} />}
       {showAugments  && <AugmentsPage  onClose={() => setShowAugments(false)} />}
       {showProjects  && <ProjectsPage  onClose={() => setShowProjects(false)} />}
@@ -305,7 +315,6 @@ const Index = () => {
         </span>}>
         <QuickLogOverlay open={showLog} onClose={() => setShowLog(false)} />
       </Modal>
-      {showChar && <CharacterSheet onClose={() => setShowChar(false)} onSkillClick={(n: string) => openDrawer('skill', n)} />}
       <DetailDrawer open={drawerOpen} item={drawerItem} onClose={closeDrawer} onOpenLog={() => setShowLog(true)} />
       <Modal open={showSearch} onClose={() => setShowSearch(false)} title="SEARCH" width={600}><SearchOverlay /></Modal>
       <Modal open={showCheckin} onClose={() => setShowCheckin(false)} title="DAILY CHECK-IN" width={500}><CheckinWidget /></Modal>

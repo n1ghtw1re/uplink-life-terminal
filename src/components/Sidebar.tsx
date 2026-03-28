@@ -13,7 +13,7 @@ interface SidebarProps {
   onExpand?: () => void;
   theme: ThemeCode;
   onThemeChange: (t: ThemeCode) => void;
-  onOpenCharSheet?: () => void;
+  onOpenCharacterSheet?: () => void;
   onOpenStat?: (statKey: StatKey) => void;
   onOpenSkills?: () => void;
   onOpenLibrary?: () => void;
@@ -21,6 +21,8 @@ interface SidebarProps {
   onOpenTools?: () => void;
   onOpenAugments?: () => void;
   onOpenProjects?: () => void;
+  onOpenClassDocs?: () => void;
+  onOpenXpDocs?: () => void;
   onOpenLifepath?: () => void;
   onOpenWidgetManager?: () => void;
   onOpenSocials?: () => void;
@@ -32,16 +34,28 @@ interface SidebarProps {
 }
 
 const sectionMap: Record<string, string> = {
-  'BODY': 'stats', 'WIRE': 'stats', 'MIND': 'stats',
-  'COOL': 'stats', 'GRIT': 'stats', 'FLOW': 'stats', 'GHOST': 'stats',
-  'Arsenal': 'arsenal', 'Tracking': 'tracking', 'System': 'system', 'Utility': 'utility',
-  'Goals': 'tracking', 'Habits': 'tracking', 'Settings': 'system',
+  BODY: 'stats',
+  WIRE: 'stats',
+  MIND: 'stats',
+  COOL: 'stats',
+  GRIT: 'stats',
+  FLOW: 'stats',
+  GHOST: 'stats',
+  Arsenal: 'arsenal',
+  Docs: 'docs',
+  Tracking: 'tracking',
+  System: 'system',
+  Utility: 'utility',
+  Goals: 'tracking',
+  Habits: 'tracking',
+  Settings: 'system',
 };
 
 const Sidebar = ({
   expanded, onToggle, onExpand, theme, onThemeChange,
-  onOpenCharSheet, onOpenStat, onOpenSkills, onOpenLibrary, onOpenCourses,
-  onOpenTools, onOpenAugments, onOpenProjects, onOpenLifepath, onOpenWidgetManager, onOpenSocials, onOpenDailyLog, onOpenNotes,
+  onOpenCharacterSheet,
+  onOpenStat, onOpenSkills, onOpenLibrary, onOpenCourses,
+  onOpenTools, onOpenAugments, onOpenProjects, onOpenClassDocs, onOpenXpDocs, onOpenLifepath, onOpenWidgetManager, onOpenSocials, onOpenDailyLog, onOpenNotes,
   onOpenClockWidget, onOpenCalculatorWidget, onOpenUnitConverterWidget,
 }: SidebarProps) => {
   const { user } = useAuth();
@@ -59,7 +73,14 @@ const Sidebar = ({
         supabase.from('projects').select('id', { count: 'exact', head: true }),
         supabase.from('projects').select('id', { count: 'exact', head: true }),
       ]);
-      return { courses: courses.count ?? 0, library: media.count ?? 0, skills: skills.count ?? 0, tools: tools.count ?? 0, augments: augments.count ?? 0, projects: projects.count ?? 0 };
+      return {
+        courses: courses.count ?? 0,
+        library: media.count ?? 0,
+        skills: skills.count ?? 0,
+        tools: tools.count ?? 0,
+        augments: augments.count ?? 0,
+        projects: projects.count ?? 0,
+      };
     },
   });
 
@@ -67,12 +88,13 @@ const Sidebar = ({
   const toggleSection = (section: string) => setOpenSection(openSection === section ? null : section);
 
   const handleCollapsedClick = (label: string, statKey?: StatKey) => {
-    if (label === 'Character Sheet') { onOpenCharSheet?.(); return; }
     if (label === 'Dashboard') { onExpand?.(); setOpenSection(null); return; }
+    if (label === 'Character Sheet') { onOpenCharacterSheet?.(); return; }
     if (label === 'Skills') { onOpenSkills?.(); return; }
     if (label === 'Lifepath') { onOpenLifepath?.(); return; }
+    if (label === 'Docs') { onExpand?.(); setOpenSection('docs'); return; }
     if (label === 'SOCIALS') { onOpenSocials?.(); return; }
-    if (label === 'Utility') { onExpand?.(); setOpenSection('utility'); onOpenUnitConverterWidget?.(); return; }
+    if (label === 'Utility') { onExpand?.(); setOpenSection('utility'); return; }
     if (statKey) { onOpenStat?.(statKey); return; }
     const section = sectionMap[label];
     if (section) { onExpand?.(); setOpenSection(section); }
@@ -81,7 +103,7 @@ const Sidebar = ({
   const handleSystemItem = async (name: string) => {
     if (name === 'LOGOUT') { await supabase.auth.signOut(); window.location.reload(); }
     if (name === 'RESET XP') {
-      const confirm1 = window.confirm('RESET ALL XP DATA?\n\nThis will clear:\n• All sessions and logs\n• All XP (skills, stats, tools, augments, master)\n• All levels reset to 1\n\nSkills, tools, augments, media, courses and projects will NOT be deleted.\n\nThis cannot be undone.');
+      const confirm1 = window.confirm('RESET ALL XP DATA?\n\nThis will clear:\n- All sessions and logs\n- All XP (skills, stats, tools, augments, master)\n- All levels reset to 1\n\nSkills, tools, augments, media, courses and projects will NOT be deleted.\n\nThis cannot be undone.');
       if (!confirm1) return;
       const confirm2 = window.confirm('ARE YOU SURE? This will permanently delete all progress data.');
       if (!confirm2) return;
@@ -111,7 +133,7 @@ const Sidebar = ({
     }
     if (name === 'IMPORT DATA') {
       const input = document.createElement('input');
-      input.type  = 'file';
+      input.type = 'file';
       input.accept = '.json';
       input.onchange = async (e) => {
         const file = (e.target as HTMLInputElement).files?.[0];
@@ -129,56 +151,63 @@ const Sidebar = ({
   };
 
   const collapsedIcons = [
-    { icon: '⌂', label: 'Dashboard' },
-    { icon: '◈', label: 'Character Sheet' },
+    { icon: 'D', label: 'Dashboard' },
+    { icon: 'C', label: 'Character Sheet' },
     { icon: 'div', label: '' },
     ...[...(stats ?? [])].sort((a, b) => a.name.localeCompare(b.name)).map(s => ({ icon: s.icon, label: s.name, statKey: s.key as StatKey })),
     { icon: 'div', label: '' },
-    { icon: '◫', label: 'Skills' },
-    { icon: '⬡', label: 'Lifepath' },
+    { icon: 'S', label: 'Skills' },
+    { icon: 'L', label: 'Lifepath' },
     { icon: 'div', label: '' },
-    { icon: '▦', label: 'Arsenal' },
+    { icon: 'A', label: 'Arsenal' },
     { icon: 'div', label: '' },
-    { icon: '◉', label: 'Tracking' },
+    { icon: '?', label: 'Docs' },
     { icon: 'div', label: '' },
-    { icon: '⚙', label: 'System' },
+    { icon: 'T', label: 'Tracking' },
     { icon: 'div', label: '' },
-    { icon: '◷', label: 'Utility' },
+    { icon: 'Y', label: 'System' },
+    { icon: 'div', label: '' },
+    { icon: 'U', label: 'Utility' },
   ];
 
   const arsenalItems = [
-    { icon: '▸', name: 'AUGMENTS',  count: counts?.augments },
-    { icon: '▸', name: 'CERTS',     count: undefined },
-    { icon: '▸', name: 'COURSES',   count: counts?.courses },
-    { icon: '▸', name: 'LIBRARY',   count: counts?.library },
-    { icon: '▸', name: 'PROJECTS',  count: counts?.projects },
-    { icon: '▸', name: 'RESOURCES', count: undefined },
-    { icon: '▸', name: 'TOOLS',     count: counts?.tools },
+    { icon: '>', name: 'AUGMENTS', count: counts?.augments },
+    { icon: '>', name: 'CERTS', count: undefined },
+    { icon: '>', name: 'COURSES', count: counts?.courses },
+    { icon: '>', name: 'LIBRARY', count: counts?.library },
+    { icon: '>', name: 'PROJECTS', count: counts?.projects },
+    { icon: '>', name: 'RESOURCES', count: undefined },
+    { icon: '>', name: 'TOOLS', count: counts?.tools },
   ];
 
   const trackingItems = [
-    { icon: '📋', name: 'DAILY LOG', count: undefined },
-    { icon: '◎', name: 'GOALS',   count: undefined },
-    { icon: '✓', name: 'HABITS',  count: undefined },
+    { icon: 'L', name: 'DAILY LOG', count: undefined },
+    { icon: 'O', name: 'GOALS', count: undefined },
+    { icon: 'V', name: 'HABITS', count: undefined },
     { icon: '', name: 'PLANNER' },
-    { icon: '🖥', name: 'TERMINAL' },
-    { icon: '👤', name: 'SOCIALS' },
+    { icon: 'T', name: 'TERMINAL' },
+    { icon: '@', name: 'SOCIALS' },
+  ];
+
+  const docsItems = [
+    { icon: '>', name: 'CLASSES', action: () => onOpenClassDocs?.() },
+    { icon: '>', name: 'XP & LEVELLING', action: () => onOpenXpDocs?.() },
   ];
 
   const systemItems = [
-    { icon: '⚙', name: 'SETTINGS' },
+    { icon: 'Y', name: 'SETTINGS' },
     { icon: '?', name: 'HELP' },
-    { icon: '💾', name: 'EXPORT DATA' },
-    { icon: '📂', name: 'IMPORT DATA' },
-    { icon: '↺', name: 'RESET XP' },
-    { icon: '⏻', name: 'LOGOUT' },
+    { icon: 'E', name: 'EXPORT DATA' },
+    { icon: 'I', name: 'IMPORT DATA' },
+    { icon: 'R', name: 'RESET XP' },
+    { icon: 'X', name: 'LOGOUT' },
   ];
 
   const utilityItems = [
-    { icon: '◷', name: 'CLOCK',          action: () => onOpenClockWidget?.() },
-    { icon: '⌨', name: 'CALCULATOR',     action: () => onOpenCalculatorWidget?.() },
-    { icon: '⇄', name: 'UNIT CONVERTER', action: () => onOpenUnitConverterWidget?.() },
-    { icon: '📝', name: 'NOTES',          action: () => onOpenNotes?.() },
+    { icon: 'C', name: 'CLOCK', action: () => onOpenClockWidget?.() },
+    { icon: 'K', name: 'CALCULATOR', action: () => onOpenCalculatorWidget?.() },
+    { icon: 'U', name: 'UNIT CONVERTER', action: () => onOpenUnitConverterWidget?.() },
+    { icon: 'N', name: 'NOTES', action: () => onOpenNotes?.() },
   ];
 
   const sortedThemeOptions = useMemo<ThemeCode[]>(
@@ -187,16 +216,31 @@ const Sidebar = ({
 
   return (
     <div style={{
-      width: expanded ? 220 : 48, transition: 'width 150ms ease',
-      background: 'hsl(var(--bg-primary))', borderRight: '1px solid hsl(var(--accent))',
-      height: '100%', flexShrink: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+      width: expanded ? 220 : 48,
+      transition: 'width 150ms ease',
+      background: 'hsl(var(--bg-primary))',
+      borderRight: '1px solid hsl(var(--accent))',
+      height: '100%',
+      flexShrink: 0,
+      display: 'flex',
+      flexDirection: 'column',
+      overflow: 'hidden',
     }}>
-      <button onClick={onToggle} style={{
-        width: '100%', padding: '8px 0', background: 'transparent', border: 'none',
-        borderBottom: '1px solid hsl(var(--accent-dim))', color: 'hsl(var(--accent))',
-        cursor: 'pointer', fontFamily: "'IBM Plex Mono', monospace", fontSize: 12,
-      }}>
-        {expanded ? '‹' : '›'}
+      <button
+        onClick={onToggle}
+        style={{
+          width: '100%',
+          padding: '8px 0',
+          background: 'transparent',
+          border: 'none',
+          borderBottom: '1px solid hsl(var(--accent-dim))',
+          color: 'hsl(var(--accent))',
+          cursor: 'pointer',
+          fontFamily: "'IBM Plex Mono', monospace",
+          fontSize: 12,
+        }}
+      >
+        {expanded ? '<' : '>'}
       </button>
 
       {!expanded ? (
@@ -206,7 +250,8 @@ const Sidebar = ({
               <div key={i} style={{ width: 32, height: 1, background: 'hsl(var(--accent-dim))', margin: '4px 0' }} />
             ) : (
               <div
-                key={i} title={item.label}
+                key={i}
+                title={item.label}
                 onClick={() => handleCollapsedClick(item.label, (item as any).statKey)}
                 style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 16, color: 'hsl(var(--text-dim))' }}
                 className="text-glow"
@@ -220,14 +265,15 @@ const Sidebar = ({
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-          <div className="sidebar-item" style={{ padding: '8px 12px', fontWeight: 600, color: 'hsl(var(--accent))' }}>⌂ DASHBOARD</div>
-          <div className="sidebar-item" style={{ padding: '8px 12px', cursor: 'pointer' }} onClick={() => onOpenCharSheet?.()}>◈ CHARACTER SHEET</div>
+          <div className="sidebar-item" style={{ padding: '8px 12px', fontWeight: 600, color: 'hsl(var(--accent))' }}>D DASHBOARD</div>
+          <div className="sidebar-item" onClick={() => onOpenCharacterSheet?.()} style={{ cursor: 'pointer', padding: '8px 12px' }}>
+            <span>C CHARACTER SHEET</span>
+          </div>
           <div style={{ height: 1, background: 'hsl(var(--accent-dim))', margin: '4px 0' }} />
 
-          {/* STATS */}
           <div className={`sidebar-section ${openSection === 'stats' ? 'active' : ''}`} onClick={() => toggleSection('stats')}>
             <span>// STATS</span>
-            <span style={{ transition: 'transform 150ms', transform: openSection === 'stats' ? 'rotate(90deg)' : 'none' }}>›</span>
+            <span style={{ transition: 'transform 150ms', transform: openSection === 'stats' ? 'rotate(90deg)' : 'none' }}>{'>'}</span>
           </div>
           {openSection === 'stats' && [...(stats ?? [])].sort((a, b) => a.name.localeCompare(b.name)).map(s => (
             <div key={s.key} className={`sidebar-item ${s.dormant ? 'dormant' : ''}`} onClick={() => onOpenStat?.(s.key as StatKey)} style={{ cursor: 'pointer' }}>
@@ -236,41 +282,57 @@ const Sidebar = ({
             </div>
           ))}
 
-          {/* SKILLS */}
           <div style={{ height: 1, background: 'hsl(var(--accent-dim))', margin: '4px 0' }} />
           <div className="sidebar-item" onClick={() => onOpenSkills?.()} style={{ cursor: 'pointer', padding: '8px 12px' }}>
-            <span>◫ SKILLS</span>
+            <span>S SKILLS</span>
             <span style={{ fontSize: 9, color: 'hsl(var(--text-dim))' }}>{counts?.skills ?? 0}</span>
           </div>
 
-          {/* LIFEPATH — between SKILLS and ARSENAL */}
           <div className="sidebar-item" onClick={() => onOpenLifepath?.()} style={{ cursor: 'pointer', padding: '8px 12px' }}>
-            <span>⬡ LIFEPATH</span>
+            <span>L LIFEPATH</span>
           </div>
           <div style={{ height: 1, background: 'hsl(var(--accent-dim))', margin: '4px 0' }} />
 
-          {/* ARSENAL */}
           <div className={`sidebar-section ${openSection === 'arsenal' ? 'active' : ''}`} onClick={() => toggleSection('arsenal')}>
             <span>// ARSENAL</span>
-            <span style={{ transition: 'transform 150ms', transform: openSection === 'arsenal' ? 'rotate(90deg)' : 'none' }}>›</span>
+            <span style={{ transition: 'transform 150ms', transform: openSection === 'arsenal' ? 'rotate(90deg)' : 'none' }}>{'>'}</span>
           </div>
           {openSection === 'arsenal' && arsenalItems.map(item => (
-            <div key={item.name} className="sidebar-item"
-              style={{ cursor: (item.name === 'LIBRARY' || item.name === 'COURSES') ? 'pointer' : undefined }}
-              onClick={() => { if (item.name === 'LIBRARY') onOpenLibrary?.(); if (item.name === 'COURSES') onOpenCourses?.(); if (item.name === 'TOOLS') onOpenTools?.(); if (item.name === 'AUGMENTS') onOpenAugments?.(); if (item.name === 'PROJECTS') onOpenProjects?.(); }}
+            <div
+              key={item.name}
+              className="sidebar-item"
+              style={{ cursor: (item.name === 'LIBRARY' || item.name === 'COURSES' || item.name === 'TOOLS' || item.name === 'AUGMENTS' || item.name === 'PROJECTS') ? 'pointer' : undefined }}
+              onClick={() => {
+                if (item.name === 'LIBRARY') onOpenLibrary?.();
+                if (item.name === 'COURSES') onOpenCourses?.();
+                if (item.name === 'TOOLS') onOpenTools?.();
+                if (item.name === 'AUGMENTS') onOpenAugments?.();
+                if (item.name === 'PROJECTS') onOpenProjects?.();
+              }}
             >
               <span>{item.icon} {item.name}</span>
-              <span style={{ fontSize: 9, color: 'hsl(var(--text-dim))' }}>{item.count !== undefined ? `(${item.count})` : '—'}</span>
+              <span style={{ fontSize: 9, color: 'hsl(var(--text-dim))' }}>{item.count !== undefined ? `(${item.count})` : '-'}</span>
             </div>
           ))}
 
-          {/* TRACKING */}
+          <div className={`sidebar-section ${openSection === 'docs' ? 'active' : ''}`} onClick={() => toggleSection('docs')}>
+            <span>// DOCS</span>
+            <span style={{ transition: 'transform 150ms', transform: openSection === 'docs' ? 'rotate(90deg)' : 'none' }}>{'>'}</span>
+          </div>
+          {openSection === 'docs' && docsItems.map(item => (
+            <div key={item.name} className="sidebar-item" style={{ cursor: 'pointer' }} onClick={() => item.action?.()}>
+              <span>{item.icon} {item.name}</span>
+            </div>
+          ))}
+
           <div className={`sidebar-section ${openSection === 'tracking' ? 'active' : ''}`} onClick={() => toggleSection('tracking')}>
             <span>// TRACKING</span>
-            <span style={{ transition: 'transform 150ms', transform: openSection === 'tracking' ? 'rotate(90deg)' : 'none' }}>›</span>
+            <span style={{ transition: 'transform 150ms', transform: openSection === 'tracking' ? 'rotate(90deg)' : 'none' }}>{'>'}</span>
           </div>
           {openSection === 'tracking' && trackingItems.map(item => (
-            <div key={item.name} className="sidebar-item"
+            <div
+              key={item.name}
+              className="sidebar-item"
               style={{ cursor: (item.name === 'SOCIALS' || item.name === 'DAILY LOG' || item.name === 'NOTES') ? 'pointer' : undefined }}
               onClick={() => {
                 if (item.name === 'SOCIALS') onOpenSocials?.();
@@ -279,18 +341,23 @@ const Sidebar = ({
               }}
             >
               <span>{item.icon} {item.name}</span>
-              <span style={{ fontSize: 9, color: 'hsl(var(--text-dim))' }}>{(item as any).count !== undefined ? `(${(item as any).count})` : '—'}</span>
+              <span style={{ fontSize: 9, color: 'hsl(var(--text-dim))' }}>{(item as any).count !== undefined ? `(${(item as any).count})` : '-'}</span>
             </div>
           ))}
 
-          {/* SYSTEM */}
           <div className={`sidebar-section ${openSection === 'system' ? 'active' : ''}`} onClick={() => toggleSection('system')}>
             <span>// SYSTEM</span>
-            <span style={{ transition: 'transform 150ms', transform: openSection === 'system' ? 'rotate(90deg)' : 'none' }}>›</span>
+            <span style={{ transition: 'transform 150ms', transform: openSection === 'system' ? 'rotate(90deg)' : 'none' }}>{'>'}</span>
           </div>
           {openSection === 'system' && systemItems.map(item => (
-            <div key={item.name} className="sidebar-item" onClick={() => handleSystemItem(item.name)}
-              style={{ cursor: (item.name === 'LOGOUT' || item.name === 'RESET XP') ? 'pointer' : undefined, color: item.name === 'LOGOUT' ? 'hsl(0,80%,55%)' : item.name === 'RESET XP' ? '#ff6600' : undefined }}
+            <div
+              key={item.name}
+              className="sidebar-item"
+              onClick={() => handleSystemItem(item.name)}
+              style={{
+                cursor: (item.name === 'LOGOUT' || item.name === 'RESET XP') ? 'pointer' : undefined,
+                color: item.name === 'LOGOUT' ? 'hsl(0,80%,55%)' : item.name === 'RESET XP' ? '#ff6600' : undefined,
+              }}
               onMouseEnter={item.name === 'LOGOUT' ? e => (e.currentTarget.style.color = 'hsl(0,80%,70%)') : undefined}
               onMouseLeave={item.name === 'LOGOUT' ? e => (e.currentTarget.style.color = 'hsl(0,80%,55%)') : undefined}
             >
@@ -298,12 +365,9 @@ const Sidebar = ({
             </div>
           ))}
 
-          {/* UTILITY */}
-          <div className={`sidebar-section ${openSection === 'utility' ? 'active' : ''}`}
-            onClick={() => { const wasOpen = openSection === 'utility'; toggleSection('utility'); if (!wasOpen) onOpenUnitConverterWidget?.(); }}
-          >
+          <div className={`sidebar-section ${openSection === 'utility' ? 'active' : ''}`} onClick={() => toggleSection('utility')}>
             <span>// Utility</span>
-            <span style={{ transition: 'transform 150ms', transform: openSection === 'utility' ? 'rotate(90deg)' : 'none' }}>›</span>
+            <span style={{ transition: 'transform 150ms', transform: openSection === 'utility' ? 'rotate(90deg)' : 'none' }}>{'>'}</span>
           </div>
           {openSection === 'utility' && utilityItems.map(item => (
             <div key={item.name} className="sidebar-item" onClick={() => item.action?.()} style={{ cursor: 'pointer' }}>

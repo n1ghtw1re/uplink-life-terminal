@@ -4,7 +4,7 @@
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { getDB } from '@/lib/db';
 import WidgetWrapper from '../WidgetWrapper';
 import Modal from '../Modal';
 import AddMediaModal from '../modals/AddMediaModal';
@@ -21,38 +21,74 @@ const TAB_MEDIA_TYPE: Record<string, 'book' | 'comic' | 'film' | 'documentary' |
 
 const IN_PROGRESS = ['READING', 'WATCHING', 'LISTENED', 'LISTENING'];
 const DONE = ['FINISHED'];
+const mono = "'IBM Plex Mono', monospace";
+const acc = 'hsl(var(--accent))';
+const adim = 'hsl(var(--accent-dim))';
 
 interface WidgetProps {
   onClose?: () => void;
   onFullscreen?: () => void;
   isFullscreen?: boolean;
-  onMediaClick?: (id: string) => void;  // ← NEW
+  onMediaClick?: (id: string) => void;
+  onOpenLibrary?: () => void;
 }
 
-const MediaWidget = ({ onClose, onFullscreen, isFullscreen, onMediaClick }: WidgetProps) => {
+const MediaWidget = ({ onClose, onFullscreen, isFullscreen, onMediaClick, onOpenLibrary }: WidgetProps) => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('BOOKS');
   const [showAdd, setShowAdd] = useState(false);
+  const [search, setSearch] = useState('');
 
   const { data: media } = useQuery({
     queryKey: ['media'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('media')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      return data ?? [];
+      const db = await getDB();
+      const res = await db.query<{
+        id: string;
+        type: string;
+        title: string;
+        creator: string | null;
+        year: number | null;
+        status: string;
+        linked_stat: string | null;
+        linked_skill_id: string | null;
+        rating: number | null;
+        notes: string | null;
+        is_legacy: boolean;
+        completed_at: string | null;
+        pages: number | null;
+        page_current: number | null;
+        runtime: number | null;
+        seasons: number | null;
+        current_season: number | null;
+        platform: string | null;
+        issue_count: number | null;
+        created_at: string;
+      }>(`SELECT * FROM media ORDER BY created_at DESC;`);
+      return res.rows.map((row) => ({
+        ...row,
+        meta: {
+          pages: row.pages,
+          page_current: row.page_current,
+          runtime: row.runtime,
+          seasons: row.seasons,
+          current_season: row.current_season,
+          platform: row.platform,
+          issue_count: row.issue_count,
+        },
+      }));
     },
   });
 
+  const searchFn = (value: string | null | undefined) => !search.trim() || (value ?? '').toLowerCase().includes(search.toLowerCase());
   const filtered = (media ?? []).filter(m =>
-    activeTab === 'ALL' ? true : m.type === TAB_TYPE_MAP[activeTab]
+    (activeTab === 'ALL' ? true : m.type === TAB_TYPE_MAP[activeTab]) &&
+    (searchFn(m.title) || searchFn(m.creator) || searchFn(m.status))
   );
 
   const inProgress = filtered.filter(m => IN_PROGRESS.includes(m.status));
-  const queued     = filtered.filter(m => m.status === 'QUEUED');
-  const done       = filtered.filter(m => DONE.includes(m.status));
+  const queued = filtered.filter(m => m.status === 'QUEUED');
+  const done = filtered.filter(m => DONE.includes(m.status));
 
   const getMeta = (m: typeof filtered[0]) => {
     if (!m.meta || typeof m.meta !== 'object') return null;
@@ -75,12 +111,12 @@ const MediaWidget = ({ onClose, onFullscreen, isFullscreen, onMediaClick }: Widg
 
   const inProgressLabel = () => {
     if (activeTab === 'ALBUMS') return 'LISTENING:';
-    if (activeTab === 'FILMS')  return 'WATCHING:';
-    if (activeTab === 'TV')     return 'WATCHING:';
+    if (activeTab === 'FILMS') return 'WATCHING:';
+    if (activeTab === 'TV') return 'WATCHING:';
     return 'READING:';
   };
 
-  const rowStyle = (id: string) => ({
+  const rowStyle = (_id: string) => ({
     marginBottom: 5,
     fontSize: 10,
     cursor: onMediaClick ? 'pointer' : 'default',
@@ -94,8 +130,6 @@ const MediaWidget = ({ onClose, onFullscreen, isFullscreen, onMediaClick }: Widg
   return (
     <>
       <WidgetWrapper title="MEDIA LIBRARY" onClose={onClose} onFullscreen={onFullscreen} isFullscreen={isFullscreen}>
-
-        {/* Tabs */}
         <div style={{ display: 'flex', gap: 4, marginBottom: 10, flexWrap: 'wrap' }}>
           {TABS.map(t => (
             <button
@@ -107,13 +141,19 @@ const MediaWidget = ({ onClose, onFullscreen, isFullscreen, onMediaClick }: Widg
           ))}
         </div>
 
+        <div style={{ position: 'relative', marginBottom: 6 }}>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search media..."
+            style={{ width: '100%', padding: '3px 8px 3px 20px', fontSize: 9, background: 'hsl(var(--bg-tertiary))', border: `1px solid ${search ? acc : adim}`, color: acc, fontFamily: mono, outline: 'none', boxSizing: 'border-box' as const }} />
+          <span style={{ position: 'absolute', left: 5, top: '50%', transform: 'translateY(-50%)', fontSize: 9, color: adim, pointerEvents: 'none' }}>⌕</span>
+          {search && <span onClick={() => setSearch('')} style={{ position: 'absolute', right: 5, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: adim, cursor: 'pointer' }}>×</span>}
+        </div>
+
         {filtered.length === 0 && (
           <div style={{ fontSize: 10, color: 'hsl(var(--text-dim))', marginBottom: 8 }}>
-            Nothing here yet.
+            {search ? 'No media matches your search.' : 'Nothing here yet.'}
           </div>
         )}
 
-        {/* In progress */}
         {inProgress.length > 0 && (
           <>
             <div style={{ fontSize: 9, color: 'hsl(var(--text-dim))', marginBottom: 4, letterSpacing: 1 }}>
@@ -129,7 +169,6 @@ const MediaWidget = ({ onClose, onFullscreen, isFullscreen, onMediaClick }: Widg
           </>
         )}
 
-        {/* Queued */}
         {queued.length > 0 && (
           <>
             <div style={{ fontSize: 9, color: 'hsl(var(--text-dim))', marginTop: 8, marginBottom: 4, letterSpacing: 1 }}>
@@ -145,7 +184,6 @@ const MediaWidget = ({ onClose, onFullscreen, isFullscreen, onMediaClick }: Widg
           </>
         )}
 
-        {/* Done */}
         {done.length > 0 && (
           <>
             <div style={{ fontSize: 9, color: 'hsl(var(--text-dim))', marginTop: 8, marginBottom: 4, letterSpacing: 1 }}>
@@ -171,13 +209,16 @@ const MediaWidget = ({ onClose, onFullscreen, isFullscreen, onMediaClick }: Widg
           </>
         )}
 
-        <button
-          className="topbar-btn"
-          style={{ width: '100%', fontSize: 10, marginTop: 8 }}
-          onClick={() => setShowAdd(true)}
-        >
-          + ADD
-        </button>
+        <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${adim}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <button onClick={() => setShowAdd(true)} style={{ background: 'transparent', border: 'none', fontFamily: mono, fontSize: 9, color: adim, cursor: 'pointer', letterSpacing: 1 }}
+            onMouseEnter={e => e.currentTarget.style.color = acc}
+            onMouseLeave={e => e.currentTarget.style.color = adim}
+          >+ ADD MEDIA</button>
+          <button onClick={onOpenLibrary} style={{ background: 'transparent', border: 'none', fontFamily: mono, fontSize: 9, color: adim, cursor: 'pointer', letterSpacing: 1 }}
+            onMouseEnter={e => e.currentTarget.style.color = acc}
+            onMouseLeave={e => e.currentTarget.style.color = adim}
+          >VIEW ALL ›</button>
+        </div>
       </WidgetWrapper>
 
       <Modal open={showAdd} onClose={() => setShowAdd(false)} title="ADD MEDIA" width={540}>

@@ -38,7 +38,7 @@ export default function ToolsWidget({ onClose, onFullscreen, isFullscreen, onOpe
   const [search, setSearch]     = useState('');
   const setFilterPersist = (f: FilterKey) => { setFilter(f); localStorage.setItem('widget-tools-filter', f); };
 
-  const { data: sessionCounts = {} } = useQuery({
+  const { data: sessionCounts, isLoading: sessionCountsLoading } = useQuery({
     queryKey: ['tool-session-counts'],
     staleTime: 0,
     queryFn: async () => {
@@ -53,7 +53,7 @@ export default function ToolsWidget({ onClose, onFullscreen, isFullscreen, onOpe
     },
   });
 
-  const { data: lastSessions = {} } = useQuery({
+  const { data: lastSessions, isLoading: lastSessionsLoading } = useQuery({
     queryKey: ['tool-last-session'],
     staleTime: 0,
     queryFn: async () => {
@@ -68,6 +68,15 @@ export default function ToolsWidget({ onClose, onFullscreen, isFullscreen, onOpe
     },
   });
 
+  const sessionCountMap = sessionCounts ?? {};
+  const lastSessionMap = lastSessions ?? {};
+  const filterLoading =
+    filter === 'recent'
+      ? lastSessionsLoading
+      : filter === 'most_used' || filter === 'new'
+        ? sessionCountsLoading
+        : false;
+
   const displayTools = useMemo(() => {
     const searchFn = (name: string) => !search.trim() || name.toLowerCase().includes(search.toLowerCase());
     const all = tools;
@@ -75,14 +84,14 @@ export default function ToolsWidget({ onClose, onFullscreen, isFullscreen, onOpe
       case 'active':
         return all.filter(t => t.active && searchFn(t.name)).sort((a, b) => b.level !== a.level ? b.level - a.level : b.xp - a.xp).slice(0, 8);
       case 'recent':
-        return all.filter(t => t.active && lastSessions[t.id] && searchFn(t.name)).sort((a, b) => String(lastSessions[b.id] ?? '').localeCompare(String(lastSessions[a.id] ?? ''))).slice(0, 8);
+        return all.filter(t => t.active && lastSessionMap[t.id] && searchFn(t.name)).sort((a, b) => String(lastSessionMap[b.id] ?? '').localeCompare(String(lastSessionMap[a.id] ?? ''))).slice(0, 8);
       case 'most_used':
-        return all.filter(t => t.active && (sessionCounts[t.id] ?? 0) > 0 && searchFn(t.name)).sort((a, b) => Number(sessionCounts[b.id] ?? 0) - Number(sessionCounts[a.id] ?? 0)).slice(0, 8);
+        return all.filter(t => t.active && (sessionCountMap[t.id] ?? 0) > 0 && searchFn(t.name)).sort((a, b) => Number(sessionCountMap[b.id] ?? 0) - Number(sessionCountMap[a.id] ?? 0)).slice(0, 8);
       case 'new':
-        return all.filter(t => t.active && !sessionCounts[t.id] && searchFn(t.name)).sort((a, b) => a.name.localeCompare(b.name)).slice(0, 8);
+        return all.filter(t => t.active && !sessionCountMap[t.id] && searchFn(t.name)).sort((a, b) => a.name.localeCompare(b.name)).slice(0, 8);
       default: return [];
     }
-  }, [tools, filter, sessionCounts, lastSessions, search]);
+  }, [tools, filter, sessionCountMap, lastSessionMap, search]);
 
   return (
     <WidgetWrapper title="TOOLS" onClose={onClose} onFullscreen={onFullscreen} isFullscreen={isFullscreen}>
@@ -106,7 +115,7 @@ export default function ToolsWidget({ onClose, onFullscreen, isFullscreen, onOpe
       </div>
 
       {/* Tool list */}
-      {isLoading ? (
+      {isLoading || filterLoading ? (
         <div style={{ fontSize: 10, color: dim }}>LOADING...</div>
       ) : displayTools.length === 0 ? (
         <div style={{ fontSize: 10, color: dim, opacity: 0.6 }}>
@@ -120,8 +129,8 @@ export default function ToolsWidget({ onClose, onFullscreen, isFullscreen, onOpe
           {displayTools.map(tool => {
             const { xpInLevel, xpForLevel } = getLevelFromXP(Number(tool.xp) || 0);
             const pct   = xpForLevel > 0 ? Math.round((xpInLevel / xpForLevel) * 100) : 0;
-            const count = sessionCounts[tool.id];
-            const last  = lastSessions[tool.id];
+            const count = sessionCountMap[tool.id];
+            const last  = lastSessionMap[tool.id];
 
             return (
               <div key={tool.id} onClick={() => onToolClick?.(tool.id)}

@@ -5,6 +5,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getDB } from '@/lib/db';
+import { refreshAppData } from '@/lib/refreshAppData';
 import { getLevelFromXP, XP_PER_MINUTE, LEGACY_RATE, SKILL_SHARE, STAT_SHARE, MASTER_SHARE } from '@/services/xpService';
 
 const mono = "'IBM Plex Mono', monospace";
@@ -206,9 +207,10 @@ async function awardNewSessionXP(
 interface Props {
   sessionId: string;
   onDeleted?: () => void;
+  onClose?: () => void;
 }
 
-export default function SessionDetailDrawer({ sessionId, onDeleted }: Props) {
+export default function SessionDetailDrawer({ sessionId, onDeleted, onClose }: Props) {
   const queryClient = useQueryClient();
   const [editing, setEditing]         = useState(false);
   const [editDuration, setEditDuration] = useState('');
@@ -266,8 +268,8 @@ export default function SessionDetailDrawer({ sessionId, onDeleted }: Props) {
       // 2. Award new XP
       await awardNewSessionXP(db, session, newDuration, editNotes.trim() || null, editLegacy);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries();
+    onSuccess: async () => {
+      await refreshAppData(queryClient);
       setEditing(false);
     },
   });
@@ -281,8 +283,8 @@ export default function SessionDetailDrawer({ sessionId, onDeleted }: Props) {
       // 2. Delete session record
       await db.exec(`DELETE FROM sessions WHERE id = '${session.id}';`);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries();
+    onSuccess: async () => {
+      await refreshAppData(queryClient);
       onDeleted?.();
     },
   });
@@ -309,8 +311,36 @@ export default function SessionDetailDrawer({ sessionId, onDeleted }: Props) {
 
       {/* Header */}
       <div style={{ padding: '16px 20px 12px', borderBottom: `1px solid rgba(153,104,0,0.3)`, flexShrink: 0 }}>
-        <div style={{ fontFamily: vt, fontSize: 22, color: acc, marginBottom: 2 }}>
-          {session.skill_name.toUpperCase()}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 2 }}>
+          <div style={{ fontFamily: vt, fontSize: 22, color: acc, flex: 1, minWidth: 0 }}>
+            {session.skill_name.toUpperCase()}
+          </div>
+          {onClose && (
+            <button
+              onClick={onClose}
+              style={{
+                background: 'transparent',
+                border: `1px solid ${adim}`,
+                color: adim,
+                fontFamily: mono,
+                fontSize: 10,
+                padding: '3px 10px',
+                cursor: 'pointer',
+                letterSpacing: 1,
+                flexShrink: 0,
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.borderColor = acc;
+                e.currentTarget.style.color = acc;
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.borderColor = adim;
+                e.currentTarget.style.color = adim;
+              }}
+            >
+              CLOSE
+            </button>
+          )}
         </div>
         <div style={{ fontFamily: mono, fontSize: 9, color: dim, letterSpacing: 1 }}>
           {date}  {time}  ·  {durLabel}
@@ -320,6 +350,40 @@ export default function SessionDetailDrawer({ sessionId, onDeleted }: Props) {
 
       {/* Scrollable body */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
+
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: showDelete ? 10 : 16 }}>
+          <button onClick={editing ? () => setEditing(false) : startEdit}
+            style={{ flex: 1, height: 32, border: `1px solid ${editing ? acc : adim}`, background: 'transparent', color: editing ? acc : adim, fontFamily: mono, fontSize: 9, cursor: 'pointer', letterSpacing: 1 }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = acc; e.currentTarget.style.color = acc; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = editing ? acc : adim; e.currentTarget.style.color = editing ? acc : adim; }}>
+            {editing ? '[ CANCEL ]' : '[ EDIT ]'}
+          </button>
+          <button onClick={() => setShowDelete(v => !v)}
+            style={{ flex: 1, height: 32, border: `1px solid rgba(153,104,0,0.4)`, background: 'transparent', color: dim, fontFamily: mono, fontSize: 9, cursor: 'pointer', letterSpacing: 1 }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = red; e.currentTarget.style.color = red; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(153,104,0,0.4)'; e.currentTarget.style.color = dim; }}>
+            [ DELETE ]
+          </button>
+        </div>
+
+        {showDelete && (
+          <div style={{ border: `1px solid ${red}`, padding: '10px 12px', background: 'rgba(255,68,0,0.06)', marginBottom: 16 }}>
+            <div style={{ fontFamily: mono, fontSize: 10, color: red, marginBottom: 8 }}>
+              DELETE SESSION? All XP will be reversed. This cannot be undone.
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => deleteSession.mutate()} disabled={deleteSession.isPending}
+                style={{ flex: 1, height: 28, background: 'transparent', border: `1px solid ${red}`, color: red, fontFamily: mono, fontSize: 9, cursor: 'pointer' }}>
+                {deleteSession.isPending ? 'DELETING...' : '[ CONFIRM DELETE ]'}
+              </button>
+              <button onClick={() => setShowDelete(false)}
+                style={{ flex: 1, height: 28, background: 'transparent', border: `1px solid ${adim}`, color: dim, fontFamily: mono, fontSize: 9, cursor: 'pointer' }}>
+                [ CANCEL ]
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* XP breakdown */}
         <div style={{ fontSize: 9, color: adim, letterSpacing: 2, marginBottom: 8 }}>// XP AWARDED</div>
@@ -414,41 +478,6 @@ export default function SessionDetailDrawer({ sessionId, onDeleted }: Props) {
         )}
       </div>
 
-      {/* Actions */}
-      <div style={{ padding: '12px 20px 16px', borderTop: `1px solid rgba(153,104,0,0.3)`, flexShrink: 0 }}>
-        <div style={{ display: 'flex', gap: 8, marginBottom: showDelete ? 10 : 0 }}>
-          <button onClick={editing ? () => setEditing(false) : startEdit}
-            style={{ flex: 1, height: 32, border: `1px solid ${editing ? acc : adim}`, background: 'transparent', color: editing ? acc : adim, fontFamily: mono, fontSize: 9, cursor: 'pointer', letterSpacing: 1 }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = acc; e.currentTarget.style.color = acc; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = editing ? acc : adim; e.currentTarget.style.color = editing ? acc : adim; }}>
-            {editing ? '[ CANCEL ]' : '[ EDIT ]'}
-          </button>
-          <button onClick={() => setShowDelete(v => !v)}
-            style={{ flex: 1, height: 32, border: `1px solid rgba(153,104,0,0.4)`, background: 'transparent', color: dim, fontFamily: mono, fontSize: 9, cursor: 'pointer', letterSpacing: 1 }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = red; e.currentTarget.style.color = red; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(153,104,0,0.4)'; e.currentTarget.style.color = dim; }}>
-            [ DELETE ]
-          </button>
-        </div>
-
-        {showDelete && (
-          <div style={{ border: `1px solid ${red}`, padding: '10px 12px', background: 'rgba(255,68,0,0.06)' }}>
-            <div style={{ fontFamily: mono, fontSize: 10, color: red, marginBottom: 8 }}>
-              DELETE SESSION? All XP will be reversed. This cannot be undone.
-            </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => deleteSession.mutate()} disabled={deleteSession.isPending}
-                style={{ flex: 1, height: 28, background: 'transparent', border: `1px solid ${red}`, color: red, fontFamily: mono, fontSize: 9, cursor: 'pointer' }}>
-                {deleteSession.isPending ? 'DELETING...' : '[ CONFIRM DELETE ]'}
-              </button>
-              <button onClick={() => setShowDelete(false)}
-                style={{ flex: 1, height: 28, background: 'transparent', border: `1px solid ${adim}`, color: dim, fontFamily: mono, fontSize: 9, cursor: 'pointer' }}>
-                [ CANCEL ]
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
     </div>
   );
 }

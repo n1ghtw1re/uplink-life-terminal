@@ -43,7 +43,7 @@ export default function SkillsWidget({ onClose, onFullscreen, isFullscreen, onOp
   const setFilterPersist = (f: FilterKey) => { setFilter(f); localStorage.setItem('widget-skills-filter', f); };
 
   // ── Session counts per skill (for MOST USED) ─────────────
-  const { data: sessionCounts = {} } = useQuery({
+  const { data: sessionCounts, isLoading: sessionCountsLoading } = useQuery({
     queryKey: ['skill-session-counts'],
     staleTime: 0,
     queryFn: async () => {
@@ -56,7 +56,7 @@ export default function SkillsWidget({ onClose, onFullscreen, isFullscreen, onOp
   });
 
   // ── Last session date per skill (for RECENT) ─────────────
-  const { data: lastSessions = {} } = useQuery({
+  const { data: lastSessions, isLoading: lastSessionsLoading } = useQuery({
     queryKey: ['skill-last-session'],
     staleTime: 0,
     queryFn: async () => {
@@ -69,6 +69,15 @@ export default function SkillsWidget({ onClose, onFullscreen, isFullscreen, onOp
   });
 
   // ── Filtered + sorted list ────────────────────────────────
+  const sessionCountMap = sessionCounts ?? {};
+  const lastSessionMap = lastSessions ?? {};
+  const filterLoading =
+    filter === 'recent'
+      ? lastSessionsLoading
+      : filter === 'most_used' || filter === 'new'
+        ? sessionCountsLoading
+        : false;
+
   const displaySkills = useMemo(() => {
     let all = (skills ?? []);
     if (search.trim()) all = all.filter(s => s.name.toLowerCase().includes(search.toLowerCase()));
@@ -86,30 +95,30 @@ export default function SkillsWidget({ onClose, onFullscreen, isFullscreen, onOp
 
       case 'recent':
         return all
-          .filter(s => (s as any).active !== false && lastSessions[s.id])
+          .filter(s => (s as any).active !== false && lastSessionMap[s.id])
           .sort((a, b) => {
-            const da = String(lastSessions[a.id] ?? '');
-            const db = String(lastSessions[b.id] ?? '');
+            const da = String(lastSessionMap[a.id] ?? '');
+            const db = String(lastSessionMap[b.id] ?? '');
             return db.localeCompare(da);
           })
           .slice(0, 8);
 
       case 'most_used':
         return all
-          .filter(s => (s as any).active !== false && (sessionCounts[s.id] ?? 0) > 0)
-          .sort((a, b) => Number(sessionCounts[b.id] ?? 0) - Number(sessionCounts[a.id] ?? 0))
+          .filter(s => (s as any).active !== false && (sessionCountMap[s.id] ?? 0) > 0)
+          .sort((a, b) => Number(sessionCountMap[b.id] ?? 0) - Number(sessionCountMap[a.id] ?? 0))
           .slice(0, 8);
 
       case 'new':
         return all
-          .filter(s => (s as any).active !== false && !(sessionCounts[s.id]))
+          .filter(s => (s as any).active !== false && !(sessionCountMap[s.id]))
           .sort((a, b) => a.name.localeCompare(b.name))
           .slice(0, 8);
 
       default:
         return [];
     }
-  }, [skills, filter, sessionCounts, lastSessions, search]);
+  }, [skills, filter, sessionCountMap, lastSessionMap, search]);
 
   return (
     <WidgetWrapper title="SKILLS" onClose={onClose} onFullscreen={onFullscreen} isFullscreen={isFullscreen}>
@@ -135,7 +144,7 @@ export default function SkillsWidget({ onClose, onFullscreen, isFullscreen, onOp
       </div>
 
       {/* Skill list */}
-      {isLoading ? (
+      {isLoading || filterLoading ? (
         <div style={{ fontSize: 10, color: dim }}>LOADING...</div>
       ) : displaySkills.length === 0 ? (
         <div style={{ fontSize: 10, color: dim, opacity: 0.6 }}>
@@ -150,8 +159,8 @@ export default function SkillsWidget({ onClose, onFullscreen, isFullscreen, onOp
             const { level, xpInLevel, xpForLevel } = getStatLevel(skill.xp);
             const pct      = xpForLevel > 0 ? Math.round((xpInLevel / xpForLevel) * 100) : 100;
             const statIcon = STAT_META[skill.statKeys[0] as StatKey]?.icon ?? '';
-            const count    = sessionCounts[skill.id];
-            const last     = lastSessions[skill.id];
+            const count    = sessionCountMap[skill.id];
+            const last     = lastSessionMap[skill.id];
 
             return (
               <div key={skill.id} onClick={() => onSkillClick?.(skill.id)}

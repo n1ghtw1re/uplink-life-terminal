@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { refreshAppData } from '@/lib/refreshAppData';
 // xpService imported dynamically in handlers
 import { StatKey, STAT_META } from '@/types';
 
@@ -378,11 +379,7 @@ export default function CourseDetailDrawer({ courseId, onClose }: Props) {
       }
     }
 
-    queryClient.invalidateQueries({ queryKey: ['course', courseId] });
-    queryClient.invalidateQueries({ queryKey: ['courses'] });
-    queryClient.invalidateQueries({ queryKey: ['courses-all'] });
-    queryClient.invalidateQueries({ queryKey: ['stats'] });
-    queryClient.invalidateQueries({ queryKey: ['operator'] });
+    await refreshAppData(queryClient);
   };
 
   // ── Tick lesson complete ──────────────────────────────────
@@ -444,9 +441,7 @@ export default function CourseDetailDrawer({ courseId, onClose }: Props) {
         );
         await updateProgress(updatedSections);
 
-        queryClient.invalidateQueries({ queryKey: ['stats'] });
-        queryClient.invalidateQueries({ queryKey: ['operator'] });
-        queryClient.invalidateQueries({ queryKey: ['xp-recent'] });
+        await refreshAppData(queryClient);
       } else {
         // Unticking — just update progress
         const updatedSections = (sections ?? []).map(s =>
@@ -465,9 +460,9 @@ export default function CourseDetailDrawer({ courseId, onClose }: Props) {
         }
       }
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries();
-    },
+      onSuccess: async () => {
+        await refreshAppData(queryClient);
+      },
   });
 
   // ── Tick section directly (only when it has no lessons) ──
@@ -505,11 +500,11 @@ export default function CourseDetailDrawer({ courseId, onClose }: Props) {
         s.id === section.id ? { ...s, completed_at: completedAt } : s
       );
       await updateProgress(updatedSections);
-      queryClient.invalidateQueries();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries();
-    },
+        await refreshAppData(queryClient);
+      },
+      onSuccess: async () => {
+        await refreshAppData(queryClient);
+      },
   });
 
   // ── Add lesson ────────────────────────────────────────────
@@ -601,10 +596,10 @@ export default function CourseDetailDrawer({ courseId, onClose }: Props) {
         ]
       );
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries();
-      setEditing(false);
-    },
+      onSuccess: async () => {
+        await refreshAppData(queryClient);
+        setEditing(false);
+      },
   });
 
   // ── Delete course ─────────────────────────────────────────
@@ -613,10 +608,10 @@ export default function CourseDetailDrawer({ courseId, onClose }: Props) {
       const db = await import('@/lib/db').then(m => m.getDB());
       await db.exec(`DELETE FROM courses WHERE id = '${courseId}'`);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries();
-      onClose?.();
-    },
+      onSuccess: async () => {
+        await refreshAppData(queryClient);
+        onClose?.();
+      },
   });
 
   const startEdit = () => {

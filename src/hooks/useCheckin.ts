@@ -1,6 +1,7 @@
 // src/hooks/useCheckin.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getTodayCheckin, getHabits, getHabitLogsToday, submitCheckin } from '@/services/checkinService';
+import { refreshAppData } from '@/lib/refreshAppData';
 
 // ── Default export — combined hook ───────────────────────────
 
@@ -49,12 +50,8 @@ export function useSubmitCheckin() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: submitCheckin,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['checkin-today'] });
-      queryClient.invalidateQueries({ queryKey: ['habit-logs-today'] });
-      queryClient.invalidateQueries({ queryKey: ['habits'] });
-      queryClient.invalidateQueries({ queryKey: ['operator'] });
-      queryClient.invalidateQueries({ queryKey: ['stats'] });
+    onSuccess: async () => {
+      await refreshAppData(queryClient);
     },
   });
 }

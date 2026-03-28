@@ -84,6 +84,7 @@ async function initSchema(db: PGlite) {
       id          TEXT PRIMARY KEY,
       name        TEXT NOT NULL,
       category    TEXT NOT NULL,
+      description TEXT,
       subcategory TEXT,
       active      BOOLEAN NOT NULL DEFAULT FALSE,
       sort_order  INTEGER NOT NULL DEFAULT 0
@@ -376,6 +377,9 @@ async function initSchema(db: PGlite) {
 
   // ── Migrations — safe to run repeatedly ─────────────────────────────────
   // ALTER TABLE with IF NOT EXISTS is idempotent — safe on every boot
+  await db.exec(
+    `ALTER TABLE lifepaths ADD COLUMN IF NOT EXISTS description TEXT`
+  );
   await db.exec(
     `ALTER TABLE courses ADD COLUMN IF NOT EXISTS linked_media_ids JSONB NOT NULL DEFAULT '[]'`
   );

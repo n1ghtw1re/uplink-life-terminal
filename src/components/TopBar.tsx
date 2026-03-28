@@ -6,11 +6,10 @@ import ProgressBar from './ProgressBar';
 interface TopBarProps {
   onOpenLog: () => void;
   onOpenCheckin: () => void;
-  onOpenCharSheet: () => void;
   onOpenSearch: () => void;
 }
 
-const TopBar = ({ onOpenLog, onOpenCheckin, onOpenCharSheet, onOpenSearch }: TopBarProps) => {
+const TopBar = ({ onOpenLog, onOpenCheckin, onOpenSearch }: TopBarProps) => {
   const [time, setTime] = useState(new Date());
   const { user } = useAuth();
   const { data: op, isLoading } = useOperator(user?.id);
@@ -25,12 +24,12 @@ const TopBar = ({ onOpenLog, onOpenCheckin, onOpenCharSheet, onOpenSearch }: Top
   const dateStr = `${time.getFullYear()}.${fmt(time.getMonth() + 1)}.${fmt(time.getDate())}`;
 
   const level      = op?.level      ?? 1;
-  const title      = op?.title      ?? 'INITIALISING';
+  const title      = op?.levelTitle ?? 'INITIALISING';
   const xpInLevel  = op?.xpInLevel  ?? 0;
   const xpForLevel = op?.xpForLevel ?? 500;
   const streak     = op?.streak     ?? 0;
-  const multiplier = op?.multiplier ?? 1.0;
-  const totalXP    = op?.totalXP    ?? 0;
+  const multiplier = streak >= 30 ? 3.0 : streak >= 14 ? 2.0 : streak >= 7 ? 1.5 : 1.0;
+  const totalXP    = op?.totalXp    ?? 0;
 
   const multClass = multiplier >= 3 ? 'pulse-glow' : multiplier >= 2 ? 'text-glow-bright' : '';
 
@@ -77,9 +76,6 @@ const TopBar = ({ onOpenLog, onOpenCheckin, onOpenCharSheet, onOpenSearch }: Top
           ✚ LOG <span style={{ fontSize: 9, opacity: 0.5 }}>SPACE</span>
         </button>
         <button className="topbar-btn" onClick={onOpenCheckin}>⬡ CHECK-IN</button>
-        <button className="topbar-btn" onClick={onOpenCharSheet}>
-          ◈ CHAR <span style={{ fontSize: 9, opacity: 0.5 }}>C</span>
-        </button>
       </div>
       <span style={{ color: 'hsl(var(--text-dim))', opacity: 0.5 }}>│</span>
 

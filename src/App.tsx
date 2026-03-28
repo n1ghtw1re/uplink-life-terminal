@@ -10,6 +10,7 @@ import Index from './pages/Index';
 import XPFloatLayer from '@/components/effects/XPFloatLayer';
 import LevelUpAnimation from '@/components/effects/LevelUpAnimation';
 import BootSequence from '@/components/effects/BootSequence';
+import ClockAlertOverlay from '@/components/effects/ClockAlertOverlay';
 
 type Stage = 'INIT' | 'BOOTING' | 'READY';
 
@@ -30,10 +31,11 @@ function AppInner() {
     }
   }, [ready]);
 
-  // Safety fallback — if boot sequence never calls onComplete, go READY after 8s
+  // Safety fallback — the full boot animation takes well over 8s, so keep this
+  // comfortably above the normal runtime and only use it as a true failsafe.
   useEffect(() => {
     if (stage !== 'BOOTING') return;
-    const t = setTimeout(() => setStage('READY'), 8000);
+    const t = setTimeout(() => setStage('READY'), 20000);
     return () => clearTimeout(t);
   }, [stage]);
 
@@ -55,6 +57,7 @@ function AppInner() {
       )}
       <XPFloatLayer />
       <LevelUpAnimation />
+      <ClockAlertOverlay />
     </>
   );
 }

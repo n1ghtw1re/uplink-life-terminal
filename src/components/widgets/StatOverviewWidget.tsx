@@ -1,15 +1,13 @@
 // ============================================================
 // src/components/widgets/StatOverviewWidget.tsx
 // ============================================================
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useStats } from '@/hooks/useStats';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import WidgetWrapper from '../WidgetWrapper';
 import ProgressBar from '../ProgressBar';
-import Modal from '../Modal';
-import AddSkillModal from '../modals/AddSkillModal';
 
 interface WidgetProps {
   onClose?: () => void;
@@ -18,10 +16,17 @@ interface WidgetProps {
   onStatClick?: (statKey: string) => void;
 }
 
+type SortKey = 'alpha' | 'level';
+
+const mono = "'IBM Plex Mono', monospace";
+const acc = 'hsl(var(--accent))';
+const adim = 'hsl(var(--accent-dim))';
+const dim = 'hsl(var(--text-dim))';
+
 const StatOverviewWidget = ({ onClose, onFullscreen, isFullscreen, onStatClick }: WidgetProps) => {
   const { user } = useAuth();
   const { data: stats } = useStats(user?.id);
-  const [showAddSkill, setShowAddSkill] = useState(false);
+  const [sortKey, setSortKey] = useState<SortKey>('level');
 
   const { data: toolProg } = useQuery({
     queryKey: ['tool-progress'],
@@ -51,11 +56,45 @@ const StatOverviewWidget = ({ onClose, onFullscreen, isFullscreen, onStatClick }
   });
 
   const classDisplay = classData?.custom_class_name ?? '---';
+  const sortedStats = useMemo(() => {
+    const allStats = [...(stats ?? [])];
+    if (sortKey === 'alpha') {
+      return allStats.sort((a, b) => a.name.localeCompare(b.name));
+    }
+    return allStats.sort((a, b) => {
+      if (b.level !== a.level) return b.level - a.level;
+      if (b.xp !== a.xp) return b.xp - a.xp;
+      return a.name.localeCompare(b.name);
+    });
+  }, [stats, sortKey]);
 
   return (
-    <>
-      <WidgetWrapper title="STAT OVERVIEW" onClose={onClose} onFullscreen={onFullscreen} isFullscreen={isFullscreen}>
-        {(stats ?? []).map(s => (
+    <WidgetWrapper title="STAT OVERVIEW" onClose={onClose} onFullscreen={onFullscreen} isFullscreen={isFullscreen}>
+        <div style={{ display: 'flex', gap: 4, marginBottom: 10, flexWrap: 'wrap' }}>
+          {([
+            { key: 'alpha', label: 'ALPHA' },
+            { key: 'level', label: 'LEVEL' },
+          ] as const).map(option => (
+            <button
+              key={option.key}
+              onClick={() => setSortKey(option.key)}
+              style={{
+                padding: '2px 8px',
+                fontSize: 9,
+                fontFamily: mono,
+                cursor: 'pointer',
+                letterSpacing: 1,
+                border: `1px solid ${sortKey === option.key ? acc : adim}`,
+                background: sortKey === option.key ? 'rgba(255,176,0,0.1)' : 'transparent',
+                color: sortKey === option.key ? acc : dim,
+              }}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+
+        {sortedStats.map(s => (
           <div
             key={s.key}
             style={{
@@ -86,14 +125,6 @@ const StatOverviewWidget = ({ onClose, onFullscreen, isFullscreen, onStatClick }
         )}
 
         <div style={{ marginTop: 8, borderTop: '1px solid hsl(var(--accent-dim))', paddingTop: 8 }}>
-          <button
-            className="topbar-btn"
-            style={{ width: '100%', fontSize: 10, marginBottom: 8 }}
-            onClick={() => setShowAddSkill(true)}
-          >
-            + ADD SKILL
-          </button>
-
           <div style={{ fontSize: 10 }}>
             <div style={{ color: 'hsl(var(--text-dim))' }}>
               CLASS: <span style={{ color: 'hsl(var(--accent))' }}>{classDisplay}</span>
@@ -111,11 +142,6 @@ const StatOverviewWidget = ({ onClose, onFullscreen, isFullscreen, onStatClick }
           </div>
         </div>
       </WidgetWrapper>
-
-      <Modal open={showAddSkill} onClose={() => setShowAddSkill(false)} title="ADD SKILL" width={680}>
-        <AddSkillModal onClose={() => setShowAddSkill(false)} />
-      </Modal>
-    </>
   );
 };
 

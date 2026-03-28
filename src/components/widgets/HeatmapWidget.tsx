@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOperator } from '@/hooks/useOperator';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { getDB } from '@/lib/db';
 import WidgetWrapper from '../WidgetWrapper';
 
 const DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -20,16 +20,19 @@ const HeatmapWidget = ({ onClose, onFullscreen, isFullscreen }: WidgetProps) => 
     queryFn: async () => {
       const since = new Date();
       since.setDate(since.getDate() - (WEEKS * 7));
-      const { data, error } = await supabase
-        .from('checkins')
-        .select('date, stats_checked')
-        .eq('user_id', user!.id)
-        .gte('date', since.toISOString().slice(0, 10))
-        .order('date');
-      if (error) throw error;
-      return data ?? [];
+      const db = await getDB();
+      const res = await db.query<{ checked_date: string; stats_checked: string[] | string }>(
+        `SELECT checked_date, stats_checked
+         FROM checkins
+         WHERE checked_date >= $1
+         ORDER BY checked_date;`,
+        [since.toISOString().slice(0, 10)]
+      );
+      return res.rows.map((row) => ({
+        date: row.checked_date,
+        stats_checked: Array.isArray(row.stats_checked) ? row.stats_checked : JSON.parse((row.stats_checked as string) || '[]'),
+      }));
     },
-    enabled: !!user?.id,
   });
 
   // Build 7×12 grid (rows=days of week, cols=weeks)

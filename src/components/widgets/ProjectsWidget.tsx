@@ -37,6 +37,7 @@ interface Props {
 export default function ProjectsWidget({ onClose, onFullscreen, isFullscreen, onOpenProjects, onProjectClick }: Props) {
   const [filter, setFilter] = useState<FilterKey>('active');
   const [showAdd, setShowAdd] = useState(false);
+  const [search, setSearch] = useState('');
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
@@ -61,16 +62,24 @@ export default function ProjectsWidget({ onClose, onFullscreen, isFullscreen, on
   });
 
   const display = useMemo(() => {
+    const searchFn = (value: string | null | undefined) => !search.trim() || (value ?? '').toLowerCase().includes(search.toLowerCase());
+    const filteredProjects = projects.filter(p => searchFn(p.name) || searchFn(p.type) || searchFn(p.status));
     switch (filter) {
-      case 'active':   return projects.filter(p => p.status === 'ACTIVE').slice(0, 8);
-      case 'complete': return projects.filter(p => p.status === 'COMPLETE').slice(0, 8);
-      case 'recent':   return [...projects].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 8);
-      default:         return projects.slice(0, 8);
+      case 'active':   return filteredProjects.filter(p => p.status === 'ACTIVE').slice(0, 8);
+      case 'complete': return filteredProjects.filter(p => p.status === 'COMPLETE').slice(0, 8);
+      case 'recent':   return [...filteredProjects].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 8);
+      default:         return filteredProjects.slice(0, 8);
     }
-  }, [projects, filter]);
+  }, [projects, filter, search]);
 
   return (
     <WidgetWrapper title="PROJECTS" onClose={onClose} onFullscreen={onFullscreen} isFullscreen={isFullscreen}>
+      <div style={{ position: 'relative', marginBottom: 6 }}>
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search projects..."
+          style={{ width: '100%', padding: '3px 8px 3px 20px', fontSize: 9, background: 'hsl(var(--bg-tertiary))', border: `1px solid ${search ? acc : adim}`, color: acc, fontFamily: mono, outline: 'none', boxSizing: 'border-box' as const }} />
+        <span style={{ position: 'absolute', left: 5, top: '50%', transform: 'translateY(-50%)', fontSize: 9, color: adim, pointerEvents: 'none' }}>⌕</span>
+        {search && <span onClick={() => setSearch('')} style={{ position: 'absolute', right: 5, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: adim, cursor: 'pointer' }}>×</span>}
+      </div>
       <div style={{ display: 'flex', gap: 4, marginBottom: 10, flexWrap: 'wrap' }}>
         {FILTER_OPTIONS.map(f => (
           <button key={f.key} onClick={() => setFilter(f.key)} style={{ padding: '2px 8px', fontSize: 9, fontFamily: mono, cursor: 'pointer', letterSpacing: 1, border: `1px solid ${filter === f.key ? acc : adim}`, background: filter === f.key ? 'rgba(255,176,0,0.1)' : 'transparent', color: filter === f.key ? acc : dim }}>{f.label}</button>
@@ -78,7 +87,9 @@ export default function ProjectsWidget({ onClose, onFullscreen, isFullscreen, on
       </div>
 
       {display.length === 0 ? (
-        <div style={{ fontSize: 10, color: dim, opacity: 0.6 }}>No projects{filter === 'active' ? ' active' : filter === 'complete' ? ' completed' : ''} yet.</div>
+        <div style={{ fontSize: 10, color: dim, opacity: 0.6 }}>
+          {search ? 'No projects match your search.' : `No projects${filter === 'active' ? ' active' : filter === 'complete' ? ' completed' : ''} yet.`}
+        </div>
       ) : display.map(proj => {
         const objs = objCounts[proj.id];
         const pct  = objs && objs.total > 0 ? Math.round((objs.done / objs.total) * 100) : null;

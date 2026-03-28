@@ -35,7 +35,7 @@ export default function AugmentsWidget({ onClose, onFullscreen, isFullscreen, on
   const [search, setSearch]         = useState('');
   const setFilterPersist = (f: FilterKey) => { setFilter(f); localStorage.setItem('widget-augments-filter', f); };
 
-  const { data: sessionCounts = {} } = useQuery({
+  const { data: sessionCounts, isLoading: sessionCountsLoading } = useQuery({
     queryKey: ['augment-session-counts'],
     staleTime: 0,
     queryFn: async () => {
@@ -50,7 +50,7 @@ export default function AugmentsWidget({ onClose, onFullscreen, isFullscreen, on
     },
   });
 
-  const { data: lastSessions = {} } = useQuery({
+  const { data: lastSessions, isLoading: lastSessionsLoading } = useQuery({
     queryKey: ['augment-last-session'],
     staleTime: 0,
     queryFn: async () => {
@@ -65,6 +65,15 @@ export default function AugmentsWidget({ onClose, onFullscreen, isFullscreen, on
     },
   });
 
+  const sessionCountMap = sessionCounts ?? {};
+  const lastSessionMap = lastSessions ?? {};
+  const filterLoading =
+    filter === 'recent'
+      ? lastSessionsLoading
+      : filter === 'most_used' || filter === 'new'
+        ? sessionCountsLoading
+        : false;
+
   const displayAugments = useMemo(() => {
     const searchFn = (name: string) => !search.trim() || name.toLowerCase().includes(search.toLowerCase());
     const all = augments ?? [];
@@ -72,14 +81,14 @@ export default function AugmentsWidget({ onClose, onFullscreen, isFullscreen, on
       case 'active':
         return all.filter(a => a.active && searchFn(a.name)).sort((a, b) => b.level !== a.level ? b.level - a.level : b.xp - a.xp).slice(0, 8);
       case 'recent':
-        return all.filter(a => a.active && lastSessions[a.id] && searchFn(a.name)).sort((a, b) => String(lastSessions[b.id] ?? '').localeCompare(String(lastSessions[a.id] ?? ''))).slice(0, 8);
+        return all.filter(a => a.active && lastSessionMap[a.id] && searchFn(a.name)).sort((a, b) => String(lastSessionMap[b.id] ?? '').localeCompare(String(lastSessionMap[a.id] ?? ''))).slice(0, 8);
       case 'most_used':
-        return all.filter(a => a.active && (sessionCounts[a.id] ?? 0) > 0 && searchFn(a.name)).sort((a, b) => (sessionCounts[b.id] ?? 0) - (sessionCounts[a.id] ?? 0)).slice(0, 8);
+        return all.filter(a => a.active && (sessionCountMap[a.id] ?? 0) > 0 && searchFn(a.name)).sort((a, b) => (sessionCountMap[b.id] ?? 0) - (sessionCountMap[a.id] ?? 0)).slice(0, 8);
       case 'new':
-        return all.filter(a => a.active && !sessionCounts[a.id] && searchFn(a.name)).sort((a, b) => a.name.localeCompare(b.name)).slice(0, 8);
+        return all.filter(a => a.active && !sessionCountMap[a.id] && searchFn(a.name)).sort((a, b) => a.name.localeCompare(b.name)).slice(0, 8);
       default: return [];
     }
-  }, [augments, filter, sessionCounts, lastSessions, search]);
+  }, [augments, filter, sessionCountMap, lastSessionMap, search]);
 
   return (
     <WidgetWrapper title="AUGMENTS" onClose={onClose} onFullscreen={onFullscreen} isFullscreen={isFullscreen}>
@@ -102,7 +111,7 @@ export default function AugmentsWidget({ onClose, onFullscreen, isFullscreen, on
         ))}
       </div>
 
-      {isLoading ? (
+      {isLoading || filterLoading ? (
         <div style={{ fontSize: 10, color: dim }}>LOADING...</div>
       ) : displayAugments.length === 0 ? (
         <div style={{ fontSize: 10, color: dim, opacity: 0.6 }}>
@@ -116,8 +125,8 @@ export default function AugmentsWidget({ onClose, onFullscreen, isFullscreen, on
           {displayAugments.map(aug => {
             const { level, xpInLevel, xpForLevel } = getLevelFromXP(Number(aug.xp) || 0);
             const pct   = xpForLevel > 0 ? Math.round((xpInLevel / xpForLevel) * 100) : 0;
-            const count = sessionCounts[aug.id];
-            const last  = lastSessions[aug.id];
+            const count = sessionCountMap[aug.id];
+            const last  = lastSessionMap[aug.id];
             return (
               <div key={aug.id} onClick={() => onAugmentClick?.(aug.id)}
                 style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7, cursor: onAugmentClick ? 'pointer' : 'default' }}

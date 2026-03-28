@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getDB } from '@/lib/db';
+import { refreshAppData } from '@/lib/refreshAppData';
 import { toast } from '@/hooks/use-toast';
 
 const mono  = "'IBM Plex Mono', monospace";
@@ -200,7 +201,10 @@ export default function ProjectDetailDrawer({ projectId, onClose }: Props) {
       const now = obj.completed_at ? null : new Date().toISOString();
       await db.query(`UPDATE project_milestones SET completed_at = $1 WHERE id = $2;`, [now, obj.id]);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project-objectives', projectId] }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['project-objectives', projectId] });
+      await refreshAppData(queryClient);
+    },
   });
 
   const addObjective = useMutation({
@@ -213,7 +217,10 @@ export default function ProjectDetailDrawer({ projectId, onClose }: Props) {
       );
       setNewObjTitle('');
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project-objectives', projectId] }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['project-objectives', projectId] });
+      await refreshAppData(queryClient);
+    },
   });
 
   const deleteObjective = useMutation({
@@ -221,7 +228,10 @@ export default function ProjectDetailDrawer({ projectId, onClose }: Props) {
       const db = await getDB();
       await db.exec(`DELETE FROM project_milestones WHERE id = '${id}'`);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project-objectives', projectId] }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['project-objectives', projectId] });
+      await refreshAppData(queryClient);
+    },
   });
 
   const saveEdit = useMutation({
@@ -236,11 +246,11 @@ export default function ProjectDetailDrawer({ projectId, onClose }: Props) {
          JSON.stringify(editMediaIds), JSON.stringify(editCourseIds), projectId]
       );
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries();
-      setEditing(false);
-      toast({ title: '✓ PROJECT UPDATED' });
-    },
+      onSuccess: async () => {
+        await refreshAppData(queryClient);
+        setEditing(false);
+        toast({ title: '✓ PROJECT UPDATED' });
+      },
   });
 
   const deleteProject = useMutation({
@@ -248,10 +258,10 @@ export default function ProjectDetailDrawer({ projectId, onClose }: Props) {
       const db = await getDB();
       await db.exec(`DELETE FROM projects WHERE id = '${projectId}'`);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
-      onClose?.();
-    },
+      onSuccess: async () => {
+        await refreshAppData(queryClient);
+        onClose?.();
+      },
   });
 
   const startEdit = () => {

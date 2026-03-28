@@ -3,9 +3,10 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getDB } from '@/lib/db';
 import { useSkills } from '@/hooks/useSkills';
-import { previewXP, awardSessionXP, awardBonusXP } from '@/services/xpService';
+import { previewXP, awardSessionXP, awardBonusXP, getLevelFromXP } from '@/services/xpService';
 import { triggerXPFloat } from '@/components/effects/XPFloatLayer';
 import { triggerLevelUp } from '@/components/effects/LevelUpAnimation';
+import { refreshAppData } from '@/lib/refreshAppData';
 import { STAT_META, StatKey } from '@/types';
 import { toast } from '@/hooks/use-toast';
 
@@ -62,6 +63,27 @@ function SectionDivider({ label }: { label: string }) {
       <div style={{ height: 1, flex: 1, background: 'rgba(153,104,0,0.3)' }} />
     </div>
   );
+}
+
+function buildSessionStatSplit(
+  keys: StatKey[],
+  preferredSplit?: number[],
+  existingSplit?: { stat: StatKey; percent: number }[]
+) {
+  const uniqueKeys = Array.from(new Set(keys)).filter((key): key is StatKey => STAT_KEYS.includes(key as StatKey)).slice(0, 2);
+  if (uniqueKeys.length === 0) return [] as { stat: StatKey; percent: number }[];
+  if (uniqueKeys.length === 1) return [{ stat: uniqueKeys[0], percent: 100 }];
+
+  const [primary, secondary] = uniqueKeys;
+  const existingPrimary = existingSplit?.find((entry) => entry.stat === primary)?.percent;
+  const preferredPrimary = preferredSplit?.[0];
+  const basePrimary = existingPrimary ?? preferredPrimary ?? 50;
+  const clampedPrimary = Math.min(100, Math.max(0, Math.round(basePrimary / 5) * 5));
+
+  return [
+    { stat: primary, percent: clampedPrimary },
+    { stat: secondary, percent: 100 - clampedPrimary },
+  ];
 }
 
 // ── Autosuggest search input ──────────────────────────────────
@@ -225,6 +247,7 @@ export default function QuickLogOverlay({ open, onClose }: Props) {
   const [skillId, setSkillId]         = useState('');
   const [skillName, setSkillName]     = useState('');
   const [skillStatKeys, setSkillStatKeys] = useState<StatKey[]>([]);
+  const [sessionStatKeys, setSessionStatKeys] = useState<StatKey[]>([]);
   const [skillDefaultSplit, setSkillDefaultSplit] = useState<number[]>([100]);
   const [duration, setDuration]       = useState(60);
   const [customDuration, setCustomDuration] = useState('');
@@ -256,7 +279,7 @@ export default function QuickLogOverlay({ open, onClose }: Props) {
   // Data queries
   const { data: allSkills = [] } = useSkills();
   const { data: allTools = [] }  = useQuery({
-    queryKey: ['tools'],
+    queryKey: ['quick-log-tools'],
     queryFn: async () => {
       const db = await getDB();
       const r  = await db.query<{ id: string; name: string; type: string; active: boolean }>(`SELECT id, name, type, active FROM tools ORDER BY name;`);
@@ -264,7 +287,7 @@ export default function QuickLogOverlay({ open, onClose }: Props) {
     },
   });
   const { data: allAugments = [] } = useQuery({
-    queryKey: ['augments'],
+    queryKey: ['quick-log-augments'],
     queryFn: async () => {
       const db = await getDB();
       const r  = await db.query<{ id: string; name: string; category: string; active: boolean }>(`SELECT id, name, category, active FROM augments ORDER BY name;`);
@@ -272,7 +295,7 @@ export default function QuickLogOverlay({ open, onClose }: Props) {
     },
   });
   const { data: allMedia = [] } = useQuery({
-    queryKey: ['media'],
+    queryKey: ['quick-log-media'],
     queryFn: async () => {
       const db = await getDB();
       const r  = await db.query<{ id: string; title: string; type: string; status: string; pages: number | null; page_current: number | null }>(`SELECT id, title, type, status, pages, page_current FROM media WHERE status != 'FINISHED' ORDER BY title;`);
@@ -280,7 +303,7 @@ export default function QuickLogOverlay({ open, onClose }: Props) {
     },
   });
   const { data: allCourses = [] } = useQuery({
-    queryKey: ['courses-all'],
+    queryKey: ['quick-log-courses'],
     queryFn: async () => {
       const db = await getDB();
       const r  = await db.query<{ id: string; name: string; status: string }>(`SELECT id, name, status FROM courses WHERE status != 'COMPLETE' ORDER BY name;`);
@@ -288,7 +311,7 @@ export default function QuickLogOverlay({ open, onClose }: Props) {
     },
   });
   const { data: allProjects = [] } = useQuery({
-    queryKey: ['projects'],
+    queryKey: ['quick-log-projects'],
     queryFn: async () => {
       const db = await getDB();
       const r  = await db.query<{ id: string; name: string; status: string }>(`SELECT id, name, status FROM projects WHERE status = 'ACTIVE' ORDER BY name;`);
@@ -330,7 +353,7 @@ export default function QuickLogOverlay({ open, onClose }: Props) {
   // Reset on close
   useEffect(() => {
     if (!open) return;
-    setStatFilter(null); setSkillId(''); setSkillName(''); setSkillStatKeys([]); setSkillDefaultSplit([100]);
+    setStatFilter(null); setSkillId(''); setSkillName(''); setSkillStatKeys([]); setSessionStatKeys([]); setSkillDefaultSplit([100]);
     setDuration(60); setCustomDuration(''); setUseCustom(false); setStatSplit([]);
     setNotes(''); setIsLegacy(false); setLogDate('');
     setTools([]); setAugments([]); setMedia(null); setMediaPage(''); setMediaFinished(false);
@@ -344,8 +367,9 @@ export default function QuickLogOverlay({ open, onClose }: Props) {
     setSkillId(skill.id);
     setSkillName(skill.name);
     setSkillStatKeys(skill.statKeys);
+    setSessionStatKeys(skill.statKeys);
     setSkillDefaultSplit(skill.defaultSplit);
-    const split = skill.statKeys.map((stat, i) => ({ stat, percent: skill.defaultSplit[i] ?? Math.floor(100 / skill.statKeys.length) }));
+    const split = buildSessionStatSplit(skill.statKeys, skill.defaultSplit);
     setStatSplit(split);
   };
 
@@ -391,6 +415,7 @@ export default function QuickLogOverlay({ open, onClose }: Props) {
     setSkillId(tpl.skill_id);
     setSkillName(tpl.skill_name);
     setSkillStatKeys(statKeys);
+    setSessionStatKeys(statKeys);
     setSkillDefaultSplit(splitPercents);
     setStatSplit(resolvedSplit);
     setDuration(Math.max(1, tpl.duration_minutes || 1));
@@ -465,6 +490,29 @@ export default function QuickLogOverlay({ open, onClose }: Props) {
 
   const toolNames = useMemo(() => Object.fromEntries(tools.map(t => [t.id, t.name])), [tools]);
   const augNames  = useMemo(() => Object.fromEntries(augments.map(a => [a.id, a.name])), [augments]);
+  const primarySessionStat = sessionStatKeys[0] ?? null;
+  const secondarySessionStat = sessionStatKeys[1] ?? '';
+
+  const applySessionStats = (keys: StatKey[], preferredSplit?: number[]) => {
+    const nextSplit = buildSessionStatSplit(keys, preferredSplit, statSplit);
+    setSessionStatKeys(nextSplit.map((entry) => entry.stat));
+    setStatSplit(nextSplit);
+  };
+
+  const handlePrimaryStatChange = (nextPrimary: StatKey) => {
+    const secondary = secondarySessionStat && secondarySessionStat !== nextPrimary ? [secondarySessionStat as StatKey] : [];
+    applySessionStats([nextPrimary, ...secondary], statSplit.map((entry) => entry.percent));
+  };
+
+  const handleSecondaryStatChange = (nextSecondary: StatKey | '') => {
+    if (!primarySessionStat) return;
+    if (!nextSecondary || nextSecondary === primarySessionStat) {
+      applySessionStats([primarySessionStat], [100]);
+      return;
+    }
+    const currentPrimaryPercent = statSplit.find((entry) => entry.stat === primarySessionStat)?.percent ?? 50;
+    applySessionStats([primarySessionStat, nextSecondary], [currentPrimaryPercent, 100 - currentPrimaryPercent]);
+  };
 
   // ── Submit ────────────────────────────────────────────────
   const handleSubmit = async () => {
@@ -503,6 +551,64 @@ export default function QuickLogOverlay({ open, onClose }: Props) {
 
       // Award XP
       const xpResult = await awardSessionXP({ sessionId, skillId, durationMinutes: effectiveDuration, statSplit, toolIds, augmentIds: augIds, isLegacy });
+
+      if (toolIds.length > 0 && xpResult.perToolXP > 0) {
+        queryClient.setQueryData(['tools'], (prev: any[] | undefined) =>
+          prev?.map((tool) => {
+            if (!toolIds.includes(tool.id)) return tool;
+            const nextXp = Number(tool.xp ?? 0) + xpResult.perToolXP;
+            const nextLevel = getLevelFromXP(nextXp);
+            return {
+              ...tool,
+              xp: nextXp,
+              level: nextLevel.level,
+              xpInLevel: nextLevel.xpInLevel,
+              xpForLevel: nextLevel.xpForLevel,
+            };
+          }) ?? prev
+        );
+
+        queryClient.setQueryData(['tool-session-counts'], (prev: Record<string, number> | undefined) => {
+          const next = { ...(prev ?? {}) };
+          for (const toolId of toolIds) next[toolId] = (next[toolId] ?? 0) + 1;
+          return next;
+        });
+
+        queryClient.setQueryData(['tool-last-session'], (prev: Record<string, string> | undefined) => {
+          const next = { ...(prev ?? {}) };
+          for (const toolId of toolIds) next[toolId] = loggedAt;
+          return next;
+        });
+      }
+
+      if (augIds.length > 0 && xpResult.perAugmentXP > 0) {
+        queryClient.setQueryData(['augments'], (prev: any[] | undefined) =>
+          prev?.map((augment) => {
+            if (!augIds.includes(augment.id)) return augment;
+            const nextXp = Number(augment.xp ?? 0) + xpResult.perAugmentXP;
+            const nextLevel = getLevelFromXP(nextXp);
+            return {
+              ...augment,
+              xp: nextXp,
+              level: nextLevel.level,
+              xpInLevel: nextLevel.xpInLevel,
+              xpForLevel: nextLevel.xpForLevel,
+            };
+          }) ?? prev
+        );
+
+        queryClient.setQueryData(['augment-session-counts'], (prev: Record<string, number> | undefined) => {
+          const next = { ...(prev ?? {}) };
+          for (const augId of augIds) next[augId] = (next[augId] ?? 0) + 1;
+          return next;
+        });
+
+        queryClient.setQueryData(['augment-last-session'], (prev: Record<string, string> | undefined) => {
+          const next = { ...(prev ?? {}) };
+          for (const augId of augIds) next[augId] = loggedAt;
+          return next;
+        });
+      }
 
       // Fire XP float animation — centre of screen
       const totalAwarded = xpResult.skillXP + xpResult.masterXP;
@@ -569,11 +675,10 @@ export default function QuickLogOverlay({ open, onClose }: Props) {
         }
       }
 
-      // Invalidate everything — broad sweep so all widgets update immediately
-      queryClient.invalidateQueries();
+        await refreshAppData(queryClient);
 
-      toast({ title: '✓ SESSION LOGGED', description: `${skillName} — ${effectiveDuration}m` });
-      onClose();
+        toast({ title: '✓ SESSION LOGGED', description: `${skillName} — ${effectiveDuration}m` });
+        onClose();
     } catch (err) {
       toast({ title: 'ERROR', description: String(err) });
     } finally {
@@ -627,7 +732,7 @@ export default function QuickLogOverlay({ open, onClose }: Props) {
                 {skillId ? (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: bgS, border: `1px solid ${acc}` }}>
                     <span style={{ flex: 1, fontSize: 11, color: acc }}>{skillName}</span>
-                    <span onClick={() => { setSkillId(''); setSkillName(''); setSkillStatKeys([]); setStatSplit([]); }} style={{ fontSize: 9, color: adim, cursor: 'pointer' }}
+                    <span onClick={() => { setSkillId(''); setSkillName(''); setSkillStatKeys([]); setSessionStatKeys([]); setStatSplit([]); }} style={{ fontSize: 9, color: adim, cursor: 'pointer' }}
                       onMouseEnter={e => e.currentTarget.style.color = '#ff4400'}
                       onMouseLeave={e => e.currentTarget.style.color = adim}>× CHANGE</span>
                   </div>
@@ -661,22 +766,100 @@ export default function QuickLogOverlay({ open, onClose }: Props) {
                 )}
               </div>
 
-              {/* Stat split — only if 2 stats */}
-              {skillStatKeys.length === 2 && (
+              {skillId && primarySessionStat && (
                 <div style={{ marginBottom: 12 }}>
-                  <Label>STAT SPLIT</Label>
-                  {statSplit.map((s, i) => (
-                    <div key={s.stat} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
-                      <span style={{ fontSize: 9, color: acc, width: 50, flexShrink: 0 }}>{s.stat.toUpperCase()}</span>
-                      <input type="range" min={0} max={100} value={s.percent}
-                        onChange={e => {
-                          const val = parseInt(e.target.value);
-                          setStatSplit([{ stat: statSplit[0].stat, percent: i === 0 ? val : 100 - val }, { stat: statSplit[1].stat, percent: i === 0 ? 100 - val : val }]);
-                        }}
-                        style={{ flex: 1, accentColor: acc }} />
-                      <span style={{ fontSize: 10, color: dim, width: 32, textAlign: 'right', flexShrink: 0 }}>{s.percent}%</span>
+                  <Label>SESSION STATS</Label>
+                  <div style={{ fontSize: 9, color: dim, marginBottom: 8, lineHeight: 1.5 }}>
+                    Override this log only. Skill preset:
+                    <span style={{ color: adim }}> {skillStatKeys.map((key) => key.toUpperCase()).join(' / ') || 'NONE'}</span>
+                  </div>
+
+                  <div style={{ marginBottom: 10 }}>
+                    <div style={{ fontSize: 9, color: adim, letterSpacing: 1, marginBottom: 6 }}>PRIMARY STAT</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                      {STAT_KEYS.map((key) => (
+                        <button
+                          key={`primary-${key}`}
+                          onClick={() => handlePrimaryStatChange(key)}
+                          style={{
+                            padding: '3px 8px',
+                            fontSize: 9,
+                            fontFamily: mono,
+                            cursor: 'pointer',
+                            border: `1px solid ${primarySessionStat === key ? acc : adim}`,
+                            background: primarySessionStat === key ? 'rgba(255,176,0,0.1)' : 'transparent',
+                            color: primarySessionStat === key ? acc : dim,
+                          }}
+                        >
+                          {STAT_META[key].icon} {STAT_META[key].name.toUpperCase()}
+                        </button>
+                      ))}
                     </div>
-                  ))}
+                  </div>
+
+                  <div style={{ marginBottom: secondarySessionStat ? 10 : 0 }}>
+                    <div style={{ fontSize: 9, color: adim, letterSpacing: 1, marginBottom: 6 }}>SECONDARY STAT</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                      <button
+                        onClick={() => handleSecondaryStatChange('')}
+                        style={{
+                          padding: '3px 8px',
+                          fontSize: 9,
+                          fontFamily: mono,
+                          cursor: 'pointer',
+                          border: `1px solid ${!secondarySessionStat ? acc : adim}`,
+                          background: !secondarySessionStat ? 'rgba(255,176,0,0.1)' : 'transparent',
+                          color: !secondarySessionStat ? acc : dim,
+                        }}
+                      >
+                        NONE
+                      </button>
+                      {STAT_KEYS.filter((key) => key !== primarySessionStat).map((key) => (
+                        <button
+                          key={`secondary-${key}`}
+                          onClick={() => handleSecondaryStatChange(key)}
+                          style={{
+                            padding: '3px 8px',
+                            fontSize: 9,
+                            fontFamily: mono,
+                            cursor: 'pointer',
+                            border: `1px solid ${secondarySessionStat === key ? acc : adim}`,
+                            background: secondarySessionStat === key ? 'rgba(255,176,0,0.1)' : 'transparent',
+                            color: secondarySessionStat === key ? acc : dim,
+                          }}
+                        >
+                          {STAT_META[key].icon} {STAT_META[key].name.toUpperCase()}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {sessionStatKeys.length === 2 && statSplit.length === 2 && (
+                    <>
+                      <div style={{ fontSize: 9, color: adim, letterSpacing: 1, marginBottom: 6 }}>
+                        SPLIT: {statSplit[0].stat.toUpperCase()} {statSplit[0].percent}% / {statSplit[1].stat.toUpperCase()} {statSplit[1].percent}%
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 9, color: acc, width: 60, flexShrink: 0 }}>{statSplit[0].stat.toUpperCase()}</span>
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          step={5}
+                          value={statSplit[0].percent}
+                          onChange={e => {
+                            const val = parseInt(e.target.value);
+                            setStatSplit([
+                              { stat: statSplit[0].stat, percent: val },
+                              { stat: statSplit[1].stat, percent: 100 - val },
+                            ]);
+                          }}
+                          style={{ flex: 1, accentColor: acc }}
+                        />
+                        <span style={{ fontSize: 10, color: dim, width: 36, textAlign: 'right', flexShrink: 0 }}>{statSplit[0].percent}%</span>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 

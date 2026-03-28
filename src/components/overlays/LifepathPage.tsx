@@ -36,7 +36,7 @@ const LIFEPATH_DESC: Record<string, string> = {
   Technology: 'Computers, digital systems, software, hardware',
 };
 
-interface Lifepath { id: string; name: string; category: string; active: boolean; }
+interface Lifepath { id: string; name: string; category: string; description: string | null; active: boolean; }
 interface Skill { id: string; name: string; stat_keys: StatKey[]; lifepath_id: string; active: boolean; xp: number; }
 
 interface Props { onClose: () => void; }
@@ -51,6 +51,10 @@ export default function LifepathPage({ onClose }: Props) {
   const [addToolSearch, setAddToolSearch]           = useState('');
   const [addSkillSearch, setAddSkillSearch]         = useState('');
   const [confirmDelete, setConfirmDelete]           = useState(false);
+  const [editingLifepath, setEditingLifepath]       = useState(false);
+  const [editName, setEditName]                     = useState('');
+  const [editCategory, setEditCategory]             = useState('Physical');
+  const [editDescription, setEditDescription]       = useState('');
 
   // ── All lifepaths ─────────────────────────────────────────
   const { data: lifepaths = [] } = useQuery({
@@ -58,7 +62,7 @@ export default function LifepathPage({ onClose }: Props) {
     queryFn: async () => {
       const db  = await getDB();
       const res = await db.query<Lifepath>(
-        `SELECT id, name, category, active FROM lifepaths ORDER BY name;`
+        `SELECT id, name, category, description, active FROM lifepaths ORDER BY name;`
       );
       return res.rows;
     },
@@ -139,6 +143,21 @@ export default function LifepathPage({ onClose }: Props) {
       queryClient.invalidateQueries({ queryKey: ['skills'] });
       setDrawerLifepath(null);
       setConfirmDelete(false);
+    },
+  });
+
+  const updateLifepath = useMutation({
+    mutationFn: async ({ id, name, category, description }: { id: string; name: string; category: string; description: string }) => {
+      const db = await getDB();
+      await db.query(
+        `UPDATE lifepaths SET name = $1, category = $2, description = $3 WHERE id = $4;`,
+        [name.trim(), category, description.trim() || null, id]
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['lifepaths'] });
+      setDrawerLifepath(prev => prev ? { ...prev, name: editName.trim(), category: editCategory, description: editDescription.trim() || null } : prev);
+      setEditingLifepath(false);
     },
   });
 
@@ -270,6 +289,7 @@ export default function LifepathPage({ onClose }: Props) {
             setShowAddToolSearch(false);
             setAddToolSearch('');
             setConfirmDelete(false);
+            setEditingLifepath(false);
           }}
                   style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', cursor: 'pointer' }}
                 >
@@ -316,14 +336,67 @@ export default function LifepathPage({ onClose }: Props) {
               <div style={{ padding: '16px 20px', borderBottom: `1px solid ${adim}`, flexShrink: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
                   <span style={{ fontFamily: vt, fontSize: 20, color: acc, flex: 1 }}>
-                    {drawerLifepath.name.toUpperCase()}
+                    {editingLifepath ? 'EDIT LIFEPATH' : drawerLifepath.name.toUpperCase()}
                   </span>
                   <button onClick={() => setDrawerLifepath(null)} style={{ background: 'transparent', border: 'none', color: dim, cursor: 'pointer', fontSize: 14 }}>×</button>
                 </div>
-                <div style={{ fontSize: 9, color: adim }}>{drawerLifepath.category}</div>
-                <div style={{ fontSize: 9, color: dim, marginTop: 4 }}>
-                  {drawerSkills.filter(s => s.active).length}/{drawerSkills.length} skills active
-                </div>
+                {editingLifepath ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <input
+                      value={editName}
+                      onChange={e => setEditName(e.target.value)}
+                      placeholder="Lifepath name..."
+                      style={{ width: '100%', padding: '7px 10px', fontSize: 11, boxSizing: 'border-box', background: bgP, border: `1px solid ${adim}`, color: acc, fontFamily: mono, outline: 'none' }}
+                    />
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {TOP_CATEGORIES.map(cat => (
+                        <button key={cat} onClick={() => setEditCategory(cat)} style={{
+                          padding: '4px 10px',
+                          fontSize: 9,
+                          fontFamily: mono,
+                          cursor: 'pointer',
+                          border: `1px solid ${editCategory === cat ? acc : adim}`,
+                          background: editCategory === cat ? 'rgba(255,176,0,0.1)' : 'transparent',
+                          color: editCategory === cat ? acc : dim,
+                        }}>{cat}</button>
+                      ))}
+                    </div>
+                    <textarea
+                      value={editDescription}
+                      onChange={e => setEditDescription(e.target.value)}
+                      rows={3}
+                      placeholder="Description..."
+                      style={{ width: '100%', padding: '8px 10px', fontSize: 10, boxSizing: 'border-box', background: bgP, border: `1px solid ${adim}`, color: acc, fontFamily: mono, outline: 'none', resize: 'vertical' as const }}
+                    />
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        onClick={() => updateLifepath.mutate({ id: drawerLifepath.id, name: editName, category: editCategory, description: editDescription })}
+                        disabled={!editName.trim() || updateLifepath.isPending}
+                        style={{ flex: 1, padding: '7px', fontSize: 9, border: `1px solid ${acc}`, background: 'rgba(255,176,0,0.1)', color: acc, fontFamily: mono, cursor: editName.trim() ? 'pointer' : 'not-allowed' }}
+                      >
+                        {updateLifepath.isPending ? 'SAVING...' : 'SAVE'}
+                      </button>
+                      <button
+                        onClick={() => setEditingLifepath(false)}
+                        style={{ flex: 1, padding: '7px', fontSize: 9, border: `1px solid ${adim}`, background: 'transparent', color: dim, fontFamily: mono, cursor: 'pointer' }}
+                      >
+                        CANCEL
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 9, color: adim }}>{drawerLifepath.category}</div>
+                    {drawerLifepath.description && (
+                      <div style={{ fontSize: 10, color: dim, marginTop: 6, lineHeight: 1.5 }}>
+                        {drawerLifepath.description}
+                      </div>
+                    )}
+                    <div style={{ fontSize: 9, color: dim, marginTop: 4 }}>
+                      {drawerSkills.filter(s => s.active).length}/{drawerSkills.length} skills active
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Skills list */}
@@ -501,6 +574,20 @@ export default function LifepathPage({ onClose }: Props) {
 
               {/* Drawer footer */}
               <div style={{ padding: '12px 16px', borderTop: `1px solid ${adim}`, flexShrink: 0, display: 'flex', gap: 8 }}>
+                <button
+                  onClick={() => {
+                    setEditingLifepath(true);
+                    setShowAddSkillSearch(false);
+                    setShowAddToolSearch(false);
+                    setConfirmDelete(false);
+                    setEditName(drawerLifepath.name);
+                    setEditCategory(drawerLifepath.category);
+                    setEditDescription(drawerLifepath.description ?? '');
+                  }}
+                  style={{ flex: 1, padding: '7px', fontSize: 9, fontFamily: mono, cursor: 'pointer', letterSpacing: 1, border: `1px solid ${adim}`, background: 'transparent', color: dim }}
+                >
+                  EDIT
+                </button>
                 <button
                   onClick={() => { setShowAddSkillSearch(!showAddSkillSearch); setConfirmDelete(false); setAddSkillSearch(''); }}
                   style={{ flex: 1, padding: '7px', fontSize: 9, fontFamily: mono, cursor: 'pointer', letterSpacing: 1,

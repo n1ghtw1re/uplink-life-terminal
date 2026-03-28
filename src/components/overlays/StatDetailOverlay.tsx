@@ -6,12 +6,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useStats } from '@/hooks/useStats';
 import { useSkills } from '@/hooks/useSkills';
 import { useQuery } from '@tanstack/react-query';
+import { getDB } from '@/lib/db';
 import { supabase } from '@/integrations/supabase/client';
 import { StatKey, STAT_META, STAT_FLAVOR, STAT_LEVEL_TITLES, getStatLevel } from '@/types';
 import { getXPDisplayValues } from '@/services/xpService';
 import CourseDetailDrawer from '@/components/drawer/CourseDetailDrawer';
 import SkillDetailDrawer from '@/components/drawer/SkillDetailDrawer';
 import MediaDetailDrawer from '@/components/drawer/MediaDetailDrawer';
+import SessionDetailDrawer from '@/components/drawer/SessionDetailDrawer';
 
 const STAT_NAV: StatKey[] = ['body', 'cool', 'flow', 'ghost', 'grit', 'mind', 'wire'];
 
@@ -124,22 +126,42 @@ export default function StatDetailOverlay({ statKey, onClose, onNavigate }: Prop
   const flavor = STAT_FLAVOR[statKey];
   const titles = STAT_LEVEL_TITLES[statKey];
   const skills = (allSkills ?? []).filter(s => s.statKeys.includes(statKey));
-  const skillIds = skills.map(s => s.id);
 
   const { data: recentActivity } = useQuery({
-    queryKey: ['xp-log-by-stat', user?.id, statKey],
-    enabled: !!user?.id,
+    queryKey: ['sessions-by-stat', statKey],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('xp_log')
-        .select('id, source, source_id, amount, notes, created_at, skill_id')
-        .eq('user_id', user!.id)
-        .eq('stat_key', statKey)
-        .eq('tier', 'stat')
-        .order('created_at', { ascending: false })
-        .limit(15);
-      if (error) throw error;
-      return data;
+      const db = await getDB();
+      const res = await db.query<{
+        id: string;
+        skill_id: string;
+        skill_name: string;
+        duration_minutes: number;
+        notes: string | null;
+        logged_at: string;
+        stat_split: Array<{ stat: string; percent: number }> | string;
+        stat_amount: number | string;
+      }>(
+        `SELECT s.id, s.skill_id, s.skill_name, s.duration_minutes, s.notes, s.logged_at, s.stat_split,
+                COALESCE(SUM(x.amount), 0) AS stat_amount
+         FROM sessions s
+         LEFT JOIN xp_log x
+           ON x.source_id = s.id
+          AND x.tier = 'stat'
+          AND x.entity_id = $1
+         GROUP BY s.id, s.skill_id, s.skill_name, s.duration_minutes, s.notes, s.logged_at, s.stat_split
+         ORDER BY s.logged_at DESC
+         LIMIT 150;`,
+        [statKey]
+      );
+
+      return res.rows
+        .filter((row) => {
+          const split = Array.isArray(row.stat_split)
+            ? row.stat_split
+            : JSON.parse((row.stat_split as string) || '[]');
+          return split.some((s) => s.stat === statKey);
+        })
+        .slice(0, 15);
     },
   });
 
@@ -553,12 +575,8 @@ export default function StatDetailOverlay({ statKey, onClose, onNavigate }: Prop
           ) : (
             <div style={{ display: 'grid', gap: 3 }}>
               {recentActivity.map(entry => {
-                const sourceLabel = entry.source
-                  .replace(/_/g, ' ')
-                  .replace('course ', '')
-                  .toUpperCase();
-                const skillName = skills.find(s => s.id === entry.skill_id)?.name;
-                const label = entry.notes || skillName || sourceLabel;
+                const sourceLabel = 'SESSION';
+                const label = entry.notes || entry.skill_name;
                 return (
                   <div key={entry.id} style={{
                     display: 'flex',
@@ -567,14 +585,34 @@ export default function StatDetailOverlay({ statKey, onClose, onNavigate }: Prop
                     padding: '6px 14px 6px 12px',
                     fontFamily: "'IBM Plex Mono', monospace",
                     borderLeft: '2px solid hsl(var(--accent-dim))',
-                  }}>
+                    cursor: 'pointer',
+                  }}
+                    onClick={() => setInnerDrawer({ type: 'session', id: entry.id })}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.background = 'rgba(255,176,0,0.04)';
+                      e.currentTarget.style.borderLeftColor = 'hsl(var(--accent))';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.background = 'transparent';
+                      e.currentTarget.style.borderLeftColor = 'hsl(var(--accent-dim))';
+                    }}
+                  >
                     <span style={{
                       fontSize: 10,
                       color: 'hsl(var(--accent))',
-                      width: 64,
+                      width: 70,
                       flexShrink: 0,
                     }}>
-                      +{entry.amount} XP
+                      {entry.duration_minutes}m
+                    </span>
+                    <span style={{
+                      fontSize: 10,
+                      color: 'hsl(var(--accent-bright))',
+                      width: 64,
+                      flexShrink: 0,
+                      textAlign: 'right',
+                    }}>
+                      +{Number(entry.stat_amount || 0)} XP
                     </span>
                     <span style={{
                       fontSize: 11,
@@ -590,7 +628,7 @@ export default function StatDetailOverlay({ statKey, onClose, onNavigate }: Prop
                       {sourceLabel}
                     </span>
                     <span style={{ fontSize: 10, color: 'hsl(var(--text-dim))', width: 76, textAlign: 'right', flexShrink: 0 }}>
-                      {formatTimeAgo(entry.created_at)}
+                      {formatTimeAgo(entry.logged_at)}
                     </span>
                   </div>
                 );
@@ -756,6 +794,7 @@ export default function StatDetailOverlay({ statKey, onClose, onNavigate }: Prop
         <div style={{
           width: innerDrawer ? 420 : 0,
           flexShrink: 0,
+          minHeight: 0,
           overflow: 'hidden',
           transition: 'width 200ms ease',
           borderLeft: innerDrawer ? '1px solid hsl(var(--accent-dim))' : 'none',
@@ -765,46 +804,50 @@ export default function StatDetailOverlay({ statKey, onClose, onNavigate }: Prop
         }}>
           {innerDrawer && (
             <>
-              {/* Drawer close button */}
-              <div style={{
-                display: 'flex',
-                justifyContent: 'flex-end',
-                padding: '8px 12px',
-                borderBottom: '1px solid hsl(var(--accent-dim))',
-                flexShrink: 0,
-              }}>
-                <button
-                  onClick={() => setInnerDrawer(null)}
-                  style={{
-                    background: 'transparent',
-                    border: '1px solid hsl(var(--accent-dim))',
-                    color: 'hsl(var(--accent-dim))',
-                    fontFamily: "'IBM Plex Mono', monospace",
-                    fontSize: 10,
-                    padding: '3px 10px',
-                    cursor: 'pointer',
-                    letterSpacing: 1,
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.borderColor = 'hsl(var(--accent))';
-                    e.currentTarget.style.color = 'hsl(var(--accent))';
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.borderColor = 'hsl(var(--accent-dim))';
-                    e.currentTarget.style.color = 'hsl(var(--accent-dim))';
-                  }}
-                >
-                  × CLOSE
-                </button>
-              </div>
+              {innerDrawer.type !== 'session' && (
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  padding: '8px 12px',
+                  borderBottom: '1px solid hsl(var(--accent-dim))',
+                  flexShrink: 0,
+                }}>
+                  <button
+                    onClick={() => setInnerDrawer(null)}
+                    style={{
+                      background: 'transparent',
+                      border: '1px solid hsl(var(--accent-dim))',
+                      color: 'hsl(var(--accent-dim))',
+                      fontFamily: "'IBM Plex Mono', monospace",
+                      fontSize: 10,
+                      padding: '3px 10px',
+                      cursor: 'pointer',
+                      letterSpacing: 1,
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.borderColor = 'hsl(var(--accent))';
+                      e.currentTarget.style.color = 'hsl(var(--accent))';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.borderColor = 'hsl(var(--accent-dim))';
+                      e.currentTarget.style.color = 'hsl(var(--accent-dim))';
+                    }}
+                  >
+                    × CLOSE
+                  </button>
+                </div>
+              )}
 
               {/* Drawer content */}
-              <div style={{ flex: 1, overflow: 'hidden' }}>
+              <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', background: 'hsl(var(--bg-primary))', display: 'flex', flexDirection: 'column' }}>
                 {innerDrawer.type === 'course' && (
                   <CourseDetailDrawer courseId={innerDrawer.id} />
                 )}
                 {innerDrawer.type === 'skill' && (
                   <SkillDetailDrawer skillId={innerDrawer.id} onClose={() => setInnerDrawer(null)} />
+                )}
+                {innerDrawer.type === 'session' && (
+                  <SessionDetailDrawer sessionId={innerDrawer.id} onDeleted={() => setInnerDrawer(null)} onClose={() => setInnerDrawer(null)} />
                 )}
                 {(innerDrawer.type === 'media' || innerDrawer.type === 'book') && (
                   <MediaDetailDrawer mediaId={innerDrawer.id} onClose={() => setInnerDrawer(null)} />

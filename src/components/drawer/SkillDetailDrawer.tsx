@@ -4,11 +4,10 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
 import { STAT_META, StatKey, getStatLevel } from '@/types';
 import { getXPDisplayValues } from '@/services/xpService';
-
-// ── Types ─────────────────────────────────────────────────────
+import { getDB } from '@/lib/db';
+import { toast } from '@/hooks/use-toast';
 
 interface Skill {
   id: string;
@@ -18,7 +17,6 @@ interface Skill {
   icon: string;
   level: number;
   xp: number;
-  xp_to_next: number;
   notes: string | null;
   active: boolean;
   lifepath_id: string | null;
@@ -33,23 +31,27 @@ interface SessionRow {
   skill_xp_awarded: number;
 }
 
+interface LifepathOption {
+  id: string;
+  name: string;
+  category: string;
+}
+
 interface Props {
   skillId: string;
   onClose?: () => void;
   onOpenLog?: () => void;
 }
 
-// ── Shared styles ─────────────────────────────────────────────
-
-const mono      = "'IBM Plex Mono', monospace";
-const vt        = "'VT323', monospace";
-const accent    = 'hsl(var(--accent))';
+const mono = "'IBM Plex Mono', monospace";
+const vt = "'VT323', monospace";
+const accent = 'hsl(var(--accent))';
 const accentDim = 'hsl(var(--accent-dim))';
-const dimText   = 'hsl(var(--text-dim))';
-const bgSec     = 'hsl(var(--bg-secondary))';
-const bgTer     = 'hsl(var(--bg-tertiary))';
-
-// ── Sub-components ────────────────────────────────────────────
+const dimText = 'hsl(var(--text-dim))';
+const bgSec = 'hsl(var(--bg-secondary))';
+const bgTer = 'hsl(var(--bg-tertiary))';
+const green = '#44ff88';
+const STAT_KEYS: StatKey[] = ['body', 'wire', 'mind', 'cool', 'grit', 'flow', 'ghost'];
 
 function SectionLabel({ label }: { label: string }) {
   return (
@@ -70,7 +72,8 @@ function XPBar({ value, max }: { value: number; max: number }) {
   return (
     <div style={{ background: bgTer, border: '1px solid hsl(var(--accent-dim))', height: 6, flex: 1 }}>
       <div style={{
-        width: `${pct}%`, height: '100%',
+        width: `${pct}%`,
+        height: '100%',
         background: accent,
         boxShadow: '0 0 6px rgba(255,176,0,0.4)',
         transition: 'width 0.4s ease',
@@ -104,21 +107,17 @@ function DeleteConfirm({ onConfirm, onCancel }: { onConfirm: () => void; onCance
   );
 }
 
-// ── Main ──────────────────────────────────────────────────────
-
 export default function SkillDetailDrawer({ skillId, onClose, onOpenLog }: Props) {
-  const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [notesValue, setNotesValue]   = useState<string | null>(null);
-  const [showDelete, setShowDelete]   = useState(false);
-  const [editingName, setEditingName] = useState(false);
-  const [nameValue, setNameValue]     = useState('');
-  const [editingStats, setEditingStats] = useState(false);
-  const [editPrimary, setEditPrimary]   = useState<StatKey>('body');
+  const [showDelete, setShowDelete] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editIcon, setEditIcon] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [editPrimary, setEditPrimary] = useState<StatKey>('body');
   const [editSecondary, setEditSecondary] = useState<StatKey | ''>('');
-  const [editSplit, setEditSplit]       = useState(50);
-
-  // ── Fetch skill ───────────────────────────────────────────
+  const [editSplit, setEditSplit] = useState(50);
+  const [editLifepathId, setEditLifepathId] = useState('');
 
   const { data: skill, isLoading } = useQuery({
     queryKey: ['skill', skillId],
@@ -134,13 +133,11 @@ export default function SkillDetailDrawer({ skillId, onClose, onOpenLog }: Props
     },
   });
 
-  // ── Fetch recent sessions ─────────────────────────────────
-
   const { data: sessions } = useQuery({
     queryKey: ['skill-sessions', skillId],
     enabled: !!skillId,
     queryFn: async () => {
-      const db  = await import('@/lib/db').then(m => m.getDB());
+      const db = await getDB();
       const res = await db.query<SessionRow>(
         `SELECT id, duration_minutes, logged_at, notes, skill_xp as skill_xp_awarded
          FROM sessions WHERE skill_id = $1 ORDER BY logged_at DESC LIMIT 20;`,
@@ -150,10 +147,18 @@ export default function SkillDetailDrawer({ skillId, onClose, onOpenLog }: Props
     },
   });
 
-  // ── Delete session ───────────────────────────────────────────
+  const { data: lifepaths = [] } = useQuery({
+    queryKey: ['lifepaths-for-skill-edit'],
+    queryFn: async () => {
+      const db = await getDB();
+      const res = await db.query<LifepathOption>(`SELECT id, name, category FROM lifepaths ORDER BY category, name;`);
+      return res.rows;
+    },
+  });
+
   const deleteSession = useMutation({
     mutationFn: async (sessionId: string) => {
-      const db = await import('@/lib/db').then(m => m.getDB());
+      const db = await getDB();
       await db.exec(`DELETE FROM sessions WHERE id = '${sessionId}'`);
     },
     onSuccess: () => {
@@ -161,16 +166,48 @@ export default function SkillDetailDrawer({ skillId, onClose, onOpenLog }: Props
     },
   });
 
-  // ── Mutations ─────────────────────────────────────────────
+  const saveEdit = useMutation({
+    mutationFn: async () => {
+      const db = await getDB();
+      const name = editName.trim();
+      if (!name) throw new Error('Skill name is required.');
 
-  const saveName = useMutation({
-    mutationFn: async (name: string) => {
-      const { error } = await supabase.from('skills').update({ name: name.trim() }).eq('id', skillId);
-      if (error) throw error;
+      const duplicate = await db.query<{ id: string }>(
+        `SELECT id FROM skills WHERE LOWER(name) = LOWER($1) AND id <> $2 LIMIT 1;`,
+        [name, skillId]
+      );
+      if (duplicate.rows.length > 0) throw new Error(`"${name}" already exists.`);
+
+      const statKeys = editSecondary ? [editPrimary, editSecondary] : [editPrimary];
+      const defaultSplit = editSecondary ? [editSplit, 100 - editSplit] : [100];
+
+      await db.query(
+        `UPDATE skills
+         SET name = $1,
+             icon = $2,
+             notes = $3,
+             stat_keys = $4,
+             default_split = $5,
+             lifepath_id = $6
+         WHERE id = $7;`,
+        [
+          name,
+          editIcon.trim() || 'o',
+          editNotes.trim() || null,
+          JSON.stringify(statKeys),
+          JSON.stringify(defaultSplit),
+          editLifepathId || null,
+          skillId,
+        ]
+      );
     },
     onSuccess: () => {
       queryClient.invalidateQueries();
-      setEditingName(false);
+      setEditing(false);
+      toast({ title: 'SKILL UPDATED' });
+    },
+    onError: (error) => {
+      toast({ title: 'ERROR', description: error instanceof Error ? error.message : String(error) });
     },
   });
 
@@ -187,7 +224,6 @@ export default function SkillDetailDrawer({ skillId, onClose, onOpenLog }: Props
 
   const toggleActive = useMutation({
     mutationFn: async (active: boolean) => {
-      const { getDB } = await import('@/lib/db');
       const db = await getDB();
       await db.exec(`UPDATE skills SET active = ${active} WHERE id = '${skillId}';`);
     },
@@ -196,86 +232,45 @@ export default function SkillDetailDrawer({ skillId, onClose, onOpenLog }: Props
     },
   });
 
-  const saveStats = useMutation({
-    mutationFn: async () => {
-      const { getDB } = await import('@/lib/db');
-      const db   = await getDB();
-      const keys = editSecondary ? [editPrimary, editSecondary] : [editPrimary];
-      const splt = editSecondary ? [editSplit, 100 - editSplit] : [100];
-      await db.exec(
-        `UPDATE skills SET stat_keys = '${JSON.stringify(keys)}', default_split = '${JSON.stringify(splt)}' WHERE id = '${skillId}';`
-      );
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries();
-      setEditingStats(false);
-    },
-  });
-
-  // ── Loading / not found ───────────────────────────────────
-
   if (isLoading) return <div style={{ padding: 20, fontFamily: mono, fontSize: 11, color: dimText }}>LOADING...</div>;
-  if (!skill)    return <div style={{ padding: 20, fontFamily: mono, fontSize: 11, color: dimText }}>SKILL NOT FOUND</div>;
+  if (!skill) return <div style={{ padding: 20, fontFamily: mono, fontSize: 11, color: dimText }}>SKILL NOT FOUND</div>;
 
   const statKeys = (skill.stat_keys ?? []) as StatKey[];
-  const split    = skill.default_split ?? [];
+  const split = skill.default_split ?? [];
   const { xpInLevel, xpForLevel } = getStatLevel(skill.xp);
-  const xpPct    = xpForLevel > 0 ? Math.min(100, Math.round((xpInLevel / xpForLevel) * 100)) : 100;
+  const xpPct = xpForLevel > 0 ? Math.min(100, Math.round((xpInLevel / xpForLevel) * 100)) : 100;
+  const selectedLifepath = lifepaths.find((lp) => lp.id === skill.lifepath_id) ?? null;
 
-  // Init edit state from skill data when entering edit mode
-  const startEditStats = () => {
-    const keys = (skill.stat_keys ?? []) as StatKey[];
-    setEditPrimary(keys[0] ?? 'body');
-    setEditSecondary(keys[1] ?? '');
+  const startEdit = () => {
+    const currentKeys = (skill.stat_keys ?? []) as StatKey[];
+    setEditName(skill.name);
+    setEditIcon(skill.icon ?? '');
+    setEditNotes(skill.notes ?? '');
+    setEditPrimary(currentKeys[0] ?? 'body');
+    setEditSecondary(currentKeys[1] ?? '');
     setEditSplit(skill.default_split?.[0] ?? 50);
-    setEditingStats(true);
+    setEditLifepathId(skill.lifepath_id ?? '');
+    setEditing(true);
   };
 
-  // ── Render ────────────────────────────────────────────────
+  const editingLifepath = lifepaths.find((lp) => lp.id === editLifepathId) ?? null;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', fontFamily: mono }}>
-
-      {/* ── Header ── */}
       <div style={{
         padding: '16px 20px 14px',
         borderBottom: '1px solid hsl(var(--accent-dim))',
         flexShrink: 0,
       }}>
         <div style={{ fontSize: 9, color: accentDim, letterSpacing: 2, marginBottom: 6 }}>// SKILL</div>
+        <div style={{
+          fontFamily: vt, fontSize: 24, color: accent,
+          textShadow: '0 0 10px rgba(255,176,0,0.3)',
+          lineHeight: 1.1, marginBottom: 4,
+        }}>
+          {skill.icon} {skill.name}
+        </div>
 
-        {/* Name — editable */}
-        {editingName ? (
-          <input
-            autoFocus value={nameValue}
-            onChange={e => setNameValue(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && nameValue.trim()) saveName.mutate(nameValue.trim());
-              if (e.key === 'Escape') setEditingName(false);
-            }}
-            onBlur={() => { if (nameValue.trim()) saveName.mutate(nameValue.trim()); else setEditingName(false); }}
-            style={{
-              fontFamily: vt, fontSize: 24,
-              background: 'transparent', border: 'none',
-              borderBottom: `1px solid ${accent}`,
-              color: accent, width: '100%', outline: 'none', marginBottom: 6,
-            }}
-          />
-        ) : (
-          <div
-            onClick={() => { setNameValue(skill.name); setEditingName(true); }}
-            title="Click to rename"
-            style={{
-              fontFamily: vt, fontSize: 24, color: accent,
-              textShadow: '0 0 10px rgba(255,176,0,0.3)',
-              lineHeight: 1.1, marginBottom: 4, cursor: 'text',
-            }}
-          >
-            {skill.icon} {skill.name}
-          </div>
-        )}
-
-        {/* Stat tags + active toggle */}
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10, alignItems: 'center' }}>
           {statKeys.map((k, i) => (
             <span key={k} style={{
@@ -289,18 +284,16 @@ export default function SkillDetailDrawer({ skillId, onClose, onOpenLog }: Props
           <div style={{ flex: 1 }} />
           <button
             onClick={() => toggleActive.mutate(!skill.active)}
-            title={skill.active ? 'Click to deactivate skill' : 'Click to activate skill'}
             style={{
               padding: '2px 10px', fontSize: 9, letterSpacing: 1,
-              border: `1px solid ${skill.active ? '#44ff88' : accentDim}`,
+              border: `1px solid ${skill.active ? green : accentDim}`,
               background: skill.active ? 'rgba(68,255,136,0.1)' : 'transparent',
-              color: skill.active ? '#44ff88' : dimText,
+              color: skill.active ? green : dimText,
               fontFamily: mono, cursor: 'pointer',
             }}
           >{skill.active ? '● ACTIVE' : '○ INACTIVE'}</button>
         </div>
 
-        {/* XP bar */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
           <span style={{ fontFamily: vt, fontSize: 16, color: accent, flexShrink: 0 }}>LVL {skill.level}</span>
           <XPBar value={xpInLevel} max={xpForLevel} />
@@ -311,15 +304,143 @@ export default function SkillDetailDrawer({ skillId, onClose, onOpenLog }: Props
         </div>
       </div>
 
-      {/* ── Scrollable body ── */}
       <div style={{
         flex: 1, overflowY: 'auto',
         padding: '4px 20px 20px',
         scrollbarWidth: 'thin',
         scrollbarColor: `${accentDim} ${bgSec}`,
       }}>
+        {editing ? (
+          <>
+            <SectionLabel label="EDIT SKILL" />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, background: bgSec, border: `1px solid ${accentDim}`, padding: 14 }}>
+              <div>
+                <div style={{ fontSize: 9, color: accentDim, letterSpacing: 1, marginBottom: 4 }}>NAME</div>
+                <input
+                  value={editName}
+                  onChange={e => setEditName(e.target.value)}
+                  style={{ width: '100%', padding: '6px 10px', fontSize: 11, boxSizing: 'border-box', background: bgTer, border: `1px solid ${accentDim}`, color: accent, fontFamily: mono, outline: 'none' }}
+                />
+              </div>
 
-        {/* ── Log session — open Quick Log overlay ── */}
+              <div>
+                <div style={{ fontSize: 9, color: accentDim, letterSpacing: 1, marginBottom: 4 }}>ICON</div>
+                <input
+                  value={editIcon}
+                  onChange={e => setEditIcon(e.target.value)}
+                  maxLength={8}
+                  style={{ width: '100%', padding: '6px 10px', fontSize: 11, boxSizing: 'border-box', background: bgTer, border: `1px solid ${accentDim}`, color: accent, fontFamily: mono, outline: 'none' }}
+                />
+              </div>
+
+              <div>
+                <div style={{ fontSize: 9, color: accentDim, letterSpacing: 1, marginBottom: 6 }}>PRIMARY STAT</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  {STAT_KEYS.map(k => (
+                    <button key={k} className="topbar-btn" onClick={() => { setEditPrimary(k); if (editSecondary === k) setEditSecondary(''); }} style={{
+                      border: `1px solid ${editPrimary === k ? accent : accentDim}`,
+                      color: editPrimary === k ? 'hsl(var(--accent-bright))' : dimText,
+                      boxShadow: editPrimary === k ? '0 0 6px rgba(255,176,0,0.3)' : 'none',
+                    }}>{STAT_META[k].icon} {STAT_META[k].name}</button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: 9, color: accentDim, letterSpacing: 1, marginBottom: 6 }}>SECONDARY STAT</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  <button className="topbar-btn" onClick={() => setEditSecondary('')} style={{
+                    border: `1px solid ${editSecondary === '' ? accent : accentDim}`,
+                    color: editSecondary === '' ? 'hsl(var(--accent-bright))' : dimText,
+                  }}>NONE</button>
+                  {STAT_KEYS.filter(k => k !== editPrimary).map(k => (
+                    <button key={k} className="topbar-btn" onClick={() => setEditSecondary(k)} style={{
+                      border: `1px solid ${editSecondary === k ? accent : accentDim}`,
+                      color: editSecondary === k ? 'hsl(var(--accent-bright))' : dimText,
+                      boxShadow: editSecondary === k ? '0 0 6px rgba(255,176,0,0.3)' : 'none',
+                    }}>{STAT_META[k].icon} {STAT_META[k].name}</button>
+                  ))}
+                </div>
+              </div>
+
+              {editSecondary && (
+                <div>
+                  <div style={{ fontSize: 9, color: accentDim, letterSpacing: 1, marginBottom: 6 }}>
+                    DEFAULT SPLIT: {STAT_META[editSecondary].name} {100 - editSplit}% / {STAT_META[editPrimary].name} {editSplit}%
+                  </div>
+                  <input
+                    type="range"
+                    className="ql-split-slider"
+                    min={10}
+                    max={90}
+                    step={5}
+                    value={editSplit}
+                    onChange={e => setEditSplit(Number(e.target.value))}
+                    style={{ width: '100%' }}
+                  />
+                </div>
+              )}
+
+              <div>
+                <div style={{ fontSize: 9, color: accentDim, letterSpacing: 1, marginBottom: 4 }}>LIFEPATH</div>
+                <select
+                  value={editLifepathId}
+                  onChange={e => setEditLifepathId(e.target.value)}
+                  style={{ width: '100%', padding: '6px 10px', fontSize: 11, boxSizing: 'border-box', background: bgTer, border: `1px solid ${accentDim}`, color: accent, fontFamily: mono, outline: 'none' }}
+                >
+                  <option value="">UNLINKED</option>
+                  {lifepaths.map(lp => (
+                    <option key={lp.id} value={lp.id}>
+                      {lp.category} - {lp.name}
+                    </option>
+                  ))}
+                </select>
+                {editingLifepath && (
+                  <div style={{ fontSize: 9, color: dimText, marginTop: 4 }}>
+                    Linked to {editingLifepath.category} / {editingLifepath.name}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <div style={{ fontSize: 9, color: accentDim, letterSpacing: 1, marginBottom: 4 }}>NOTES</div>
+                <textarea
+                  value={editNotes}
+                  onChange={e => setEditNotes(e.target.value)}
+                  rows={4}
+                  style={{ width: '100%', padding: '8px 10px', fontSize: 11, boxSizing: 'border-box', background: bgTer, border: `1px solid ${accentDim}`, color: dimText, fontFamily: mono, outline: 'none', resize: 'vertical', lineHeight: 1.6 }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => saveEdit.mutate()} disabled={saveEdit.isPending} style={{ flex: 1, padding: '6px', fontSize: 9, border: `1px solid ${accent}`, background: 'transparent', color: accent, fontFamily: mono, cursor: 'pointer' }}>
+                  {saveEdit.isPending ? 'SAVING...' : '✓ SAVE'}
+                </button>
+                <button onClick={() => setEditing(false)} style={{ flex: 1, padding: '6px', fontSize: 9, border: `1px solid ${accentDim}`, background: 'transparent', color: dimText, fontFamily: mono, cursor: 'pointer' }}>
+                  CANCEL
+                </button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            {selectedLifepath && (
+              <>
+                <SectionLabel label="LIFEPATH" />
+                <div style={{ fontSize: 10, color: dimText }}>
+                  {selectedLifepath.category} / <span style={{ color: accent }}>{selectedLifepath.name}</span>
+                </div>
+              </>
+            )}
+            {skill.notes && (
+              <>
+                <SectionLabel label="NOTES" />
+                <div style={{ fontSize: 10, color: dimText, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{skill.notes}</div>
+              </>
+            )}
+          </>
+        )}
+
         <SectionLabel label="LOG SESSION" />
         <button
           onClick={() => {
@@ -339,7 +460,6 @@ export default function SkillDetailDrawer({ skillId, onClose, onOpenLog }: Props
           [ &gt;&gt; LOG SESSION ]
         </button>
 
-        {/* ── Recent sessions ── */}
         <SectionLabel label="RECENT SESSIONS" />
         {!sessions || sessions.length === 0 ? (
           <div style={{ fontSize: 10, color: dimText, opacity: 0.5 }}>No sessions logged yet.</div>
@@ -348,135 +468,40 @@ export default function SkillDetailDrawer({ skillId, onClose, onOpenLog }: Props
             const date = new Date(s.logged_at).toLocaleDateString('en-CA').replace(/-/g, '.');
             const time = new Date(s.logged_at).toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' });
             return (
-              <div key={s.id} style={{ display: 'flex', gap: 8, fontFamily: mono, fontSize: 10, marginBottom: 6, alignItems: 'center', padding: '4px 6px', background: 'rgba(153,104,0,0.06)', border: '1px solid rgba(153,104,0,0.2)' }}
+              <div
+                key={s.id}
+                style={{ display: 'flex', gap: 8, fontFamily: mono, fontSize: 10, marginBottom: 6, alignItems: 'center', padding: '4px 6px', background: 'rgba(153,104,0,0.06)', border: '1px solid rgba(153,104,0,0.2)' }}
                 onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(153,104,0,0.4)'}
-                onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(153,104,0,0.2)'}>
+                onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(153,104,0,0.2)'}
+              >
                 <span style={{ color: accentDim, flexShrink: 0 }}>›</span>
                 <span style={{ color: dimText, flexShrink: 0, width: 72 }}>{date}</span>
                 <span style={{ color: dimText, flexShrink: 0, width: 44, fontSize: 9, opacity: 0.6 }}>{time}</span>
                 <span style={{ color: accent, flexShrink: 0 }}>{s.duration_minutes}m</span>
-                {s.notes && <span style={{ color: dimText, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 9 }}>{s.notes}</span>}
-                {!s.notes && <span style={{ flex: 1 }} />}
-                <span style={{ color: '#44ff88', flexShrink: 0 }}>+{s.skill_xp_awarded}</span>
-                <span onClick={() => { if (window.confirm('Delete this session? XP already awarded will not be reversed.')) deleteSession.mutate(s.id); }}
+                {s.notes ? <span style={{ color: dimText, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 9 }}>{s.notes}</span> : <span style={{ flex: 1 }} />}
+                <span style={{ color: green, flexShrink: 0 }}>+{s.skill_xp_awarded}</span>
+                <span
+                  onClick={() => { if (window.confirm('Delete this session? XP already awarded will not be reversed.')) deleteSession.mutate(s.id); }}
                   style={{ fontSize: 9, color: 'rgba(153,104,0,0.4)', cursor: 'pointer', flexShrink: 0, padding: '0 2px' }}
                   onMouseEnter={e => e.currentTarget.style.color = '#ff4400'}
-                  onMouseLeave={e => e.currentTarget.style.color = 'rgba(153,104,0,0.4)'}>×</span>
+                  onMouseLeave={e => e.currentTarget.style.color = 'rgba(153,104,0,0.4)'}
+                >×</span>
               </div>
             );
           })
         )}
 
-        {/* ── Stats & Split — editable ── */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <SectionLabel label="STATS & SPLIT" />
-          {!editingStats && (
-            <button onClick={startEditStats} style={{ fontSize: 9, background: 'transparent', border: 'none', color: accentDim, cursor: 'pointer', fontFamily: mono, letterSpacing: 1 }}
-              onMouseEnter={e => e.currentTarget.style.color = accent}
-              onMouseLeave={e => e.currentTarget.style.color = accentDim}
-            >[ EDIT ]</button>
-          )}
-        </div>
-
-        {editingStats ? (
-          <div style={{ background: bgSec, border: `1px solid ${accentDim}`, padding: 12, marginBottom: 8, display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {/* Primary */}
-            <div>
-              <div style={{ fontSize: 9, color: accentDim, letterSpacing: 1, marginBottom: 6 }}>PRIMARY STAT</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                {(['body','wire','mind','cool','grit','flow','ghost'] as StatKey[]).map(k => (
-                  <button key={k} className="topbar-btn" onClick={() => { setEditPrimary(k); if (editSecondary === k) setEditSecondary(''); }} style={{
-                    border: `1px solid ${editPrimary === k ? accent : accentDim}`,
-                    color: editPrimary === k ? 'hsl(var(--accent-bright))' : dimText,
-                    boxShadow: editPrimary === k ? '0 0 6px rgba(255,176,0,0.3)' : 'none',
-                  }}>{STAT_META[k].icon} {STAT_META[k].name}</button>
-                ))}
-              </div>
-            </div>
-            {/* Secondary */}
-            <div>
-              <div style={{ fontSize: 9, color: accentDim, letterSpacing: 1, marginBottom: 6 }}>SECONDARY STAT <span style={{ color: dimText }}>(optional)</span></div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                <button className="topbar-btn" onClick={() => setEditSecondary('')} style={{ border: `1px solid ${editSecondary === '' ? accent : accentDim}`, color: editSecondary === '' ? 'hsl(var(--accent-bright))' : dimText }}>NONE</button>
-                {(['body','wire','mind','cool','grit','flow','ghost'] as StatKey[]).filter(k => k !== editPrimary).map(k => (
-                  <button key={k} className="topbar-btn" onClick={() => setEditSecondary(k)} style={{
-                    border: `1px solid ${editSecondary === k ? accent : accentDim}`,
-                    color: editSecondary === k ? 'hsl(var(--accent-bright))' : dimText,
-                    boxShadow: editSecondary === k ? '0 0 6px rgba(255,176,0,0.3)' : 'none',
-                  }}>{STAT_META[k].icon} {STAT_META[k].name}</button>
-                ))}
-              </div>
-            </div>
-            {/* Split */}
-            {editSecondary && (
-              <div>
-                <div style={{ fontSize: 9, color: accentDim, letterSpacing: 1, marginBottom: 6 }}>
-                  SPLIT: {STAT_META[editSecondary as StatKey]?.name} {100 - editSplit}% / {STAT_META[editPrimary]?.name} {editSplit}%
-                </div>
-                <input type="range" className="ql-split-slider" min={10} max={90} step={5}
-                  value={editSplit} onChange={e => setEditSplit(Number(e.target.value))} style={{ width: '100%' }} />
-              </div>
-            )}
-            {/* Save / Cancel */}
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => saveStats.mutate()} disabled={saveStats.isPending} style={{ flex: 1, padding: '6px', fontSize: 9, border: `1px solid ${accent}`, background: 'transparent', color: accent, fontFamily: mono, cursor: 'pointer' }}>
-                {saveStats.isPending ? 'SAVING...' : '✓ SAVE'}
-              </button>
-              <button onClick={() => setEditingStats(false)} style={{ flex: 1, padding: '6px', fontSize: 9, border: `1px solid ${accentDim}`, background: 'transparent', color: dimText, fontFamily: mono, cursor: 'pointer' }}>
-                CANCEL
-              </button>
-            </div>
-          </div>
-        ) : (
-          statKeys.length > 0 && statKeys.map((k, i) => {
-            const pct = split[i] ?? Math.round(100 / statKeys.length);
-            return (
-              <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                <span style={{ fontSize: 10, color: accent, width: 64, flexShrink: 0 }}>{STAT_META[k]?.icon} {k.toUpperCase()}</span>
-                <div style={{ flex: 1, height: 5, background: bgTer, border: '1px solid hsl(var(--accent-dim))' }}>
-                  <div style={{ width: `${pct}%`, height: '100%', background: accent, boxShadow: '0 0 4px rgba(255,176,0,0.4)' }} />
-                </div>
-                <span style={{ fontSize: 10, color: dimText, width: 32, textAlign: 'right', flexShrink: 0 }}>{pct}%</span>
-              </div>
-            );
-          })
-        )}
-
-        {/* ── Notes ── */}
-        <SectionLabel label="NOTES" />
-        <textarea
-          value={notesValue ?? (skill.notes ?? '')}
-          onChange={e => setNotesValue(e.target.value)}
-          onBlur={async e => {
-            await supabase.from('skills').update({ notes: e.target.value.trim() || null }).eq('id', skillId);
-            queryClient.invalidateQueries({ queryKey: ['skill', skillId] });
-            queryClient.invalidateQueries({ queryKey: ['skills'] });
-          }}
-          placeholder="Add notes about this skill..."
-          rows={3}
-          style={{
-            width: '100%', background: bgSec,
-            border: '1px solid rgba(153,104,0,0.4)',
-            color: dimText, fontFamily: mono, fontSize: 11,
-            lineHeight: 1.6, padding: '8px 10px',
-            outline: 'none', resize: 'vertical', boxSizing: 'border-box',
-          }}
-          onFocus={e => (e.target.style.borderColor = accentDim)}
-          onBlurCapture={e => (e.target.style.borderColor = 'rgba(153,104,0,0.4)')}
-        />
-
-        {/* ── Actions ── */}
         <div style={{ height: 1, background: 'rgba(153,104,0,0.3)', margin: '20px 0 16px' }} />
         <div style={{ display: 'flex', gap: 8 }}>
           <button
-            onClick={() => { setNameValue(skill.name); setEditingName(true); }}
+            onClick={startEdit}
             style={{ flex: 1, height: 32, border: `1px solid ${accentDim}`, background: 'transparent', color: accentDim, fontFamily: mono, fontSize: 10, cursor: 'pointer' }}
             onMouseEnter={e => { e.currentTarget.style.borderColor = accent; e.currentTarget.style.color = accent; }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = accentDim; e.currentTarget.style.color = accentDim; }}
-          >[ RENAME ]</button>
+          >[ EDIT ]</button>
           <button
             onClick={() => toggleActive.mutate(!skill.active)}
-            style={{ flex: 1, height: 32, border: `1px solid ${skill.active ? 'rgba(255,60,60,0.4)' : '#44ff88'}`, background: 'transparent', color: skill.active ? 'hsl(0,80%,55%)' : '#44ff88', fontFamily: mono, fontSize: 10, cursor: 'pointer' }}
+            style={{ flex: 1, height: 32, border: `1px solid ${skill.active ? 'rgba(255,60,60,0.4)' : green}`, background: 'transparent', color: skill.active ? 'hsl(0,80%,55%)' : green, fontFamily: mono, fontSize: 10, cursor: 'pointer' }}
           >{skill.active ? '[ DEACTIVATE ]' : '[ ACTIVATE ]'}</button>
           <button
             onClick={() => setShowDelete(v => !v)}

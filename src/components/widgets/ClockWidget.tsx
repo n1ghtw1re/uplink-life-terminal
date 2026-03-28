@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import WidgetWrapper from '../WidgetWrapper';
+import { syncClockSoundStatus, triggerClockAlert } from '@/components/effects/ClockAlertOverlay';
 
 interface WidgetProps {
   onClose?: () => void;
@@ -16,6 +17,16 @@ const TIMER_PRESETS = [5, 10, 15, 25, 45, 60];
 const POMODORO_BREAK_SOUND_SRC = '/music/peace_orchestra.mp3';
 const POMODORO_VOLUME_STORAGE_KEY = 'uplink-pomodoro-volume';
 const POMODORO_WORK_MIN_STORAGE_KEY = 'uplink-pomodoro-work-minutes';
+let sharedPomodoroBreakAudio: HTMLAudioElement | null = null;
+
+const getPomodoroBreakAudio = () => {
+  if (sharedPomodoroBreakAudio) return sharedPomodoroBreakAudio;
+  const audio = new Audio(POMODORO_BREAK_SOUND_SRC);
+  audio.preload = 'auto';
+  audio.loop = false;
+  sharedPomodoroBreakAudio = audio;
+  return audio;
+};
 
 const formatTime = (seconds: number) => {
   const mins = Math.floor(seconds / 60);
@@ -63,11 +74,10 @@ const ClockWidget = ({ onClose, onFullscreen, isFullscreen, isFocused }: WidgetP
     }
   });
 
-  const [notification, setNotification] = useState<string | null>(null);
-  const [glitchActive, setGlitchActive] = useState(false);
-  const glitchTimeoutRef = useRef<number | null>(null);
   const pomodoroBreakAudioRef = useRef<HTMLAudioElement | null>(null);
   const pomodoroVolumeRef = useRef(pomodoroVolume);
+  const [pomodoroSoundPlaying, setPomodoroSoundPlaying] = useState(false);
+  const [pendingClockAlert, setPendingClockAlert] = useState<null | { message: string; popup: boolean; glitch: boolean }>(null);
 
   useEffect(() => {
     pomodoroVolumeRef.current = pomodoroVolume;
@@ -81,64 +91,83 @@ const ClockWidget = ({ onClose, onFullscreen, isFullscreen, isFocused }: WidgetP
   }, [pomodoroVolume]);
 
   useEffect(() => {
-    const audio = new Audio(POMODORO_BREAK_SOUND_SRC);
-    audio.preload = 'auto';
+    const audio = getPomodoroBreakAudio();
     audio.volume = pomodoroVolumeRef.current;
+    const syncPlaying = () => setPomodoroSoundPlaying(!audio.paused && !audio.ended);
+    audio.addEventListener('play', syncPlaying);
+    audio.addEventListener('playing', syncPlaying);
+    audio.addEventListener('pause', syncPlaying);
+    audio.addEventListener('ended', syncPlaying);
     pomodoroBreakAudioRef.current = audio;
+    syncPlaying();
     return () => {
-      audio.pause();
-      pomodoroBreakAudioRef.current = null;
+      audio.removeEventListener('play', syncPlaying);
+      audio.removeEventListener('playing', syncPlaying);
+      audio.removeEventListener('pause', syncPlaying);
+      audio.removeEventListener('ended', syncPlaying);
+      if (pomodoroBreakAudioRef.current === audio) {
+        pomodoroBreakAudioRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    syncClockSoundStatus(pomodoroSoundPlaying);
+  }, [pomodoroSoundPlaying]);
+
+  useEffect(() => {
+    const handleStopSound = () => {
+      stopPomodoroSound();
+    };
+    window.addEventListener('uplink:clock-sound-stop', handleStopSound);
+    return () => {
+      window.removeEventListener('uplink:clock-sound-stop', handleStopSound);
     };
   }, []);
 
   const playPomodoroCompleteSound = () => {
     const v = pomodoroVolumeRef.current;
     if (v <= 0) return;
-    const audio = pomodoroBreakAudioRef.current;
-    if (!audio) return;
+    const audio = pomodoroBreakAudioRef.current ?? getPomodoroBreakAudio();
+    pomodoroBreakAudioRef.current = audio;
     audio.volume = Math.min(1, Math.max(0, v));
+    audio.pause();
     audio.currentTime = 0;
+    setPomodoroSoundPlaying(true);
     void audio.play().catch(() => {});
   };
 
-  const triggerNotification = (message: string, popup: boolean, glitch: boolean) => {
-    setNotification(popup ? message : null);
-    setGlitchActive(glitch);
-
-    if (!popup && !glitch) return;
-
-    if (glitchTimeoutRef.current) {
-      window.clearTimeout(glitchTimeoutRef.current);
-    }
-    glitchTimeoutRef.current = window.setTimeout(() => {
-      setNotification(null);
-      setGlitchActive(false);
-      glitchTimeoutRef.current = null;
-    }, 1600);
+  const stopPomodoroSound = () => {
+    const audio = pomodoroBreakAudioRef.current ?? sharedPomodoroBreakAudio;
+    if (!audio) return;
+    audio.pause();
+    audio.currentTime = 0;
+    setPomodoroSoundPlaying(false);
+    syncClockSoundStatus(false);
   };
 
   useEffect(() => {
-    return () => {
-      if (glitchTimeoutRef.current) window.clearTimeout(glitchTimeoutRef.current);
-    };
-  }, []);
+    if (!pendingClockAlert) return;
+    triggerClockAlert(pendingClockAlert.message, pendingClockAlert.popup, pendingClockAlert.glitch);
+    setPendingClockAlert(null);
+  }, [pendingClockAlert]);
 
   useEffect(() => {
     if (!timerRunning) return;
     const id = window.setInterval(() => {
-      setTimerSecondsLeft((prev) => {
-        if (prev <= 1) {
-          setTimerRunning(false);
-          if (timerNotify || timerGlitch) {
-            triggerNotification('Timer complete', timerNotify, timerGlitch);
-          }
-          return 0;
-        }
-        return prev - 1;
-      });
+      setTimerSecondsLeft((prev) => Math.max(0, prev - 1));
     }, 1000);
     return () => window.clearInterval(id);
   }, [timerRunning, timerNotify, timerGlitch]);
+
+  useEffect(() => {
+    if (!timerRunning) return;
+    if (timerSecondsLeft !== 0) return;
+    setTimerRunning(false);
+    if (timerNotify || timerGlitch) {
+      setPendingClockAlert({ message: 'Timer complete', popup: timerNotify, glitch: timerGlitch });
+    }
+  }, [timerRunning, timerSecondsLeft, timerNotify, timerGlitch]);
 
   useEffect(() => {
     if (isFocused) {
@@ -171,27 +200,32 @@ const ClockWidget = ({ onClose, onFullscreen, isFullscreen, isFocused }: WidgetP
   useEffect(() => {
     if (!pomodoroRunning) return;
     const id = window.setInterval(() => {
-      setPomodoroSecondsLeft((prev) => {
-        if (prev <= 1) {
-          const nextPhase: PomodoroPhase = pomodoroPhase === 'WORK' ? 'BREAK' : 'WORK';
-          if (pomodoroPhase === 'WORK') {
-            setPomodoroCycles((c) => c + 1);
-          }
-          queueMicrotask(() => playPomodoroCompleteSound());
-          setPomodoroPhase(nextPhase);
-
-          if (pomodoroNotify || pomodoroGlitch) {
-            const message = nextPhase === 'BREAK' ? 'Break time!' : 'Back to work!';
-            triggerNotification(message, pomodoroNotify, pomodoroGlitch);
-          }
-
-          return nextPhase === 'WORK' ? pomodoroWorkMinutes * 60 : 5 * 60;
-        }
-        return prev - 1;
-      });
+      setPomodoroSecondsLeft((prev) => Math.max(0, prev - 1));
     }, 1000);
     return () => window.clearInterval(id);
   }, [pomodoroRunning, pomodoroPhase, pomodoroNotify, pomodoroGlitch, pomodoroWorkMinutes]);
+
+  useEffect(() => {
+    if (!pomodoroRunning) return;
+    if (pomodoroSecondsLeft !== 0) return;
+
+    const nextPhase: PomodoroPhase = pomodoroPhase === 'WORK' ? 'BREAK' : 'WORK';
+    if (pomodoroPhase === 'WORK') {
+      setPomodoroCycles((c) => c + 1);
+    }
+
+    playPomodoroCompleteSound();
+    setPomodoroPhase(nextPhase);
+    setPomodoroSecondsLeft(nextPhase === 'WORK' ? pomodoroWorkMinutes * 60 : 5 * 60);
+
+    if (pomodoroNotify || pomodoroGlitch) {
+      setPendingClockAlert({
+        message: nextPhase === 'BREAK' ? 'Break time!' : 'Back to work!',
+        popup: pomodoroNotify,
+        glitch: pomodoroGlitch,
+      });
+    }
+  }, [pomodoroRunning, pomodoroSecondsLeft, pomodoroPhase, pomodoroNotify, pomodoroGlitch, pomodoroWorkMinutes]);
 
   const timerProgress = useMemo(() => {
     const total = Math.max(1, timerDurationMin * 60);
@@ -206,85 +240,9 @@ const ClockWidget = ({ onClose, onFullscreen, isFullscreen, isFocused }: WidgetP
     setTimerRunning(false);
   };
 
-  const renderNotification = () => {
-    if (!notification && !glitchActive) return null;
-    return (
-      <div
-        className={`glitch-overlay${glitchActive ? ' glitch-active' : ''}`}
-        onClick={() => {
-          setNotification(null);
-          setGlitchActive(false);
-          if (glitchTimeoutRef.current) {
-            window.clearTimeout(glitchTimeoutRef.current);
-            glitchTimeoutRef.current = null;
-          }
-        }}
-      >
-        <div className="glitch-box">
-          {notification && (
-            <>
-              <div className="glitch-text" aria-live="polite">
-                {notification}
-              </div>
-              <div style={{ marginTop: 12, fontSize: 10, color: 'hsl(var(--text-dim))' }}>
-                (click anywhere to dismiss)
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    );
-  };
-
   return (
     <WidgetWrapper title="CLOCK" onClose={onClose} onFullscreen={onFullscreen} isFullscreen={isFullscreen}>
       <div ref={containerRef} tabIndex={0} style={{ outline: 'none', position: 'relative' }}>
-        {renderNotification()}
-        <style>{`
-          .glitch-overlay {
-            position: absolute;
-            inset: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: hsl(var(--bg-primary) / 0.85);
-            z-index: 5;
-            cursor: pointer;
-          }
-
-          .glitch-box {
-            padding: 18px 20px;
-            border: 1px solid hsl(var(--accent));
-            background: hsl(var(--bg-secondary) / 0.9);
-            border-radius: 10px;
-            text-align: center;
-            min-width: 260px;
-            max-width: 320px;
-            box-shadow: 0 0 18px rgba(0,0,0,0.5);
-          }
-
-          .glitch-text {
-            font-family: 'VT323', monospace;
-            font-size: 22px;
-            letter-spacing: 0.08em;
-            color: hsl(var(--accent-bright));
-            text-shadow: 0 0 10px hsl(var(--accent-bright) / 0.8);
-          }
-
-          .glitch-overlay.glitch-active .glitch-box {
-            animation: glitch-anim 0.45s ease-in-out infinite;
-          }
-
-          @keyframes glitch-anim {
-            0% { transform: translate(0,0); }
-            20% { transform: translate(-2px, 2px); }
-            40% { transform: translate(2px, -2px); }
-            60% { transform: translate(-1px, 1px); }
-            80% { transform: translate(1px, -1px); }
-            100% { transform: translate(0,0); }
-          }
-        `}</style>
-
         <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
           <button className={`topbar-btn ${tab === 'timer' ? 'active' : ''}`} onClick={() => setTab('timer')}>
             TIMER
@@ -385,6 +343,7 @@ const ClockWidget = ({ onClose, onFullscreen, isFullscreen, isFocused }: WidgetP
             <button
               className="topbar-btn"
               onClick={() => {
+                stopPomodoroSound();
                 setPomodoroRunning(false);
                 setPomodoroPhase('WORK');
                 setPomodoroSecondsLeft(pomodoroWorkMinutes * 60);
@@ -392,6 +351,9 @@ const ClockWidget = ({ onClose, onFullscreen, isFullscreen, isFocused }: WidgetP
               }}
             >
               RESET
+            </button>
+            <button className="topbar-btn" onClick={stopPomodoroSound} disabled={!pomodoroSoundPlaying}>
+              STOP SOUND
             </button>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>

@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { refreshAppData } from '@/lib/refreshAppData';
 // xpService imported dynamically in handlers
 import { STAT_META, StatKey } from '@/types';
 
@@ -226,9 +227,9 @@ export default function MediaDetailDrawer({ mediaId, onClose }: Props) {
         .eq('id', mediaId);
       if (error) throw error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries();
-    },
+      onSuccess: async () => {
+        await refreshAppData(queryClient);
+      },
   });
 
   const markFinished = useMutation({
@@ -260,9 +261,9 @@ export default function MediaDetailDrawer({ mediaId, onClose }: Props) {
       setLastXP(baseXP);
       setTimeout(() => setLastXP(null), 3000);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries();
-    },
+      onSuccess: async () => {
+        await refreshAppData(queryClient);
+      },
   });
 
   const updatePageProgress = useMutation({
@@ -270,7 +271,9 @@ export default function MediaDetailDrawer({ mediaId, onClose }: Props) {
       const db = await import('@/lib/db').then(m => m.getDB());
       await db.query(`UPDATE media SET page_current = $1 WHERE id = $2`, [currentPage, mediaId]);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['media-item', mediaId] }),
+    onSuccess: async () => {
+      await refreshAppData(queryClient);
+    },
   });
 
   const updateTVProgress = useMutation({
@@ -278,11 +281,11 @@ export default function MediaDetailDrawer({ mediaId, onClose }: Props) {
       const db = await import('@/lib/db').then(m => m.getDB());
       await db.query(`UPDATE media SET current_season = $1 WHERE id = $2`, [season, mediaId]);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['media-item', mediaId] });
-      setEditingProgress(false);
-      setSeasonInput('');
-    },
+      onSuccess: async () => {
+        await refreshAppData(queryClient);
+        setEditingProgress(false);
+        setSeasonInput('');
+      },
   });
 
   const saveEdit = useMutation({
@@ -296,10 +299,10 @@ export default function MediaDetailDrawer({ mediaId, onClose }: Props) {
          editLegacy, mediaId]
       );
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries();
-      setEditing(false);
-    },
+      onSuccess: async () => {
+        await refreshAppData(queryClient);
+        setEditing(false);
+      },
   });
 
   const startEdit = () => {
@@ -320,10 +323,10 @@ export default function MediaDetailDrawer({ mediaId, onClose }: Props) {
       const error = null;
       if (error) throw error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['media'] });
-      onClose?.();
-    },
+      onSuccess: async () => {
+        await refreshAppData(queryClient);
+        onClose?.();
+      },
   });
 
   // ── Loading / not found ───────────────────────────────────
