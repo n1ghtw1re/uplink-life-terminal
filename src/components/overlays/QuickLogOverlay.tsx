@@ -770,6 +770,11 @@ export default function QuickLogOverlay({ open, onClose }: Props) {
             await awardBonusXP({ source: 'course_section', sourceId: secId, amount: masterBonus, notes: `${course.name} — ${sec?.title ?? ''}` });
           }
         }
+        
+        const totalSections = course.sections.length;
+        const completedCount = course.sections.filter(s => s.completed_at || completedSections.includes(s.id)).length;
+        const newProgress = totalSections > 0 ? Math.round((completedCount / totalSections) * 100) : 0;
+        await db.exec(`UPDATE courses SET progress = ${newProgress} WHERE id = '${course.id}';`);
       }
       if (course && markCourseComplete) {
         await db.exec(`UPDATE courses SET status = 'COMPLETE', progress = 100, completed_at = '${new Date().toISOString()}' WHERE id = '${course.id}';`);
