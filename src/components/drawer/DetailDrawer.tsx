@@ -6,6 +6,7 @@ import ProjectDetailDrawer from './ProjectDetailDrawer';
 import MediaDetailDrawer from './MediaDetailDrawer';
 import ToolDetailDrawer from './ToolDetailDrawer';
 import NoteDetailDrawer from './NoteDetailDrawer';
+import ResourceDetailDrawer from './ResourceDetailDrawer';
 
 export interface DrawerItem {
   type: 'skill' | 'course' | 'book' | 'project' | 'cert' | 'tool' | 'augment' | 'resource' | 'media' | 'note';
@@ -81,6 +82,7 @@ const DetailDrawer = ({ open, item, onClose, onOpenLog }: DetailDrawerProps) => 
       {item?.type === 'book'    && <MediaDetailDrawer mediaId={item.id} onClose={onClose} />}
       {item?.type === 'project'  && <ProjectDetailDrawer projectId={item.id} onClose={onClose} />}
       {item?.type === 'note'   && <NoteDetailDrawer noteId={item.id} embedded onClose={onClose} />}
+      {item?.type === 'resource' && <ResourceDetailDrawer resourceId={item.id} onClose={onClose} />}
       {!item?.type && null}
       </div>
     </div>

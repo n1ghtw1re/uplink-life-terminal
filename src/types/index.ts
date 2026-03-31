@@ -535,11 +535,12 @@ export interface Resource {
   id: string;
   userId: string;
   title: string;
-  url: string;
+  url: string | null;
   type: ResourceType;
   tags: string[];
   linkedSkillIds: string[];
   status: ResourceStatus;
+  description: string | null;
   notes: string | null;
   isLegacy: boolean;
   createdAt: string;
@@ -574,6 +575,16 @@ export interface Badge {
   badgeKey: string;
   earnedAt: string;
   shieldAwarded: boolean;
+}
+
+export interface BackgroundRecord {
+  id: string;
+  type: 'CAREER' | 'EDUCATION';
+  title: string;
+  organization: string;
+  dateStr: string;
+  description: string;
+  createdAt: string;
 }
 
 export interface WeeklyChallenge {

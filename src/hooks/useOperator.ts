@@ -20,15 +20,15 @@ export function useOperator(_userId?: string) {
         db.query<{ total_xp: number; level: number; streak: number; shields: number }>(
           `SELECT total_xp, level, streak, shields FROM master_progress WHERE id = 1;`
         ),
-        db.query<{ callsign: string; theme: string; custom_class: string | null; designation: string | null }>(
-          `SELECT callsign, theme, custom_class, designation FROM profile WHERE id = 1;`
+        db.query<{ callsign: string; theme: string; custom_class: string | null; designation: string | null; avatar: string | null }>(
+          `SELECT callsign, theme, custom_class, designation, avatar FROM profile WHERE id = 1;`
         ),
         db.query<{ stat_key: string; xp: number; level: number }>(
           `SELECT stat_key, xp, level FROM stats;`
         ),
       ]);
       const p = prog.rows[0] ?? { total_xp: 0, level: 1, streak: 0, shields: 0 };
-      const pr = prof.rows[0] ?? { callsign: 'OPERATOR', theme: 'AMBER', custom_class: null, designation: null };
+      const pr = prof.rows[0] ?? { callsign: 'OPERATOR', theme: 'AMBER', custom_class: null, designation: null, avatar: null };
       
       const statsData = stats.rows.map(s => ({
         key: s.stat_key as any,
@@ -56,6 +56,7 @@ export function useOperator(_userId?: string) {
         shields: p.shields,
         callsign: pr.callsign,
         designation: pr.designation,
+        avatar: pr.avatar,
         theme: pr.theme,
         customClass: resolvedClass?.name ?? '',
         bootstrapComplete: true, // skip wizard until rebuilt for Lifepath system

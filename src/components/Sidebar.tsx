@@ -19,6 +19,7 @@ interface SidebarProps {
   onOpenLibrary?: () => void;
   onOpenCourses?: () => void;
   onOpenTools?: () => void;
+  onOpenResources?: () => void;
   onOpenAugments?: () => void;
   onOpenProjects?: () => void;
   onOpenClassDocs?: () => void;
@@ -55,7 +56,7 @@ const Sidebar = ({
   expanded, onToggle, onExpand, theme, onThemeChange,
   onOpenCharacterSheet,
   onOpenStat, onOpenSkills, onOpenLibrary, onOpenCourses,
-  onOpenTools, onOpenAugments, onOpenProjects, onOpenClassDocs, onOpenXpDocs, onOpenLifepath, onOpenWidgetManager, onOpenSocials, onOpenDailyLog, onOpenNotes,
+  onOpenTools, onOpenResources, onOpenAugments, onOpenProjects, onOpenClassDocs, onOpenXpDocs, onOpenLifepath, onOpenWidgetManager, onOpenSocials, onOpenDailyLog, onOpenNotes,
   onOpenClockWidget, onOpenCalculatorWidget, onOpenUnitConverterWidget,
 }: SidebarProps) => {
   const { user } = useAuth();
@@ -306,6 +307,7 @@ const Sidebar = ({
                 if (item.name === 'LIBRARY') onOpenLibrary?.();
                 if (item.name === 'COURSES') onOpenCourses?.();
                 if (item.name === 'TOOLS') onOpenTools?.();
+                if (item.name === 'RESOURCES') onOpenResources?.();
                 if (item.name === 'AUGMENTS') onOpenAugments?.();
                 if (item.name === 'PROJECTS') onOpenProjects?.();
               }}

@@ -1,7 +1,7 @@
 // ============================================================
 // src/components/drawer/SkillDetailDrawer.tsx
 // ============================================================
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { STAT_META, StatKey, getStatLevel } from '@/types';
@@ -118,6 +118,12 @@ export default function SkillDetailDrawer({ skillId, onClose, onOpenLog }: Props
   const [editSecondary, setEditSecondary] = useState<StatKey | ''>('');
   const [editSplit, setEditSplit] = useState(50);
   const [editLifepathId, setEditLifepathId] = useState('');
+
+  // Reset edit/delete states when skillId changes
+  useEffect(() => {
+    setEditing(false);
+    setShowDelete(false);
+  }, [skillId]);
 
   const { data: skill, isLoading } = useQuery({
     queryKey: ['skill', skillId],

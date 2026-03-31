@@ -368,6 +368,17 @@ async function initSchema(db: PGlite) {
     CREATE INDEX IF NOT EXISTS idx_notes_status ON notes(status);
     CREATE INDEX IF NOT EXISTS idx_notes_created_at ON notes(created_at);
 
+    CREATE TABLE IF NOT EXISTS background_records (
+      id           TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      type         TEXT NOT NULL,
+      title        TEXT NOT NULL,
+      organization TEXT NOT NULL,
+      date_str     TEXT NOT NULL,
+      description  TEXT,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_bg_records_type ON background_records(type);
+
     CREATE INDEX IF NOT EXISTS idx_sessions_skill  ON sessions(skill_id);
     CREATE INDEX IF NOT EXISTS idx_sessions_date   ON sessions(logged_at);
     CREATE INDEX IF NOT EXISTS idx_xp_log_tier     ON xp_log(tier);
@@ -425,6 +436,12 @@ async function initSchema(db: PGlite) {
   );
   await db.exec(
     `ALTER TABLE notes ALTER COLUMN status SET DEFAULT 'ACTIVE'`
+  );
+  await db.exec(
+    `ALTER TABLE resources ADD COLUMN IF NOT EXISTS description TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE resources ALTER COLUMN url DROP NOT NULL`
   );
   // Reset level floors to 0 for new level system (safe — only resets if XP is 0)
   await db.exec(`

@@ -19,7 +19,7 @@ const TAB_MEDIA_TYPE: Record<string, 'book' | 'comic' | 'film' | 'documentary' |
   BOOKS: 'book', COMICS: 'comic', FILMS: 'film', DOCS: 'documentary', TV: 'tv', ALBUMS: 'album', GAMES: 'game', ALL: 'book',
 };
 
-const IN_PROGRESS = ['READING', 'WATCHING', 'LISTENED', 'LISTENING'];
+const IN_PROGRESS = ['READING', 'WATCHING', 'LISTENED', 'LISTENING', 'PLAYING'];
 const DONE = ['FINISHED'];
 const mono = "'IBM Plex Mono', monospace";
 const acc = 'hsl(var(--accent))';
@@ -110,9 +110,11 @@ const MediaWidget = ({ onClose, onFullscreen, isFullscreen, onMediaClick, onOpen
   };
 
   const inProgressLabel = () => {
+    if (activeTab === 'ALL') return 'ACTIVE:';
     if (activeTab === 'ALBUMS') return 'LISTENING:';
     if (activeTab === 'FILMS') return 'WATCHING:';
     if (activeTab === 'TV') return 'WATCHING:';
+    if (activeTab === 'GAMES') return 'PLAYING:';
     return 'READING:';
   };
 
@@ -222,7 +224,7 @@ const MediaWidget = ({ onClose, onFullscreen, isFullscreen, onMediaClick, onOpen
       </WidgetWrapper>
 
       <Modal open={showAdd} onClose={() => setShowAdd(false)} title="ADD MEDIA" width={540}>
-        <AddMediaModal onClose={() => setShowAdd(false)} defaultType={TAB_MEDIA_TYPE[activeTab]} />
+        <AddMediaModal key={Date.now()} onClose={() => setShowAdd(false)} defaultType={TAB_MEDIA_TYPE[activeTab]} />
       </Modal>
     </>
   );

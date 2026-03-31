@@ -6,6 +6,12 @@ import { createPortal } from 'react-dom';
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+const MASTER_TITLES = [
+  'Novice', 'Apprentice', 'Initiate', 'Adept', 'Specialist', 
+  'Senior', 'Lead', 'Expert', 'Master', 'Principal', 
+  'Elite', 'Exalted', 'Grandmaster',
+];
+
 export interface LevelUpData {
   level: number;
   className: string;
@@ -208,7 +214,7 @@ const LevelUpAnimation = () => {
             {/* Class */}
             {step >= 3 && (
               <div style={{ fontFamily: vt, fontSize: 26, color: accB, marginBottom: 20, letterSpacing: 2 }}>
-                // {data.className}
+                // {MASTER_TITLES[Math.min(Math.floor(data.level / 5), MASTER_TITLES.length - 1)].toUpperCase()}
               </div>
             )}
 

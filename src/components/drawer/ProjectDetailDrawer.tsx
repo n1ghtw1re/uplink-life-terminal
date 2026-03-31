@@ -161,6 +161,12 @@ export default function ProjectDetailDrawer({ projectId, onClose }: Props) {
   const [editMediaIds, setEditMediaIds]   = useState<string[]>([]);
   const [editCourseIds, setEditCourseIds] = useState<string[]>([]);
 
+  // Reset edit/delete states when projectId changes
+  useEffect(() => {
+    setEditing(false);
+    setShowDelete(false);
+  }, [projectId]);
+
   const { data: project, isLoading } = useQuery({
     queryKey: ['project', projectId],
     enabled: !!projectId,

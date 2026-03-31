@@ -1,204 +1,134 @@
+// ============================================================
+// src/components/overlays/CharSheetPage3.tsx
+// ACHIEVEMENTS & BADGES
+// ============================================================
 import { useState } from 'react';
+import { useOperator } from '@/hooks/useOperator';
+import { applyThemeClass, normalizeTheme } from '@/lib/themes';
 
-const statSections = [
-  {
-    icon: '▲', name: 'BODY', level: 4,
-    skills: [
-      { name: 'Weightlifting', level: 5, xpPct: 78 },
-      { name: 'Running', level: 3, xpPct: 45 },
-      { name: 'MMA', level: 4, xpPct: 62 },
-    ],
-  },
-  {
-    icon: '⬡', name: 'WIRE', level: 6,
-    skills: [
-      { name: 'Coding', level: 6, xpPct: 55 },
-      { name: 'Web Dev', level: 5, xpPct: 88 },
-    ],
-  },
-  {
-    icon: '◈', name: 'MIND', level: 5,
-    skills: [
-      { name: 'Spanish', level: 4, xpPct: 33 },
-      { name: 'Reading', level: 5, xpPct: 70 },
-      { name: 'Online Courses', level: 3, xpPct: 20 },
-    ],
-  },
-  {
-    icon: '✦', name: 'FLOW', level: 5,
-    skills: [
-      { name: 'Music Production', level: 5, xpPct: 91 },
-      { name: 'Creative Writing', level: 3, xpPct: 48 },
-      { name: 'Drawing', level: 2, xpPct: 15 },
-    ],
-  },
-  {
-    icon: '░', name: 'GHOST', level: 3,
-    skills: [
-      { name: 'Meditation', level: 4, xpPct: 60 },
-      { name: 'Breathwork', level: 2, xpPct: 30 },
-    ],
-  },
+const mono = "'IBM Plex Mono', monospace";
+const vt   = "'VT323', monospace";
+const acc  = 'hsl(var(--accent))';
+const dim  = 'hsl(var(--text-dim))';
+const adim = 'hsl(var(--accent-dim))';
+const bgS  = 'hsl(var(--bg-secondary))';
+
+const MASTER_TITLES = [
+  'Novice', 'Apprentice', 'Initiate', 'Adept', 'Specialist', 
+  'Senior', 'Lead', 'Expert', 'Master', 'Principal', 
+  'Elite', 'Exalted', 'Grandmaster',
 ];
 
-const dormantStats = [
-  { icon: '◆', name: 'COOL' },
-  { icon: '▣', name: 'GRIT' },
+const MOCK_ACHIEVEMENTS = [
+  { id: 1, title: 'FIRST BLOOD', desc: 'Complete your first sprint goal.', date: '2026-03-20' },
+  { id: 2, title: 'NIGHT OWL', desc: 'Log 5 sessions after midnight.', date: '2026-03-24' },
+  { id: 3, title: 'JACKED IN', desc: 'Achieve a 7-day login streak.', date: '2026-03-28' },
 ];
 
-const CharSheetPage3 = ({ onSkillClick }: { onSkillClick?: (name: string) => void }) => {
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({
-    BODY: false,
-    WIRE: true,
-    MIND: false,
-    FLOW: false,
-    GHOST: true,
-  });
+const THEMES = ['2077', 'DOS', 'AMBER'];
 
-  const toggleCard = (name: string) => {
-    setExpanded(prev => ({ ...prev, [name]: !prev[name] }));
+export default function CharSheetPage3() {
+  const { data: operator } = useOperator();
+  
+  // Calculate earned titles
+  const level = operator?.level || 0;
+  const maxTitleIndex = Math.min(Math.floor(level / 5), MASTER_TITLES.length - 1);
+  const earnedTitles = MASTER_TITLES.slice(0, maxTitleIndex + 1);
+
+  const handleThemeChange = (themeName: string) => {
+    const t = normalizeTheme(themeName);
+    applyThemeClass(document.documentElement, t);
+    localStorage.setItem('uplink-theme', t);
+    window.dispatchEvent(new Event('theme-changed'));
   };
 
   return (
-    <div style={{ height: '100%', overflowY: 'auto', paddingRight: 4 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', fontFamily: mono, gap: 24, overflowY: 'auto', paddingRight: 8, scrollbarWidth: 'none' }}>
+      
       {/* Header */}
-      <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: '#996800', marginBottom: 16 }}>
-        // SKILLS
+      <div style={{ borderBottom: `1px solid ${adim}`, paddingBottom: 16 }}>
+        <div style={{ fontFamily: vt, fontSize: 32, color: acc, letterSpacing: 2 }}>ACHIEVEMENTS & BADGES</div>
+        <div style={{ fontSize: 10, color: adim, letterSpacing: 1 }}>// OPERATOR MILESTONES AND UNLOCKS</div>
       </div>
 
-      {/* Active stats grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16, alignItems: 'start' }}>
-        {statSections.map(stat => {
-          const isExpanded = expanded[stat.name];
-          return (
-            <div
-              key={stat.name}
-              style={{
-                background: '#1a0f00',
-                border: '1px solid #261600',
-                padding: '10px 12px',
-                display: 'flex',
-                flexDirection: 'column',
-              }}
-              onMouseEnter={e => (e.currentTarget.style.borderColor = '#3a2000')}
-              onMouseLeave={e => (e.currentTarget.style.borderColor = '#261600')}
-            >
-              {/* Stat header — clickable */}
-              <div
-                onClick={() => toggleCard(stat.name)}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  cursor: 'pointer',
-                  userSelect: 'none',
-                }}
-              >
-                <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: '#ffb000' }}>
-                  {stat.icon} {stat.name}
-                </span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontFamily: "'VT323', monospace", fontSize: 14, color: '#ffd060' }}>
-                    LVL {stat.level}
-                  </span>
-                  <span style={{
-                    fontSize: 10,
-                    color: '#996800',
-                    minWidth: 32,
-                    textAlign: 'right',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 2,
-                  }}>
-                    <span style={{
-                      display: 'inline-block',
-                      transition: 'transform 200ms ease',
-                      transform: isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)',
-                    }}>▾</span>
-                    {!isExpanded && <span>({stat.skills.length})</span>}
-                  </span>
+      <div style={{ display: 'flex', gap: 24, paddingBottom: 24 }}>
+        
+        {/* Left Col: Titles, Themes, Achievements */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 24 }}>
+          
+          {/* Master Level Titles */}
+          <div style={{ padding: 16, background: bgS, border: `1px solid ${adim}` }}>
+            <div style={{ fontSize: 12, color: acc, fontFamily: vt, letterSpacing: 1, marginBottom: 16 }}>// MASTER LEVEL TITLES EARNED</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {earnedTitles.map((title, i) => (
+                <div key={title} style={{ 
+                  padding: '6px 12px', background: 'rgba(255,176,0,0.1)', 
+                  border: `1px solid ${acc}`, color: acc, fontSize: 10, 
+                  letterSpacing: 1, boxShadow: i === earnedTitles.length - 1 ? '0 0 8px rgba(255,176,0,0.3)' : 'none'
+                }}>
+                  {title.toUpperCase()}
                 </div>
-              </div>
-
-              {/* Collapsible body */}
-              <div style={{
-                overflow: 'hidden',
-                maxHeight: isExpanded ? 400 : 0,
-                opacity: isExpanded ? 1 : 0,
-                transition: 'max-height 200ms ease, opacity 200ms ease',
-              }}>
-                {/* Divider */}
-                <div style={{ height: 1, background: '#261600', margin: '6px 0 8px' }} />
-                {/* Skills */}
-                {stat.skills.map((skill, si) => (
-                  <div key={skill.name} style={{ marginBottom: si < stat.skills.length - 1 ? 8 : 0 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
-                      <span
-                        style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: '#996800', cursor: 'pointer' }}
-                        onClick={(e) => { e.stopPropagation(); onSkillClick?.(skill.name); }}
-                        onMouseEnter={e => { e.currentTarget.style.color = '#ffb000'; }}
-                        onMouseLeave={e => { e.currentTarget.style.color = '#996800'; }}
-                      >
-                        {skill.name}
-                      </span>
-                      <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: '#ffd060' }}>
-                        LVL {skill.level}
-                      </span>
-                    </div>
-                    <div style={{ width: '100%', height: 4, background: '#261600', position: 'relative' }}>
-                      <div
-                        style={{
-                          width: `${skill.xpPct}%`,
-                          height: '100%',
-                          background: '#ffb000',
-                          boxShadow: '0 0 4px rgba(255,176,0,0.3)',
-                        }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
+              ))}
             </div>
-          );
-        })}
-      </div>
-
-      {/* Dormant section */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, color: '#332200', whiteSpace: 'nowrap' }}>
-          ── DORMANT
-        </span>
-        <div style={{ flex: 1, height: 1, background: '#332200' }} />
-      </div>
-
-      <div style={{ display: 'flex', gap: 12 }}>
-        {dormantStats.map(stat => (
-          <div
-            key={stat.name}
-            style={{
-              flex: 1,
-              border: '1px solid #1a0f00',
-              padding: '8px 12px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              opacity: 0.35,
-            }}
-          >
-            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10 }}>
-              {stat.icon} {stat.name}
-            </span>
-            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, color: '#664400' }}>
-              DORMANT
-            </span>
-            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 8, color: '#332200', fontStyle: 'italic' }}>
-              — no skills added
-            </span>
+            <div style={{ marginTop: 16, fontSize: 9, color: dim }}>
+              CURRENT LEVEL: {level} &nbsp;&nbsp; // &nbsp;&nbsp; NEXT TITLE UNLOCKS AT: LEVEL {(maxTitleIndex + 1) * 5}
+            </div>
           </div>
-        ))}
+
+          {/* Themes Unlocked */}
+          <div style={{ padding: 16, background: bgS, border: `1px solid ${adim}` }}>
+            <div style={{ fontSize: 12, color: acc, fontFamily: vt, letterSpacing: 1, marginBottom: 16 }}>// THEMES UNLOCKED</div>
+            <div style={{ display: 'flex', gap: 12 }}>
+              {THEMES.map(t => (
+                <button key={t} onClick={() => handleThemeChange(t)} style={{
+                  padding: '6px 16px', background: 'transparent', border: `1px solid ${adim}`,
+                  color: dim, fontFamily: mono, fontSize: 10, cursor: 'pointer', letterSpacing: 1, transition: 'all 150ms'
+                }} onMouseEnter={e => { e.currentTarget.style.color = acc; e.currentTarget.style.borderColor = acc; }}
+                   onMouseLeave={e => { e.currentTarget.style.color = dim; e.currentTarget.style.borderColor = adim; }}>
+                  APPLY [{t}]
+                </button>
+              ))}
+            </div>
+          </div>
+          
+          {/* Recent Achievements */}
+          <div style={{ padding: 16, background: bgS, border: `1px solid ${adim}`, flex: 1 }}>
+            <div style={{ fontSize: 12, color: acc, fontFamily: vt, letterSpacing: 1, marginBottom: 16 }}>// RECENT ACHIEVEMENTS</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {MOCK_ACHIEVEMENTS.map(ach => (
+                <div key={ach.id} style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingBottom: 12, borderBottom: `1px solid rgba(153,104,0,0.2)` }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ color: acc, fontSize: 14, fontFamily: vt, letterSpacing: 1 }}>{ach.title}</span>
+                    <span style={{ color: adim, fontSize: 9 }}>{ach.date}</span>
+                  </div>
+                  <span style={{ color: dim, fontSize: 10 }}>{ach.desc}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Right Col: Badges Matrix */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ padding: 16, background: bgS, border: `1px solid ${adim}`, flex: 1 }}>
+            <div style={{ fontSize: 12, color: acc, fontFamily: vt, letterSpacing: 1, marginBottom: 16 }}>// BADGE COLLECTION</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, 100px)', gap: 16 }}>
+              {[1, 2, 3, 4, 5, 6].map(num => (
+                <div key={num} style={{ 
+                  width: 100, height: 100, border: `1px solid ${adim}`, background: '#0a0a0a',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden'
+                 }}>
+                  <img src={`/images/badges/badge${num}.jpeg`} alt={`Badge ${num}`} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.8, filter: 'grayscale(20%) sepia(30%) hue-rotate(5deg)' }} />
+                  <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.85)', padding: '6px', textAlign: 'center', fontSize: 10, color: acc, borderTop: `1px solid ${adim}`, fontFamily: vt, letterSpacing: 2 }}>
+                    BADGE_0{num}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
   );
-};
-
-export default CharSheetPage3;
+}

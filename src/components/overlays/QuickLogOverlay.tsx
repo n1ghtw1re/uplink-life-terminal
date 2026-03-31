@@ -520,7 +520,8 @@ export default function QuickLogOverlay({ open, onClose }: Props) {
     setCustomDuration('');
     setNotes(tpl.notes ?? '');
     setIsLegacy(Boolean(tpl.is_legacy));
-    setLogDate(tpl.logged_at ? new Date(tpl.logged_at).toISOString().slice(0, 10) : '');
+    // Reset date to empty so it defaults to current time on submit
+    setLogDate('');
 
     const toolIds = parseArray<string>(tpl.tool_ids);
     setTools(toolIds.map(id => {
@@ -620,7 +621,18 @@ export default function QuickLogOverlay({ open, onClose }: Props) {
     try {
       const db        = await getDB();
       const sessionId = crypto.randomUUID();
-      const loggedAt  = logDate ? new Date(logDate).toISOString() : new Date().toISOString();
+      // Use logDate if set (local date), otherwise use now
+      let loggedAt: string;
+      if (logDate) {
+        const parts = logDate.split('-');
+        const year = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const day = parseInt(parts[2], 10);
+        // Create date at noon in local timezone
+        loggedAt = new Date(year, month, day, 12, 0, 0, 0).toISOString();
+      } else {
+        loggedAt = new Date().toISOString();
+      }
       const toolIds   = tools.map(t => t.id);
       const augIds    = augments.map(a => a.id);
 

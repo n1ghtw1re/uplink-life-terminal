@@ -18,6 +18,7 @@ import ClockWidget from '@/components/widgets/ClockWidget';
 import CalculatorWidget from '@/components/widgets/CalculatorWidget';
 import UnitConverterWidget from '@/components/widgets/UnitConverterWidget';
 import ToolsWidget from '@/components/widgets/ToolsWidget';
+import ResourcesWidget from '@/components/widgets/ResourcesWidget';
 import AugmentsWidget from '@/components/widgets/AugmentsWidget';
 import ProjectsWidget from '@/components/widgets/ProjectsWidget';
 import NotesWidget from '@/components/widgets/NotesWidget';
@@ -32,6 +33,7 @@ import NotesPage from '@/components/overlays/NotesPage';
 import SocialsOverlay from '@/components/overlays/SocialsOverlay';
 import LifepathPage from '@/components/overlays/LifepathPage';
 import ToolsPage from '@/components/overlays/ToolsPage';
+import ResourcesPage from '@/components/overlays/ResourcesPage';
 import AugmentsPage from '@/components/overlays/AugmentsPage';
 import ProjectsPage from '@/components/overlays/ProjectsPage';
 import CharacterSheet from '@/components/overlays/CharacterSheet';
@@ -48,7 +50,7 @@ import { applyThemeClass, normalizeTheme, type ThemeCode } from '@/lib/themes';
 
 type LayoutItem = { i: string; x: number; y: number; w: number; h: number; minW?: number; minH?: number };
 
-const ALL_WIDGET_IDS = ['xp', 'checkin', 'heatmap', 'stats', 'courses', 'media', 'skills', 'tools', 'augments', 'projects', 'notes', 'clock', 'calculator', 'unitConverter'];
+const ALL_WIDGET_IDS = ['xp', 'checkin', 'heatmap', 'stats', 'courses', 'media', 'skills', 'tools', 'resources', 'augments', 'projects', 'notes', 'clock', 'calculator', 'unitConverter'];
 const DEFAULT_ACTIVE_WIDGET_IDS = ['xp', 'checkin', 'heatmap', 'stats', 'courses', 'media', 'skills'];
 
 const defaultLayout: LayoutItem[] = [
@@ -60,7 +62,8 @@ const defaultLayout: LayoutItem[] = [
   { i: 'media', x: 8, y: 3, w: 4, h: 4, minW: 2, minH: 2 },
   { i: 'skills', x: 4, y: 7, w: 4, h: 4, minW: 2, minH: 2 },
   { i: 'tools',    x: 0, y: 8, w: 4, h: 4, minW: 2, minH: 2 },
-  { i: 'augments',  x: 4, y: 8, w: 4, h: 4, minW: 2, minH: 2 },
+  { i: 'resources', x: 4, y: 8, w: 4, h: 4, minW: 2, minH: 2 },
+  { i: 'augments',  x: 8, y: 8, w: 4, h: 4, minW: 2, minH: 2 },
   { i: 'projects',  x: 8, y: 8, w: 4, h: 4, minW: 2, minH: 2 },
   { i: 'clock', x: 8, y: 7, w: 4, h: 4, minW: 2, minH: 2 },
   { i: 'calculator', x: 0, y: 9, w: 4, h: 4, minW: 2, minH: 2 },
@@ -70,7 +73,7 @@ const defaultLayout: LayoutItem[] = [
 const widgetNames: Record<string, string> = {
   xp: 'XP & LEVELLING', checkin: 'DAILY CHECK-IN', heatmap: 'STREAK HEATMAP',
   stats: 'STAT OVERVIEW', courses: 'COURSES', media: 'MEDIA LIBRARY',
-  skills: 'SKILLS', tools: 'TOOLS', augments: 'AUGMENTS', projects: 'PROJECTS', notes: 'NOTES',
+  skills: 'SKILLS', tools: 'TOOLS', resources: 'RESOURCES', augments: 'AUGMENTS', projects: 'PROJECTS', notes: 'NOTES',
   clock: 'CLOCK', calculator: 'CALCULATOR', unitConverter: 'UNIT CONVERTER',
 };
 
@@ -87,6 +90,7 @@ const Index = () => {
   const [showNotesPage, setShowNotesPage] = useState(false);
   const [showLifepath, setShowLifepath] = useState(false);
   const [showTools, setShowTools]         = useState(false);
+  const [showResources, setShowResources] = useState(false);
   const [showAugments, setShowAugments]   = useState(false);
   const [showProjects, setShowProjects]   = useState(false);
   const [showCheckin, setShowCheckin] = useState(false);
@@ -253,6 +257,7 @@ const Index = () => {
       case 'media':        return <MediaWidget {...props} onOpenLibrary={() => setShowLibrary(true)} onMediaClick={(id) => openDrawer('book', id)} />;
       case 'skills':       return <SkillsWidget {...props} onOpenSkills={() => setShowSkills(true)} onSkillClick={(id) => openDrawer('skill', id)} />;
       case 'tools':    return <ToolsWidget {...props} onOpenTools={() => setShowTools(true)} onToolClick={(id) => openDrawer('tool', id)} />;
+      case 'resources': return <ResourcesWidget {...props} onOpenResources={() => setShowResources(true)} onResourceClick={(id) => openDrawer('resource', id)} />;
       case 'augments': return <AugmentsWidget {...props} onOpenAugments={() => setShowAugments(true)} onAugmentClick={(id) => openDrawer('augment', id)} />;
       case 'projects': return <ProjectsWidget {...props} onOpenProjects={() => setShowProjects(true)} onProjectClick={(id) => openDrawer('project', id)} />;
       case 'notes':    return <NotesWidget {...props} onNoteClick={(id) => openDrawer('note', id)} />;
@@ -291,6 +296,7 @@ const Index = () => {
           onOpenCourses={() => setShowCourses(true)}
           onOpenLifepath={() => setShowLifepath(true)}
           onOpenTools={() => setShowTools(true)}
+          onOpenResources={() => setShowResources(true)}
           onOpenAugments={() => setShowAugments(true)}
           onOpenProjects={() => setShowProjects(true)}
           onOpenClassDocs={() => setShowClassDocs(true)}
@@ -338,6 +344,7 @@ const Index = () => {
       {showClassDocs && <ClassDocsPage onClose={() => setShowClassDocs(false)} />}
       {showCharacterSheet && <CharacterSheet onClose={() => setShowCharacterSheet(false)} />}
       {showTools     && <ToolsPage     onClose={() => setShowTools(false)} />}
+      {showResources && <ResourcesPage onClose={() => setShowResources(false)} />}
       {showAugments  && <AugmentsPage  onClose={() => setShowAugments(false)} />}
       {showProjects  && <ProjectsPage  onClose={() => setShowProjects(false)} />}
       {showWidgetManager && <WidgetManager activeWidgets={activeWidgets} onRestore={handleRestore} onClose={handleClose} onDismiss={() => setShowWidgetManager(false)} />}

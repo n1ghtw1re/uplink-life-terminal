@@ -1,316 +1,254 @@
-import { useState } from 'react';
+// ============================================================
+// src/components/overlays/CharSheetPage2.tsx
+// RECORDS (Career & Education)
+// ============================================================
+import { useState, useMemo, useEffect } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { getDB } from '@/lib/db';
+import { useRecords } from '@/hooks/useRecords';
+import type { BackgroundRecord } from '@/types';
 
-// ─── DATA ─────────────────────────────────────────────────────────────────────
+const mono = "'IBM Plex Mono', monospace";
+const vt   = "'VT323', monospace";
+const acc  = 'hsl(var(--accent))';
+const dim  = 'hsl(var(--text-dim))';
+const adim = 'hsl(var(--accent-dim))';
+const bgS  = 'hsl(var(--bg-secondary))';
+const bgT  = 'hsl(var(--bg-tertiary))';
 
-const PRIMARY   = 'ROCKERBOY';
-const SECONDARY = 'WITCH';
+type SortType = 'date' | 'alpha';
 
-// Order MUST be clockwise from 12 o'clock — this determines where each
-// class appears on the radar. Do not reorder.
-const CLASSES = [
-  { name: 'NETRUNNER',  value: 0.12, rare: false },  // 0 — top
-  { name: 'TECHIE',     value: 0.06, rare: false },  // 1 — top-right
-  { name: 'EDGERUNNER', value: 0.04, rare: false },  // 2
-  { name: 'SOLO',       value: 0.02, rare: false },  // 3 — right
-  { name: 'NOMAD',      value: 0.02, rare: false },  // 4
-  { name: 'MEDTECH',    value: 0.08, rare: false },  // 5
-  { name: 'FIXER',      value: 0.14, rare: false },  // 6 — bottom-right
-  { name: 'EXEC',       value: 0.03, rare: false },  // 7
-  { name: 'ROCKERBOY',  value: 0.42, rare: false },  // 8 — bottom
-  { name: 'AGITATOR',   value: 0.28, rare: false },  // 9
-  { name: 'WITCH',      value: 0.35, rare: false },  // 10 — left
-  { name: 'SIGNAL',     value: 0.24, rare: false },  // 11
-  { name: 'HERALD',     value: 0.19, rare: true  },  // 12 — top-left
-  { name: 'PROPHET',    value: 0.07, rare: true  },  // 13
-  { name: 'AGITPROP',   value: 0.01, rare: true  },  // 14
-];
+export default function CharSheetPage2() {
+  const queryClient = useQueryClient();
+  const { data: records = [], isLoading } = useRecords();
 
-const SORTED = [...CLASSES].sort((a, b) => b.value - a.value);
+  const [search, setSearch] = useState('');
+  const [sort, setSort]     = useState<SortType>('date');
+  
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [showAddCareer, setShowAddCareer] = useState(false);
+  const [showAddEdu, setShowAddEdu] = useState(false);
 
-// ─── RADAR GEOMETRY ───────────────────────────────────────────────────────────
-
-const N  = 15;    // number of classes
-const CX = 250;   // SVG centre x
-const CY = 250;   // SVG centre y
-const CR = 185;   // outer ring radius
-const LR = 232;   // label ring radius (outside chart)
-
-function spokePoint(index: number, value: number) {
-  const angle = (2 * Math.PI * index / N) - (Math.PI / 2);
-  return {
-    x: CX + CR * value * Math.cos(angle),
-    y: CY + CR * value * Math.sin(angle),
+  // Sorting and filtering
+  const filterAndSort = (items: BackgroundRecord[]) => {
+    let res = items.filter(item => 
+      !search.trim() || 
+      item.title.toLowerCase().includes(search.toLowerCase()) || 
+      item.organization.toLowerCase().includes(search.toLowerCase())
+    );
+    if (sort === 'alpha') {
+      res = [...res].sort((a, b) => a.title.localeCompare(b.title));
+    }
+    return res;
   };
-}
 
-function labelPoint(index: number) {
-  const angle = (2 * Math.PI * index / N) - (Math.PI / 2);
-  return {
-    x: CX + LR * Math.cos(angle),
-    y: CY + LR * Math.sin(angle),
-  };
-}
+  const careerList = useMemo(() => filterAndSort(records.filter(r => r.type === 'CAREER')), [records, search, sort]);
+  const eduList    = useMemo(() => filterAndSort(records.filter(r => r.type === 'EDUCATION')), [records, search, sort]);
 
-function textAnchor(index: number): 'start' | 'end' | 'middle' {
-  const x = Math.cos((2 * Math.PI * index / N) - (Math.PI / 2));
-  if (x < -0.2) return 'end';
-  if (x >  0.2) return 'start';
-  return 'middle';
-}
+  const saveRecord = useMutation({
+    mutationFn: async (payload: Omit<BackgroundRecord, 'id' | 'createdAt'> & { id?: string }) => {
+      const db = await getDB();
+      if (payload.id) {
+        await db.query(
+          `UPDATE background_records SET title = $1, organization = $2, date_str = $3, description = $4 WHERE id = $5;`,
+          [payload.title, payload.organization, payload.dateStr, payload.description, payload.id]
+        );
+      } else {
+        await db.query(
+          `INSERT INTO background_records (type, title, organization, date_str, description) VALUES ($1, $2, $3, $4, $5);`,
+          [payload.type, payload.title, payload.organization, payload.dateStr, payload.description]
+        );
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['background_records'] });
+      setEditingId(null);
+      setShowAddCareer(false);
+      setShowAddEdu(false);
+    }
+  });
 
-function gridRingPoints(scale: number): string {
-  return Array.from({ length: N }, (_, i) => {
-    const p = spokePoint(i, scale);
-    return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
-  }).join(' ');
-}
+  const deleteRecord = useMutation({
+    mutationFn: async (id: string) => {
+      const db = await getDB();
+      await db.query(`DELETE FROM background_records WHERE id = $1;`, [id]);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['background_records'] });
+    }
+  });
 
-function affinityPoints(): string {
-  return CLASSES.map((cls, i) => {
-    const p = spokePoint(i, Math.max(cls.value, 0.05));
-    return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
-  }).join(' ');
-}
+  // Inner Form Component
+  const RecordForm = ({ 
+    initialData, 
+    type, 
+    onCancel 
+  }: { 
+    initialData?: BackgroundRecord, 
+    type: 'CAREER' | 'EDUCATION', 
+    onCancel: () => void 
+  }) => {
+    const [title, setTitle] = useState(initialData?.title || '');
+    const [org, setOrg] = useState(initialData?.organization || '');
+    const [dateStr, setDateStr] = useState(initialData?.dateStr || '');
+    const [desc, setDesc] = useState(initialData?.description || '');
 
-// ─── RADAR SVG ────────────────────────────────────────────────────────────────
+    const handleSave = () => {
+      if (!title.trim() || !org.trim() || !dateStr.trim()) return;
+      saveRecord.mutate({
+        id: initialData?.id,
+        type,
+        title: title.trim(),
+        organization: org.trim(),
+        dateStr: dateStr.trim(),
+        description: desc.trim()
+      });
+    };
 
-const Radar = ({
-  hovered,
-  onHover,
-}: {
-  hovered: string | null;
-  onHover: (n: string | null) => void;
-}) => (
-  <svg
-    viewBox="-60 -60 620 640"
-    width="100%"
-    height="100%"
-    preserveAspectRatio="xMidYMid meet"
-    style={{ overflow: 'visible', display: 'block' }}
-  >
-    {/* Grid rings */}
-    {[0.2, 0.4, 0.6, 0.8, 1.0].map(s => (
-      <polygon key={s} points={gridRingPoints(s)} fill="none"
-        stroke={s === 1.0 ? '#3a2000' : '#261600'}
-        strokeWidth={s === 1.0 ? 1.5 : 0.8}
-      />
-    ))}
-
-    {/* Spokes */}
-    {CLASSES.map((_, i) => {
-      const o = spokePoint(i, 1.0);
-      return <line key={i} x1={CX} y1={CY} x2={o.x} y2={o.y} stroke="#261600" strokeWidth={0.6} />;
-    })}
-
-    {/* Affinity polygon */}
-    <polygon
-      points={affinityPoints()}
-      fill="rgba(255,176,0,0.13)"
-      stroke="#ffb000"
-      strokeWidth={2}
-      strokeLinejoin="round"
-      style={{ filter: 'drop-shadow(0 0 6px rgba(255,176,0,0.55))' }}
-    />
-
-    {/* Data dots */}
-    {CLASSES.map((cls, i) => {
-      const p     = spokePoint(i, Math.max(cls.value, 0.05));
-      const isPri = cls.name === PRIMARY;
-      const isSec = cls.name === SECONDARY;
-      const isHov = hovered === cls.name;
-      const r     = isPri ? 6 : isSec ? 5 : cls.rare ? 4 : 3;
-      const fill  = isPri ? '#ffd060' : isSec ? '#ffb000' : cls.rare ? '#cc8800' : '#886600';
-      return (
-        <circle key={cls.name} cx={p.x} cy={p.y} r={isHov ? r + 2 : r} fill={fill}
-          style={{
-            filter: isHov || isPri ? 'drop-shadow(0 0 6px rgba(255,208,96,1))' : 'drop-shadow(0 0 3px rgba(255,176,0,0.5))',
-            cursor: 'pointer',
-          }}
-          onMouseEnter={() => onHover(cls.name)}
-          onMouseLeave={() => onHover(null)}
-        />
-      );
-    })}
-
-    {/* Labels */}
-    {CLASSES.map((cls, i) => {
-      const pos   = labelPoint(i);
-      const isPri = cls.name === PRIMARY;
-      const isSec = cls.name === SECONDARY;
-      const isHov = hovered === cls.name;
-      const fill  = isPri ? '#ffd060' : isSec ? '#ffb000' : isHov ? '#ffb000' : cls.rare ? '#aa7700' : '#665500';
-      const size  = isPri ? 12 : isSec ? 11 : 9;
-      return (
-        <text key={cls.name} x={pos.x} y={pos.y}
-          textAnchor={textAnchor(i)} dominantBaseline="middle"
-          fill={fill} fontSize={size}
-          fontWeight={isPri ? 'bold' : 'normal'}
-          fontFamily="'IBM Plex Mono', monospace"
-          style={{
-            filter: isPri || isHov ? 'drop-shadow(0 0 4px rgba(255,208,96,0.9))' : 'none',
-            cursor: 'pointer',
-          }}
-          onMouseEnter={() => onHover(cls.name)}
-          onMouseLeave={() => onHover(null)}
-        >
-          {cls.name}{cls.rare ? ' ✦' : ''}
-        </text>
-      );
-    })}
-
-    {/* Centre dot */}
-    <circle cx={CX} cy={CY} r={3} fill="#ffb000" opacity={0.4} />
-
-    {/* Hover tooltip */}
-    {hovered && (() => {
-      const cls = CLASSES.find(d => d.name === hovered);
-      if (!cls) return null;
-      return (
-        <g>
-          <rect x={CX - 52} y={CY - 14} width={104} height={20}
-            fill="#1a0f00" stroke="#ffb000" strokeWidth={0.8} rx={1} />
-          <text x={CX} y={CY - 4} textAnchor="middle" dominantBaseline="middle"
-            fill="#ffd060" fontSize={9} fontFamily="'IBM Plex Mono', monospace">
-            {cls.name}  {Math.round(cls.value * 100)}%
-          </text>
-        </g>
-      );
-    })()}
-  </svg>
-);
-
-// ─── PAGE 2 ───────────────────────────────────────────────────────────────────
-
-const CharSheetPage2 = () => {
-  const [hovered, setHovered] = useState<string | null>(null);
-
-  return (
-    <div style={{ display: 'flex', height: '100%', gap: 0, overflow: 'hidden' }}>
-
-      {/* LEFT — RADAR */}
-      <div className="char-sheet-left" style={{
-        flex: 1, minWidth: 0,
-        display: 'flex', flexDirection: 'column',
-        overflow: 'hidden',
-      }}>
-        <div style={{ color: 'hsl(var(--text-dim))', fontSize: 10, marginBottom: 8, flexShrink: 0 }}>
-          // CLASS AFFINITY
+    return (
+      <div style={{ padding: 16, background: bgT, border: `1px solid ${adim}`, marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ fontFamily: mono, fontSize: 10, color: acc, letterSpacing: 2 }}>
+          // {initialData ? `EDIT ` : `NEW `} {type} RECORD
         </div>
-
-        {/* flex: 1 + minHeight: 0 — lets SVG fill available space without overflowing */}
-        <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Radar hovered={hovered} onHover={setHovered} />
-        </div>
-
-        {/* Primary / Secondary display */}
-        <div style={{ borderTop: '1px solid #261600', paddingTop: 8, marginTop: 6, flexShrink: 0 }}>
-          <div style={{ display: 'flex', gap: 24, marginBottom: 4 }}>
-            <div>
-              <span style={{ fontSize: 9, color: 'hsl(var(--text-dim))' }}>PRIMARY: </span>
-              <span className="font-display" style={{ fontSize: 15, color: 'hsl(var(--accent-bright))' }}>
-                {PRIMARY}
-              </span>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 9, color: adim, letterSpacing: 1, marginBottom: 4 }}>
+              {type === 'CAREER' ? 'TITLE / ROLE' : 'DEGREE / COURSE'}
             </div>
-            <div>
-              <span style={{ fontSize: 9, color: 'hsl(var(--text-dim))' }}>SECONDARY: </span>
-              <span className="font-display" style={{ fontSize: 15, color: 'hsl(var(--accent-bright))' }}>
-                {SECONDARY}
-              </span>
-            </div>
+            <input value={title} onChange={e => setTitle(e.target.value)} placeholder={type === 'CAREER' ? "e.g. Senior Developer" : "e.g. B.S. Computer Science"} style={{ width: '100%', padding: '6px 10px', fontSize: 11, boxSizing: 'border-box', background: bgS, border: `1px solid ${adim}`, color: acc, fontFamily: mono, outline: 'none' }} />
           </div>
-          <div style={{ fontSize: 9, color: 'hsl(41 100% 18%)' }}>
-            LAST SHIFT: 3 DAYS AGO — WAS: SIGNAL // WITCH
+          <div>
+            <div style={{ fontSize: 9, color: adim, letterSpacing: 1, marginBottom: 4 }}>
+              {type === 'CAREER' ? 'ORGANIZATION' : 'SCHOOL / INST.'}
+            </div>
+            <input value={org} onChange={e => setOrg(e.target.value)} placeholder="e.g. Uplink Global" style={{ width: '100%', padding: '6px 10px', fontSize: 11, boxSizing: 'border-box', background: bgS, border: `1px solid ${adim}`, color: acc, fontFamily: mono, outline: 'none' }} />
           </div>
         </div>
-      </div>
-
-      {/* RIGHT — BREAKDOWN */}
-      <div className="char-sheet-right" style={{
-        flex: 1, minWidth: 0,
-        display: 'flex', flexDirection: 'column',
-        overflow: 'hidden',
-      }}>
-        <div style={{ color: 'hsl(var(--text-dim))', fontSize: 10, marginBottom: 8, flexShrink: 0 }}>
-          // CLASS BREAKDOWN
+        <div>
+          <div style={{ fontSize: 9, color: adim, letterSpacing: 1, marginBottom: 4 }}>DATES (e.g. 2020 - 2024 or 2024 - Present)</div>
+          <input value={dateStr} onChange={e => setDateStr(e.target.value)} placeholder="Ex: 2022 - Present" style={{ width: '100%', padding: '6px 10px', fontSize: 11, boxSizing: 'border-box', background: bgS, border: `1px solid ${adim}`, color: acc, fontFamily: mono, outline: 'none' }} />
         </div>
-
-        {/* space-between evenly distributes all 15 rows across full height */}
-        <div style={{
-          flex: 1,
-          minHeight: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between',
-        }}>
-          {SORTED.map(cls => {
-            const isPri = cls.name === PRIMARY;
-            const isSec = cls.name === SECONDARY;
-            const isHov = hovered === cls.name;
-            const isLow = cls.value < 0.05;
-            const pct   = Math.round(cls.value * 100);
-            const nameColor = isPri || isHov
-              ? 'hsl(var(--accent-bright))'
-              : isLow ? 'hsl(41 100% 25%)' : 'hsl(var(--accent))';
-
-            return (
-              <div key={cls.name}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  opacity: isLow && !isHov ? 0.45 : 1,
-                  cursor: 'pointer',
-                }}
-                onMouseEnter={() => setHovered(cls.name)}
-                onMouseLeave={() => setHovered(null)}
-              >
-                {/* Arrow */}
-                <span style={{ width: 8, fontSize: 7, color: 'hsl(var(--accent-bright))', flexShrink: 0 }}>
-                  {isPri ? '▶' : isSec ? '▷' : ''}
-                </span>
-
-                {/* Name */}
-                <span style={{
-                  fontSize: isPri ? 10 : 9,
-                  fontFamily: "'IBM Plex Mono', monospace",
-                  color: nameColor,
-                  width: 88, flexShrink: 0, lineHeight: 1,
-                }}>
-                  {cls.name}{cls.rare ? ' ✦' : ''}
-                </span>
-
-                {/* Bar track */}
-                <div style={{ flex: 1, height: 3, background: 'hsl(30 100% 9%)', position: 'relative' }}>
-                  <div style={{
-                    width: `${pct}%`, height: '100%',
-                    background: isPri ? 'hsl(var(--accent-bright))' : 'hsl(var(--accent))',
-                    boxShadow: isPri || isHov ? '0 0 5px rgba(255,176,0,0.6)' : '0 0 2px rgba(255,176,0,0.25)',
-                  }} />
-                </div>
-
-                {/* Percentage */}
-                <span style={{
-                  fontSize: 9, fontFamily: "'IBM Plex Mono', monospace",
-                  color: isLow ? 'hsl(41 100% 20%)' : 'hsl(var(--text-dim))',
-                  width: 24, textAlign: 'right', flexShrink: 0, lineHeight: 1,
-                }}>
-                  {pct}%
-                </span>
-
-                {/* Tags */}
-                {isPri && <span className="multiplier-tag" style={{ fontSize: 7, flexShrink: 0 }}>PRIMARY</span>}
-                {isSec && <span className="multiplier-tag" style={{ fontSize: 7, flexShrink: 0 }}>SECONDARY</span>}
-              </div>
-            );
-          })}
+        <div>
+          <div style={{ fontSize: 9, color: adim, letterSpacing: 1, marginBottom: 4 }}>DESCRIPTION</div>
+          <textarea value={desc} onChange={e => setDesc(e.target.value)} placeholder="Describe your responsibilities or achievements..." style={{ width: '100%', padding: '6px 10px', fontSize: 11, boxSizing: 'border-box', background: bgS, border: `1px solid ${adim}`, color: acc, fontFamily: mono, outline: 'none', height: 60, resize: 'none' }} />
         </div>
-
-        {/* Legend */}
-        <div style={{ fontSize: 8, color: 'hsl(41 100% 18%)', marginTop: 6, flexShrink: 0, lineHeight: 1.6 }}>
-          ✦ = RARE CLASS &nbsp;&nbsp; ▶ = PRIMARY &nbsp;&nbsp; ▷ = SECONDARY
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
+          <button onClick={onCancel} style={{ padding: '6px 12px', background: 'transparent', border: `1px solid ${adim}`, color: dim, fontFamily: mono, fontSize: 9, cursor: 'pointer' }}>CANCEL</button>
+          <button onClick={handleSave} disabled={saveRecord.isPending} style={{ padding: '6px 16px', background: 'rgba(255,176,0,0.1)', border: `1px solid ${acc}`, color: acc, fontFamily: mono, fontSize: 9, cursor: 'pointer', letterSpacing: 1, opacity: saveRecord.isPending ? 0.5 : 1 }}>SAVE RECORD</button>
         </div>
       </div>
+    );
+  };
 
+  const renderCard = (item: BackgroundRecord) => (
+    <div key={item.id} style={{ 
+      padding: '12px 16px', background: bgS, border: `1px solid rgba(153,104,0,0.3)`, 
+      marginBottom: 10, display: 'flex', flexDirection: 'column', gap: 6,
+      position: 'relative', overflow: 'hidden'
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <div style={{ fontFamily: vt, fontSize: 18, color: acc, letterSpacing: 1 }}>{item.title}</div>
+          <div style={{ fontFamily: mono, fontSize: 10, color: adim, marginTop: -2 }}>
+            <span style={{ color: dim }}>{item.organization}</span> <span style={{ opacity: 0.5 }}>//</span> {item.dateStr}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 6, opacity: 0.8 }} className="record-actions">
+          <button onClick={() => setEditingId(item.id)} style={{ background: 'transparent', border: `1px solid ${adim}`, color: adim, fontFamily: mono, fontSize: 9, padding: '2px 6px', cursor: 'pointer' }} onMouseEnter={e => { e.currentTarget.style.color = acc; e.currentTarget.style.borderColor = acc; }} onMouseLeave={e => { e.currentTarget.style.color = adim; e.currentTarget.style.borderColor = adim; }}>[ EDIT ]</button>
+          <button onClick={() => { if (confirm('Delete this record?')) deleteRecord.mutate(item.id); }} style={{ background: 'transparent', border: `1px solid rgba(153,104,0,0.3)`, color: dim, fontFamily: mono, fontSize: 9, padding: '2px 6px', cursor: 'pointer' }} onMouseEnter={e => { e.currentTarget.style.color = '#ff4400'; e.currentTarget.style.borderColor = '#ff4400'; }} onMouseLeave={e => { e.currentTarget.style.color = dim; e.currentTarget.style.borderColor = 'rgba(153,104,0,0.3)'; }}>[ DEL ]</button>
+        </div>
+      </div>
+      {item.description && (
+        <div style={{ fontFamily: mono, fontSize: 10, color: dim, lineHeight: 1.5, marginTop: 4, whiteSpace: 'pre-wrap' }}>
+          {item.description}
+        </div>
+      )}
     </div>
   );
-};
 
-export default CharSheetPage2;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', fontFamily: mono }}>
+      
+      {/* Top Controls */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, paddingBottom: 12, borderBottom: `1px solid ${adim}` }}>
+        <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+          <span style={{ fontSize: 9, color: adim, letterSpacing: 2 }}>// ARCHIVE FILTER</span>
+          <div style={{ position: 'relative' }}>
+            <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: adim }}>⌕</span>
+            <input 
+              value={search} onChange={e => setSearch(e.target.value)} 
+              placeholder="Search records..."
+              style={{ padding: '4px 10px 4px 24px', fontSize: 10, width: 220, background: bgT, border: `1px solid ${search ? acc : adim}`, color: acc, fontFamily: mono, outline: 'none' }}
+            />
+          </div>
+        </div>
+        
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <span style={{ fontSize: 9, color: adim, letterSpacing: 2, marginRight: 4 }}>SORT:</span>
+          <button onClick={() => setSort('date')} style={{
+            padding: '3px 10px', fontSize: 9, fontFamily: mono, cursor: 'pointer', letterSpacing: 1,
+            border: `1px solid ${sort === 'date' ? acc : adim}`,
+            background: sort === 'date' ? 'rgba(255,176,0,0.1)' : 'transparent',
+            color: sort === 'date' ? acc : dim,
+          }}>DATE (Added)</button>
+          <button onClick={() => setSort('alpha')} style={{
+            padding: '3px 10px', fontSize: 9, fontFamily: mono, cursor: 'pointer', letterSpacing: 1,
+            border: `1px solid ${sort === 'alpha' ? acc : adim}`,
+            background: sort === 'alpha' ? 'rgba(255,176,0,0.1)' : 'transparent',
+            color: sort === 'alpha' ? acc : dim,
+          }}>ALPHA</button>
+        </div>
+      </div>
+
+      {/* Columns */}
+      <div style={{ display: 'flex', flex: 1, gap: 24, minHeight: 0 }}>
+        
+        {/* Left Column: Career */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <span style={{ fontFamily: vt, fontSize: 24, color: acc, letterSpacing: 2 }}>CAREER EXPERIENCE</span>
+            <button onClick={() => { setShowAddCareer(true); setEditingId(null); }} style={{ background: 'transparent', border: 'none', color: acc, fontFamily: mono, fontSize: 10, cursor: 'pointer', letterSpacing: 1 }}>+ ADD RECORD</button>
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', paddingRight: 8, scrollbarWidth: 'none' }}>
+            {showAddCareer && <RecordForm type="CAREER" onCancel={() => setShowAddCareer(false)} />}
+            
+            {isLoading ? (
+              <div style={{ fontSize: 10, color: dim }}>LOADING...</div>
+            ) : careerList.length === 0 && !showAddCareer ? (
+              <div style={{ color: dim, fontSize: 10, marginTop: 20 }}>No career records found.</div>
+            ) : careerList.map(item => (
+               editingId === item.id 
+                 ? <RecordForm key={item.id} type="CAREER" initialData={item} onCancel={() => setEditingId(null)} />
+                 : renderCard(item)
+            ))}
+          </div>
+        </div>
+
+        {/* Vertical Divider */}
+        <div style={{ width: 1, background: `linear-gradient(to bottom, transparent, rgba(153,104,0,0.3) 10%, rgba(153,104,0,0.3) 90%, transparent)` }} />
+
+        {/* Right Column: Education */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <span style={{ fontFamily: vt, fontSize: 24, color: acc, letterSpacing: 2 }}>EDUCATION & TRAINING</span>
+            <button onClick={() => { setShowAddEdu(true); setEditingId(null); }} style={{ background: 'transparent', border: 'none', color: acc, fontFamily: mono, fontSize: 10, cursor: 'pointer', letterSpacing: 1 }}>+ ADD RECORD</button>
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', paddingRight: 8, scrollbarWidth: 'none' }}>
+            {showAddEdu && <RecordForm type="EDUCATION" onCancel={() => setShowAddEdu(false)} />}
+            
+            {isLoading ? (
+              <div style={{ fontSize: 10, color: dim }}>LOADING...</div>
+            ) : eduList.length === 0 && !showAddEdu ? (
+              <div style={{ color: dim, fontSize: 10, marginTop: 20 }}>No education records found.</div>
+            ) : eduList.map(item => (
+               editingId === item.id 
+                 ? <RecordForm key={item.id} type="EDUCATION" initialData={item} onCancel={() => setEditingId(null)} />
+                 : renderCard(item)
+            ))}
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+}

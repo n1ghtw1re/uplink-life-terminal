@@ -293,6 +293,12 @@ export default function CourseDetailDrawer({ courseId, onClose }: Props) {
   const [editAugIds, setEditAugIds]     = useState<string[]>([]);
   const [editMediaIds, setEditMediaIds] = useState<string[]>([]);
 
+  // Reset edit/delete states when courseId changes
+  useEffect(() => {
+    setEditing(false);
+    setShowDelete(false);
+  }, [courseId]);
+
   // ── Fetch course ──────────────────────────────────────────
 
   const { data: course, isLoading: courseLoading } = useQuery({

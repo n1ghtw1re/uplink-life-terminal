@@ -26,6 +26,7 @@ const TopBar = ({ onOpenLog, onOpenCheckin, onOpenSearch }: TopBarProps) => {
   const level      = op?.level      ?? 1;
   const title      = op?.levelTitle ?? 'Novice';
   const customClass = op?.customClass ?? '';
+  const callsign   = op?.callsign   ?? '';
   const xpInLevel  = op?.xpInLevel  ?? 0;
   const xpForLevel = op?.xpForLevel ?? 500;
   const streak     = op?.streak     ?? 0;
@@ -56,6 +57,14 @@ const TopBar = ({ onOpenLog, onOpenCheckin, onOpenSearch }: TopBarProps) => {
         <span style={{ fontSize: 11, color: 'hsl(var(--text-dim))' }}>CONNECTING...</span>
       ) : (
         <>
+          {callsign && (
+            <>
+              <span className="font-display text-glow" style={{ fontSize: 16, color: 'hsl(var(--accent))' }}>
+                {callsign}
+              </span>
+              <span style={{ color: 'hsl(var(--text-dim))', opacity: 0.5 }}> │ </span>
+            </>
+          )}
           <span className="font-display text-glow" style={{ fontSize: 16, color: 'hsl(var(--accent-bright))' }}>
             Level {level} // {title}{customClass ? ` ${customClass}` : ''}
           </span>
@@ -67,7 +76,7 @@ const TopBar = ({ onOpenLog, onOpenCheckin, onOpenSearch }: TopBarProps) => {
           </span>
         </>
       )}
-      <span style={{ color: 'hsl(var(--text-dim))', opacity: 0.5 }}>│</span>
+      <span style={{ color: 'hsl(var(--text-dim))', opacity: 0.5 }}> │ </span>
 
       <div style={{ display: 'flex', gap: 4 }}>
         <button className="topbar-btn" onClick={onOpenSearch}>

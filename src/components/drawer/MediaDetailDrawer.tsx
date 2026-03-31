@@ -1,7 +1,7 @@
 // ============================================================
 // src/components/drawer/MediaDetailDrawer.tsx
 // ============================================================
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -200,6 +200,13 @@ export default function MediaDetailDrawer({ mediaId, onClose }: Props) {
   const [editStat, setEditStat]               = useState<StatKey | ''>('');
   const [editNotes, setEditNotes]             = useState('');
   const [editLegacy, setEditLegacy]           = useState(false);
+
+  // Reset edit/delete states when mediaId changes
+  useEffect(() => {
+    setEditing(false);
+    setShowDelete(false);
+    setEditingProgress(false);
+  }, [mediaId]);
 
   // ── Fetch — uses 'media' table (correct schema) ───────────
 
@@ -574,13 +581,12 @@ export default function MediaDetailDrawer({ mediaId, onClose }: Props) {
 
         <SectionLabel label="STATUS" />
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {(['QUEUED', getInProgressStatus(item.type), 'FINISHED', 'DROPPED'] as MediaStatus[]).map(s => (
+          {(['QUEUED', getInProgressStatus(item.type), 'DROPPED'] as MediaStatus[]).map(s => (
             <button
               key={s}
               onClick={() => {
                 if (s === item.status) return;
                 const patch: Partial<MediaItem> = { status: s };
-                if (s === 'FINISHED' && !item.completed_at) patch.completed_at = new Date().toISOString();
                 updateItem.mutate(patch);
               }}
               style={{

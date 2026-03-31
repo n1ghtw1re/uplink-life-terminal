@@ -1,5 +1,5 @@
 // src/components/drawer/AugmentDetailDrawer.tsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getDB } from '@/lib/db';
 import { getLevelFromXP, getXPDisplayValues } from '@/services/xpService';
@@ -52,6 +52,12 @@ export default function AugmentDetailDrawer({ augmentId, onClose }: Props) {
   const [editDesc, setEditDesc]     = useState('');
   const [editNotes, setEditNotes]   = useState('');
   const [showDelete, setShowDelete] = useState(false);
+
+  // Reset edit/delete states when augmentId changes
+  useEffect(() => {
+    setEditing(false);
+    setShowDelete(false);
+  }, [augmentId]);
 
   const { data: augment, isLoading } = useQuery({
     queryKey: ['augment', augmentId],

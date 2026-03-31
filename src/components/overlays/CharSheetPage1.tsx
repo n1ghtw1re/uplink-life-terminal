@@ -8,6 +8,7 @@ import { getDB } from '@/lib/db';
 import { getLevelFromXP, getXPDisplayValues } from '@/services/xpService';
 import { supabase } from '@/integrations/supabase/client';
 import { STAT_META, StatKey } from '@/types';
+import ImageUploadModal from './ImageUploadModal';
 
 type StatTabKey = StatKey | 'ALL';
 
@@ -26,6 +27,7 @@ const CharSheetPage1 = ({ onSkillClick }: CharSheetPage1Props) => {
   const [skillTab, setSkillTab] = useState<StatTabKey>('ALL');
   const [arsenalTab, setArsenalTab] = useState<'tools' | 'augments'>('tools');
   const [specTab, setSpecTab] = useState<'courses' | 'projects' | 'media'>('courses');
+  const [showImageModal, setShowImageModal] = useState(false);
 
   const { data: tools } = useQuery({
     queryKey: ['tools-xp'],
@@ -126,17 +128,57 @@ const CharSheetPage1 = ({ onSkillClick }: CharSheetPage1Props) => {
 
   return (
     <div style={{ display: 'flex', height: '100%', gap: 16, padding: '0 4px' }}>
-      {/* LEFT COLUMN - USER + CLASS */}
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      {/* LEFT - TOP SECTION: VISUAL + USER */}
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
         
-        {/* USER and CLASS side by side */}
+        {/* VISUAL + USER side by side */}
         <div style={{ display: 'flex', gap: 12, marginBottom: 8 }}>
-          {/* USER */}
+          {/* // VISUAL - Image */}
+          <div style={{ width: 180, flexShrink: 0 }}>
+            <div style={{ color: dim, fontSize: 9, marginBottom: 6, letterSpacing: 1 }}>// VISUAL</div>
+            <div style={{ 
+              width: 180, 
+              height: 180, 
+              border: `2px solid ${acc}`, 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              background: bgT,
+              marginBottom: 6,
+              overflow: 'hidden',
+            }}>
+              {op?.avatar ? (
+                <img 
+                  src={op.avatar} 
+                  alt="Character" 
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+              ) : (
+                <span style={{ color: dim, fontSize: 10 }}>No image</span>
+              )}
+            </div>
+            <button 
+              onClick={() => setShowImageModal(true)}
+              style={{ 
+                background: 'transparent', 
+                border: `1px solid ${accDim}`, 
+                color: accDim, 
+                fontSize: 8, 
+                padding: '2px 8px', 
+                cursor: 'pointer',
+                width: '100%'
+            }}>
+              [EDIT IMAGE]
+            </button>
+          </div>
+
+          {/* // USER - info next to image */}
           <div style={{ flex: 1 }}>
-            <div style={{ color: dim, fontSize: 9, marginBottom: 8, letterSpacing: 1 }}>// USER</div>
+            <div style={{ color: dim, fontSize: 9, marginBottom: 6, letterSpacing: 1 }}>// USER</div>
             
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 9, color: accDim, marginBottom: 4 }}>CALLSIGN</div>
+            {/* Callsign */}
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 9, color: accDim, marginBottom: 2 }}>CALLSIGN</div>
               {editing === 'callsign' ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <input
@@ -157,8 +199,15 @@ const CharSheetPage1 = ({ onSkillClick }: CharSheetPage1Props) => {
               )}
             </div>
 
+            {/* Class */}
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 9, color: accDim, marginBottom: 2 }}>// CLASS</div>
+              <span style={{ fontFamily: mono, fontSize: 14, color: acc }}>{op?.customClass || '—'}</span>
+            </div>
+
+            {/* Designation */}
             <div>
-              <div style={{ fontSize: 9, color: accDim, marginBottom: 4 }}>DESIGNATION</div>
+              <div style={{ fontSize: 9, color: accDim, marginBottom: 2 }}>DESIGNATION</div>
               {editing === 'designation' ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <input
@@ -181,30 +230,9 @@ const CharSheetPage1 = ({ onSkillClick }: CharSheetPage1Props) => {
               )}
             </div>
           </div>
-
-          {/* CLASS */}
-          <div style={{ flex: 1 }}>
-            <div style={{ color: dim, fontSize: 9, marginBottom: 8, letterSpacing: 1 }}>// CLASS</div>
-            <div>
-              <span style={{ fontFamily: mono, fontSize: 14, color: acc }}>{op?.customClass || '—'}</span>
-              <div style={{ fontSize: 9, color: accDim, marginTop: 4 }}>(auto-generated from stats)</div>
-            </div>
-          </div>
         </div>
 
-        {/* Master Level */}
-        <div style={{ marginBottom: 8, padding: 10, background: bgT, border: `1px solid ${accDim}` }}>
-          <div style={{ fontSize: 9, color: accDim, marginBottom: 6 }}>MASTER LEVEL</div>
-          <div style={{ fontFamily: mono, fontSize: 16, color: acc, marginBottom: 6 }}>
-            Level {op?.level || 1} // {op?.levelTitle || 'Novice'}
-          </div>
-          <ProgressBar value={op?.xpInLevel || 0} max={op?.xpForLevel || 500} width="100%" height={8} />
-          <div style={{ fontSize: 9, color: dim, marginTop: 4 }}>
-            {getXPDisplayValues(op?.totalXp || 0).totalXP.toLocaleString()} / {getXPDisplayValues(op?.totalXp || 0).totalXPToNextLevel.toLocaleString()} XP
-          </div>
-        </div>
-
-        {/* Stats - scrollable if needed */}
+        {/* Stats - scrollable */}
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
           <div style={{ fontSize: 9, color: accDim, marginBottom: 8 }}>STATS</div>
           {stats?.map(s => (
@@ -231,11 +259,23 @@ const CharSheetPage1 = ({ onSkillClick }: CharSheetPage1Props) => {
         </div>
       </div>
 
-      {/* RIGHT COLUMN - SPEC */}
+      {/* RIGHT - MASTER LEVEL + SKILLS */}
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <div style={{ color: dim, fontSize: 9, marginBottom: 8, letterSpacing: 1 }}>// SKILLS</div>
+        
+        {/* Master Level */}
+        <div style={{ marginBottom: 8, padding: 10, background: bgT, border: `1px solid ${accDim}` }}>
+          <div style={{ fontSize: 9, color: accDim, marginBottom: 6 }}>MASTER LEVEL</div>
+          <div style={{ fontFamily: mono, fontSize: 16, color: acc, marginBottom: 6 }}>
+            Level {op?.level || 1} // {op?.levelTitle || 'Novice'}
+          </div>
+          <ProgressBar value={op?.xpInLevel || 0} max={op?.xpForLevel || 500} width="100%" height={8} />
+          <div style={{ fontSize: 9, color: dim, marginTop: 4 }}>
+            {getXPDisplayValues(op?.totalXp || 0).totalXP.toLocaleString()} / {getXPDisplayValues(op?.totalXp || 0).totalXPToNextLevel.toLocaleString()} XP
+          </div>
+        </div>
 
         {/* Skills */}
+        <div style={{ color: dim, fontSize: 9, marginBottom: 8, letterSpacing: 1 }}>// SKILLS</div>
         <div style={{ marginBottom: 12 }}>
           <div style={{ display: 'flex', gap: 3, marginBottom: 6, flexWrap: 'wrap' }}>
             {statTabs.map(t => (
@@ -394,6 +434,14 @@ const CharSheetPage1 = ({ onSkillClick }: CharSheetPage1Props) => {
           </div>
         </div>
       </div>
+
+      {/* Image Upload Modal */}
+      {showImageModal && (
+        <ImageUploadModal
+          currentImage={op?.avatar}
+          onClose={() => setShowImageModal(false)}
+        />
+      )}
     </div>
   );
 };
