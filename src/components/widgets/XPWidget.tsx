@@ -40,7 +40,8 @@ const XPWidget = ({ onClose, onFullscreen, isFullscreen }: WidgetProps) => {
   const challenge = null;
 
   const level      = op?.level      ?? 1;
-  const title      = op?.levelTitle  ?? 'INITIALISING';
+  const title      = op?.levelTitle  ?? 'Novice';
+  const customClass = op?.customClass ?? '';
   const xpInLevel  = op?.xpInLevel  ?? 0;
   const xpForLevel = op?.xpForLevel ?? 500;
   const totalXP    = op?.totalXp    ?? 0;
@@ -61,7 +62,7 @@ const XPWidget = ({ onClose, onFullscreen, isFullscreen }: WidgetProps) => {
   return (
     <WidgetWrapper title="XP & LEVELLING" onClose={onClose} onFullscreen={onFullscreen} isFullscreen={isFullscreen}>
       <div className="font-display text-glow" style={{ fontSize: 18, marginBottom: 8, color: 'hsl(var(--accent-bright))' }}>
-        LVL {level} // {title}
+        Level {level} // {title}{customClass ? ` ${customClass}` : ''}
       </div>
       <ProgressBar value={xpInLevel} max={xpForLevel} />
       <div style={{ fontSize: 10, color: 'hsl(var(--text-dim))', marginTop: 4, marginBottom: 10 }}>

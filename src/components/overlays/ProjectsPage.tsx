@@ -164,8 +164,32 @@ export default function ProjectsPage({ onClose }: Props) {
         </div>
 
         {/* Drawer */}
-        <div style={{ width: selectedId ? 420 : 0, flexShrink: 0, overflow: 'hidden', transition: 'width 200ms ease', borderLeft: selectedId ? `1px solid ${adim}` : 'none' }}>
-          {selectedId && <ProjectDetailDrawer projectId={selectedId} onClose={() => setSelectedId(null)} />}
+        <div style={{ width: selectedId ? 420 : 0, flexShrink: 0, overflow: 'hidden', transition: 'width 200ms ease', borderLeft: selectedId ? `1px solid ${adim}` : 'none', display: 'flex', flexDirection: 'column' }}>
+          {selectedId && (
+            <>
+              <div style={{
+                height: 36, flexShrink: 0,
+                borderBottom: `1px solid ${adim}`,
+                display: 'flex', alignItems: 'center',
+                justifyContent: 'flex-end', padding: '0 12px',
+                background: bgS,
+              }}>
+                <button
+                  onClick={() => setSelectedId(null)}
+                  style={{
+                    background: 'transparent', border: 'none',
+                    color: dim, fontFamily: mono, fontSize: 10,
+                    cursor: 'pointer', letterSpacing: 1,
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.color = acc}
+                  onMouseLeave={e => e.currentTarget.style.color = dim}
+                >× CLOSE</button>
+              </div>
+              <div style={{ flex: 1, overflow: 'hidden' }}>
+                <ProjectDetailDrawer projectId={selectedId} onClose={() => setSelectedId(null)} />
+              </div>
+            </>
+          )}
         </div>
       </div>
 

@@ -4,6 +4,8 @@ import CharSheetPage2 from './CharSheetPage2';
 import CharSheetPage3 from './CharSheetPage3';
 import CharSheetPage4 from './CharSheetPage4';
 import CharSheetPage5 from './CharSheetPage5';
+import { useOperator } from '@/hooks/useOperator';
+
 interface CharacterSheetProps {
   onClose: () => void;
   onSkillClick?: (skillName: string) => void;
@@ -12,6 +14,7 @@ interface CharacterSheetProps {
 const TOTAL_PAGES = 5;
 
 const CharacterSheet = ({ onClose, onSkillClick }: CharacterSheetProps) => {
+  const { data: op } = useOperator();
   const [currentPage, setCurrentPage] = useState(1);
   const [animClass, setAnimClass] = useState('');
 
@@ -27,7 +30,7 @@ const CharacterSheet = ({ onClose, onSkillClick }: CharacterSheetProps) => {
 
   const renderPage = () => {
     switch (currentPage) {
-      case 1: return <CharSheetPage1 />;
+      case 1: return <CharSheetPage1 onSkillClick={onSkillClick} />;
       case 2: return <CharSheetPage2 />;
       case 3: return <CharSheetPage3 onSkillClick={onSkillClick} />;
       case 4: return <CharSheetPage4 />;
@@ -41,7 +44,7 @@ const CharacterSheet = ({ onClose, onSkillClick }: CharacterSheetProps) => {
       <div className="char-sheet-header">
         <span style={{ fontSize: 11, color: 'hsl(var(--text-dim))' }}>// CHARACTER SHEET</span>
         <span className="font-display text-glow-bright" style={{ fontSize: 20, color: 'hsl(var(--accent-bright))' }}>
-          VOID_SIGNAL
+          {op?.callsign || 'OPERATOR'}
         </span>
         <button className="topbar-btn" onClick={onClose} style={{ fontSize: 11 }}>[ × CLOSE ]</button>
       </div>

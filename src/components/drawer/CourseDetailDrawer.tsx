@@ -382,11 +382,97 @@ export default function CourseDetailDrawer({ courseId, onClose }: Props) {
     await refreshAppData(queryClient);
   };
 
+  // ── Reverse bonus XP helper ─────────────────────────────────
+  const reverseBonusXP = async (sourceId: string) => {
+    const db = await import('@/lib/db').then(m => m.getDB());
+    const logs = await db.query<{ tier: string; entity_id: string; amount: number }>(
+      `SELECT tier, entity_id, amount FROM xp_log WHERE source = 'course_section' AND source_id = $1;`,
+      [sourceId]
+    );
+    for (const log of logs.rows) {
+      const amt = Number(log.amount);
+      if (amt <= 0) continue;
+      if (log.tier === 'skill') {
+        await db.exec(`UPDATE skills SET xp = GREATEST(0, xp - ${amt}), level = ${levelCase(`GREATEST(0, xp - ${amt})`)} WHERE id = '${log.entity_id}';`);
+      } else if (log.tier === 'stat') {
+        await db.exec(`UPDATE stats SET xp = GREATEST(0, xp - ${amt}), level = ${levelCase(`GREATEST(0, xp - ${amt})`)} WHERE stat_key = '${log.entity_id}';`);
+      } else if (log.tier === 'master') {
+        await db.exec(`UPDATE master_progress SET total_xp = GREATEST(0, total_xp - ${amt}), level = ${levelCase(`GREATEST(0, total_xp - ${amt})`)} WHERE id = 1;`);
+      }
+    }
+    await db.exec(`DELETE FROM xp_log WHERE source = 'course_section' AND source_id = $1;`, [sourceId]);
+  };
+
+  const levelCase = (col: string) => `
+    CASE
+      WHEN ${col} >= 438000 THEN (60 + FLOOR((${col} - 438000) / 13200) + 1)::int
+      WHEN ${col} >= 424800 THEN 59
+      WHEN ${col} >= 411800 THEN 58
+      WHEN ${col} >= 399000 THEN 57
+      WHEN ${col} >= 386400 THEN 56
+      WHEN ${col} >= 374000 THEN 55
+      WHEN ${col} >= 361800 THEN 54
+      WHEN ${col} >= 349800 THEN 53
+      WHEN ${col} >= 338000 THEN 52
+      WHEN ${col} >= 326400 THEN 51
+      WHEN ${col} >= 315000 THEN 50
+      WHEN ${col} >= 303800 THEN 49
+      WHEN ${col} >= 292800 THEN 48
+      WHEN ${col} >= 282000 THEN 47
+      WHEN ${col} >= 271400 THEN 46
+      WHEN ${col} >= 261000 THEN 45
+      WHEN ${col} >= 250800 THEN 44
+      WHEN ${col} >= 240800 THEN 43
+      WHEN ${col} >= 231000 THEN 42
+      WHEN ${col} >= 221400 THEN 41
+      WHEN ${col} >= 212000 THEN 40
+      WHEN ${col} >= 202800 THEN 39
+      WHEN ${col} >= 193800 THEN 38
+      WHEN ${col} >= 185000 THEN 37
+      WHEN ${col} >= 176400 THEN 36
+      WHEN ${col} >= 168000 THEN 35
+      WHEN ${col} >= 159800 THEN 34
+      WHEN ${col} >= 151800 THEN 33
+      WHEN ${col} >= 144000 THEN 32
+      WHEN ${col} >= 136400 THEN 31
+      WHEN ${col} >= 129000 THEN 30
+      WHEN ${col} >= 121800 THEN 29
+      WHEN ${col} >= 114800 THEN 28
+      WHEN ${col} >= 108000 THEN 27
+      WHEN ${col} >= 101400 THEN 26
+      WHEN ${col} >= 95000 THEN 25
+      WHEN ${col} >= 88800 THEN 24
+      WHEN ${col} >= 82800 THEN 23
+      WHEN ${col} >= 77000 THEN 22
+      WHEN ${col} >= 71400 THEN 21
+      WHEN ${col} >= 66000 THEN 20
+      WHEN ${col} >= 60800 THEN 19
+      WHEN ${col} >= 55800 THEN 18
+      WHEN ${col} >= 51000 THEN 17
+      WHEN ${col} >= 46400 THEN 16
+      WHEN ${col} >= 42000 THEN 15
+      WHEN ${col} >= 37800 THEN 14
+      WHEN ${col} >= 33800 THEN 13
+      WHEN ${col} >= 30000 THEN 12
+      WHEN ${col} >= 26400 THEN 11
+      WHEN ${col} >= 23000 THEN 10
+      WHEN ${col} >= 19800 THEN 9
+      WHEN ${col} >= 16800 THEN 8
+      WHEN ${col} >= 14000 THEN 7
+      WHEN ${col} >= 11400 THEN 6
+      WHEN ${col} >= 9000 THEN 5
+      WHEN ${col} >= 6800 THEN 4
+      WHEN ${col} >= 4800 THEN 3
+      WHEN ${col} >= 3000 THEN 2
+      WHEN ${col} >= 1400 THEN 1
+      ELSE 0
+    END`;
+
   // ── Tick lesson complete ──────────────────────────────────
 
   const tickLesson = useMutation({
     mutationFn: async ({ lesson, section }: { lesson: Lesson; section: Section }) => {
-      if (!user || !course) return;
+      if (!course) return;
 
       const nowDone = !lesson.completed_at;
       const completedAt = nowDone ? new Date().toISOString() : null;
@@ -419,19 +505,27 @@ export default function CourseDetailDrawer({ courseId, onClose }: Props) {
             .update({ completed_at: new Date().toISOString() })
             .eq('id', section.id);
 
-          const totalSections = (sections ?? []).length || 1;
-          const sectionBonus  = Math.floor(totalSections * 100 * (course.is_legacy ? 0.5 : 1.0));
+          const sectionBonus  = Math.floor(100 * (course.is_legacy ? 0.5 : 1.0));
           const { awardBonusXP } = await import('@/services/xpService');
-          if (statKeys.length > 0) {
-            await awardBonusXP({
-              source: 'course_section',
-              sourceId: section.id,
-              statKey: statKeys[0],
-              amount: sectionBonus,
-              notes: `${course.name} — ${section.title}`,
-            });
+          const linkedSkillIds = Array.isArray(course.linked_skill_ids) ? course.linked_skill_ids : [];
+          const linkedSkillId = linkedSkillIds[0] || null;
+          const coursePrimaryStat = statKeys[0];
+
+          if (linkedSkillId && coursePrimaryStat) {
+            const skillBonus = Math.floor(sectionBonus * 0.5);
+            const statBonus = Math.floor(sectionBonus * 0.25);
+            const masterBonus = Math.floor(sectionBonus * 0.25);
+            await awardBonusXP({ source: 'course_section', sourceId: section.id, skillId: linkedSkillId, amount: skillBonus, notes: `${course.name} — ${section.title} [SKILL]`, tier: 'skill' });
+            await awardBonusXP({ source: 'course_section', sourceId: section.id, statKey: coursePrimaryStat, amount: statBonus, notes: `${course.name} — ${section.title} [STAT]`, tier: 'stat' });
+            await awardBonusXP({ source: 'course_section', sourceId: section.id, amount: masterBonus, notes: `${course.name} — ${section.title} [MASTER]`, tier: 'master' });
+            setLastXP({ amount: sectionBonus, label: section.title });
+          } else if (coursePrimaryStat) {
+            const statBonus = Math.floor(sectionBonus * 0.5);
+            const masterBonus = Math.floor(sectionBonus * 0.5);
+            await awardBonusXP({ source: 'course_section', sourceId: section.id, statKey: coursePrimaryStat, amount: statBonus, notes: `${course.name} — ${section.title}`, tier: 'stat' });
+            await awardBonusXP({ source: 'course_section', sourceId: section.id, amount: masterBonus, notes: `${course.name} — ${section.title}`, tier: 'master' });
+            setLastXP({ amount: sectionBonus, label: section.title });
           }
-          setLastXP({ amount: sectionBonus, label: section.title });
           setTimeout(() => setLastXP(null), 3000);
         }
 
@@ -443,6 +537,11 @@ export default function CourseDetailDrawer({ courseId, onClose }: Props) {
 
         await refreshAppData(queryClient);
       } else {
+        // Unticking — remove XP if section was completed
+        if (section.completed_at) {
+          await reverseBonusXP(section.id);
+        }
+
         // Unticking — just update progress
         const updatedSections = (sections ?? []).map(s =>
           s.id === section.id
@@ -469,7 +568,7 @@ export default function CourseDetailDrawer({ courseId, onClose }: Props) {
 
   const tickSection = useMutation({
     mutationFn: async (section: Section) => {
-      if (!user || !course) return;
+      if (!course) return;
       const nowDone = !section.completed_at;
       const completedAt = nowDone ? new Date().toISOString() : null;
 
@@ -480,20 +579,31 @@ export default function CourseDetailDrawer({ courseId, onClose }: Props) {
 
       if (nowDone) {
         const statKeys = (course.linked_stats ?? []) as StatKey[];
-        const totalSections2 = (sections ?? []).length || 1;
-        const sectionBonus2  = Math.floor(totalSections2 * 100 * (course.is_legacy ? 0.5 : 1.0));
+        const sectionBonus2  = Math.floor(100 * (course.is_legacy ? 0.5 : 1.0));
         const { awardBonusXP: awardBonusXP2 } = await import('@/services/xpService');
-        if (statKeys.length > 0) {
-          await awardBonusXP2({
-            source: 'course_section',
-            sourceId: section.id,
-            statKey: statKeys[0],
-            amount: sectionBonus2,
-            notes: `${course.name} — ${section.title}`,
-          });
+        const linkedSkillIds = Array.isArray(course.linked_skill_ids) ? course.linked_skill_ids : [];
+        const linkedSkillId = linkedSkillIds[0] || null;
+        const coursePrimaryStat = statKeys[0];
+
+        if (linkedSkillId && coursePrimaryStat) {
+          const skillBonus = Math.floor(sectionBonus2 * 0.5);
+          const statBonus = Math.floor(sectionBonus2 * 0.25);
+          const masterBonus = Math.floor(sectionBonus2 * 0.25);
+          await awardBonusXP2({ source: 'course_section', sourceId: section.id, skillId: linkedSkillId, amount: skillBonus, notes: `${course.name} — ${section.title} [SKILL]`, tier: 'skill' });
+          await awardBonusXP2({ source: 'course_section', sourceId: section.id, statKey: coursePrimaryStat, amount: statBonus, notes: `${course.name} — ${section.title} [STAT]`, tier: 'stat' });
+          await awardBonusXP2({ source: 'course_section', sourceId: section.id, amount: masterBonus, notes: `${course.name} — ${section.title} [MASTER]`, tier: 'master' });
+          setLastXP({ amount: sectionBonus2, label: section.title });
+        } else if (coursePrimaryStat) {
+          const statBonus = Math.floor(sectionBonus2 * 0.5);
+          const masterBonus = Math.floor(sectionBonus2 * 0.5);
+          await awardBonusXP2({ source: 'course_section', sourceId: section.id, statKey: coursePrimaryStat, amount: statBonus, notes: `${course.name} — ${section.title}`, tier: 'stat' });
+          await awardBonusXP2({ source: 'course_section', sourceId: section.id, amount: masterBonus, notes: `${course.name} — ${section.title}`, tier: 'master' });
+          setLastXP({ amount: sectionBonus2, label: section.title });
         }
-        setLastXP({ amount: sectionBonus2, label: section.title });
         setTimeout(() => setLastXP(null), 3000);
+      } else {
+        // Unticking — reverse XP
+        await reverseBonusXP(section.id);
       }
 
       const updatedSections = (sections ?? []).map(s =>
@@ -843,7 +953,20 @@ export default function CourseDetailDrawer({ courseId, onClose }: Props) {
                   {/* Section checkbox — only when no lessons, stops propagation */}
                   {section.lessons.length === 0 && (
                     <div
-                      onClick={e => { e.stopPropagation(); tickSection.mutate(section); }}
+                      role="checkbox"
+                      aria-checked={sectionDone}
+                      tabIndex={0}
+                      onClick={e => { 
+                        console.log('Section checkbox clicked', section.id, sectionDone);
+                        e.stopPropagation(); tickSection.mutate(section); 
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          tickSection.mutate(section);
+                        }
+                      }}
                       style={{
                         width: 14,
                         height: 14,
@@ -855,6 +978,7 @@ export default function CourseDetailDrawer({ courseId, onClose }: Props) {
                         alignItems: 'center',
                         justifyContent: 'center',
                         fontSize: 9,
+                        pointerEvents: 'auto',
                         color: '#44ff88',
                       }}
                     >
@@ -919,7 +1043,21 @@ export default function CourseDetailDrawer({ courseId, onClose }: Props) {
                           >
                             {/* Checkbox */}
                             <div
-                              onClick={() => tickLesson.mutate({ lesson, section })}
+                              role="checkbox"
+                              aria-checked={isDone}
+                              tabIndex={0}
+                              onClick={(e) => { 
+                                console.log('Checkbox clicked', lesson.id, isDone);
+                                e.stopPropagation(); 
+                                tickLesson.mutate({ lesson, section }); 
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  tickLesson.mutate({ lesson, section });
+                                }
+                              }}
                               style={{
                                 width: 14,
                                 height: 14,
@@ -932,6 +1070,7 @@ export default function CourseDetailDrawer({ courseId, onClose }: Props) {
                                 justifyContent: 'center',
                                 fontSize: 9,
                                 color: '#44ff88',
+                                pointerEvents: 'auto',
                               }}
                             >
                               {isDone ? '✓' : ''}

@@ -207,6 +207,7 @@ export default function LibraryPage({ onClose }: Props) {
 
   const [activeTab, setActiveTab]     = useState<MediaType | 'ALL'>('ALL');
   const [sortKey, setSortKey]         = useState<SortKey>('status');
+  const [search, setSearch]           = useState('');
   const [selectedId, setSelectedId]   = useState<string | null>(null);
   const [showAdd, setShowAdd]         = useState(false);
 
@@ -230,7 +231,11 @@ export default function LibraryPage({ onClose }: Props) {
       ? (items ?? [])
       : (items ?? []).filter(i => i.type === activeTab);
 
-    return [...base].sort((a, b) => {
+    const searched = search.trim()
+      ? base.filter(i => i.title.toLowerCase().includes(search.toLowerCase()) || (i.creator ?? '').toLowerCase().includes(search.toLowerCase()))
+      : base;
+
+    return [...searched].sort((a, b) => {
       if (sortKey === 'title')  return a.title.localeCompare(b.title);
       if (sortKey === 'rating') return (b.rating ?? 0) - (a.rating ?? 0);
       if (sortKey === 'recent') return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
@@ -241,7 +246,7 @@ export default function LibraryPage({ onClose }: Props) {
       }
       return 0;
     });
-  }, [items, activeTab, sortKey]);
+  }, [items, activeTab, sortKey, search]);
 
   return (
     <div style={{
@@ -264,6 +269,27 @@ export default function LibraryPage({ onClose }: Props) {
           {(items ?? []).length} items
         </span>
         <div style={{ flex: 1 }} />
+
+        {/* Search */}
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+          <span style={{ position: 'absolute', left: 8, fontSize: 10, color: adim, pointerEvents: 'none' }}>⌕</span>
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search media..."
+            style={{
+              padding: '4px 10px 4px 24px', fontSize: 10, width: 200,
+              background: bgS, border: `1px solid ${search ? acc : adim}`,
+              color: acc, fontFamily: mono, outline: 'none',
+            }}
+          />
+          {search && (
+            <button onClick={() => setSearch('')} style={{
+              position: 'absolute', right: 6, background: 'transparent',
+              border: 'none', color: adim, cursor: 'pointer', fontSize: 12, padding: 0,
+            }}>×</button>
+          )}
+        </div>
 
         {/* Sort */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

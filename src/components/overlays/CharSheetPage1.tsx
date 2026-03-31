@@ -1,205 +1,397 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import ProgressBar from '../ProgressBar';
+import { useOperator } from '@/hooks/useOperator';
+import { useStats } from '@/hooks/useStats';
+import { useSkills } from '@/hooks/useSkills';
+import { getDB } from '@/lib/db';
+import { getLevelFromXP, getXPDisplayValues } from '@/services/xpService';
+import { supabase } from '@/integrations/supabase/client';
+import { STAT_META, StatKey } from '@/types';
 
-const op = {
-  callsign: 'VOID_SIGNAL',
-  level: 6,
-  title: 'SPECIALIST',
-  xp: 7820,
-  xpToNext: 12000,
-  streak: 14,
-  multiplier: 2.0,
-  shields: [true, true, false],
-  classPrimary: 'ROCKERBOY',
-  classSecondary: 'WITCH',
-  augmentation: 74,
-};
+type StatTabKey = StatKey | 'ALL';
 
-const statData = [
-  { icon: '▲', name: 'BODY', level: 4, xp: 4200, xpToNext: 6500, streak: 9, dormant: false },
-  { icon: '⬡', name: 'WIRE', level: 6, xp: 9100, xpToNext: 12000, streak: 14, dormant: false },
-  { icon: '◈', name: 'MIND', level: 5, xp: 6800, xpToNext: 9000, streak: 14, dormant: false },
-  { icon: '◆', name: 'COOL', level: null, xp: 0, xpToNext: 0, streak: 0, dormant: true },
-  { icon: '▣', name: 'GRIT', level: null, xp: 0, xpToNext: 0, streak: 0, dormant: true },
-  { icon: '✦', name: 'FLOW', level: 5, xp: 5900, xpToNext: 9000, streak: 12, dormant: false },
-  { icon: '░', name: 'GHOST', level: 3, xp: 2100, xpToNext: 4500, streak: 6, dormant: false },
-];
+interface CharSheetPage1Props {
+  onSkillClick?: (skillName: string) => void;
+}
 
-const CharSheetPage1 = () => {
-  const [customDesignation, setCustomDesignation] = useState<string | null>(null);
-  const [editing, setEditing] = useState(false);
+const CharSheetPage1 = ({ onSkillClick }: CharSheetPage1Props) => {
+  const queryClient = useQueryClient();
+  const { data: op, isLoading: opLoading } = useOperator();
+  const { data: stats, isLoading: statsLoading } = useStats();
+  const { data: skills, isLoading: skillsLoading } = useSkills();
+  
+  const [editing, setEditing] = useState<'designation' | 'callsign' | false>(false);
   const [editValue, setEditValue] = useState('');
+  const [skillTab, setSkillTab] = useState<StatTabKey>('ALL');
+  const [arsenalTab, setArsenalTab] = useState<'tools' | 'augments'>('tools');
+  const [specTab, setSpecTab] = useState<'courses' | 'projects' | 'media'>('courses');
 
-  const startEdit = () => {
-    setEditValue(customDesignation || '');
-    setEditing(true);
+  const { data: tools } = useQuery({
+    queryKey: ['tools-xp'],
+    queryFn: async () => {
+      const db = await getDB();
+      const res = await db.query<{ id: string; name: string; xp: number }>(`SELECT id, name, xp FROM tools ORDER BY xp DESC LIMIT 5;`);
+      return res.rows.map(t => ({ ...t, ...getLevelFromXP(t.xp) }));
+    },
+  });
+
+  const { data: augments } = useQuery({
+    queryKey: ['augments-xp'],
+    queryFn: async () => {
+      const db = await getDB();
+      const res = await db.query<{ id: string; name: string; xp: number }>(`SELECT id, name, xp FROM augments ORDER BY xp DESC LIMIT 5;`);
+      return res.rows.map(a => ({ ...a, ...getLevelFromXP(a.xp) }));
+    },
+  });
+
+  const { data: recentCourses } = useQuery({
+    queryKey: ['courses-recent'],
+    queryFn: async () => {
+      const db = await getDB();
+      const res = await db.query<{ id: string; name: string; status: string; progress: number }>(
+        `SELECT id, name, status, progress FROM courses ORDER BY created_at DESC LIMIT 5;`
+      );
+      return res.rows;
+    },
+  });
+
+  const { data: recentProjects } = useQuery({
+    queryKey: ['projects-recent'],
+    queryFn: async () => {
+      const db = await getDB();
+      const res = await db.query<{ id: string; name: string; status: string; progress: number }>(
+        `SELECT id, name, status, progress FROM projects ORDER BY created_at DESC LIMIT 5;`
+      );
+      return res.rows;
+    },
+  });
+
+  const { data: recentMedia } = useQuery({
+    queryKey: ['media-recent'],
+    queryFn: async () => {
+      const db = await getDB();
+      const res = await db.query<{ id: string; title: string; type: string; status: string }>(
+        `SELECT id, title, type, status FROM media ORDER BY created_at DESC LIMIT 5;`
+      );
+      return res.rows;
+    },
+  });
+
+  const filteredSkills = useMemo(() => {
+    if (!skills) return [];
+    const sorted = [...skills].sort((a, b) => b.xp - a.xp);
+    if (skillTab === 'ALL') return sorted.slice(0, 5);
+    return sorted.filter(s => s.statKeys.includes(skillTab)).slice(0, 5);
+  }, [skills, skillTab]);
+
+  const statTabs: StatTabKey[] = ['ALL', 'body', 'wire', 'mind', 'cool', 'grit', 'flow', 'ghost'];
+
+  const startDesignationEdit = () => {
+    setEditValue(op?.designation || '');
+    setEditing('designation');
   };
 
-  const saveEdit = () => {
+  const saveDesignationEdit = async () => {
     const v = editValue.trim();
-    setCustomDesignation(v || null);
+    await supabase.from('profile').update({ designation: v || null }).eq('id', 1);
+    queryClient.invalidateQueries({ queryKey: ['operator'] });
     setEditing(false);
   };
 
+  const startCallsignEdit = () => {
+    setEditValue(op?.callsign || '');
+    setEditing('callsign');
+  };
+
+  const saveCallsignEdit = async () => {
+    const v = editValue.trim();
+    if (v) {
+      await supabase.from('profile').update({ callsign: v }).eq('id', 1);
+      queryClient.invalidateQueries({ queryKey: ['operator'] });
+    }
+    setEditing(false);
+  };
+
+  const loading = opLoading || statsLoading || skillsLoading;
+  if (loading) {
+    return <div style={{ padding: 20, color: 'hsl(var(--text-dim))' }}>Loading...</div>;
+  }
+
+  const mono = "'IBM Plex Mono', monospace";
+  const acc = 'hsl(var(--accent))';
+  const accDim = 'hsl(var(--accent-dim))';
+  const dim = 'hsl(var(--text-dim))';
+  const bgT = 'hsl(var(--bg-tertiary))';
+
   return (
-    <div style={{ display: 'flex', height: '100%', gap: 0 }}>
-      {/* LEFT — IDENTITY */}
-      <div className="char-sheet-left" style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ color: 'hsl(var(--text-dim))', fontSize: 10, marginBottom: 20 }}>// IDENTITY</div>
-
-        {/* Callsign */}
-        <div style={{ marginBottom: 24 }}>
-          <div className="char-label">CALLSIGN</div>
-          <div className="font-display text-glow-bright" style={{ fontSize: 28, color: 'hsl(var(--accent-bright))' }}>
-            {op.callsign}
-          </div>
-        </div>
-
-        {/* Class */}
-        <div style={{ marginBottom: 24 }}>
-          <div className="char-label">CLASS</div>
-          <div>
-            <span className="font-display" style={{ fontSize: 22, color: 'hsl(var(--accent-bright))' }}>{op.classPrimary}</span>
-            <span className="font-display" style={{ fontSize: 22, color: 'hsl(var(--accent))' }}> // {op.classSecondary}</span>
-          </div>
-          <div style={{ fontSize: 9, color: 'hsl(var(--text-dim))', fontStyle: 'italic', marginTop: 2 }}>(generated)</div>
-        </div>
-
-        {/* Custom Designation */}
-        <div style={{ marginBottom: 24 }}>
-          <div className="char-label">CUSTOM DESIGNATION</div>
-          {editing ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <input
-                className="crt-input"
-                autoFocus
-                value={editValue}
-                onChange={e => setEditValue(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') setEditing(false); }}
-                style={{ fontSize: 14, flex: 1, maxWidth: 280 }}
-              />
-              <button
-                className="topbar-btn"
-                onClick={saveEdit}
-                style={{ fontSize: 9, padding: '2px 6px' }}
-              >[ save ]</button>
+    <div style={{ display: 'flex', height: '100%', gap: 16, padding: '0 4px' }}>
+      {/* LEFT COLUMN - USER + CLASS */}
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        
+        {/* USER and CLASS side by side */}
+        <div style={{ display: 'flex', gap: 12, marginBottom: 8 }}>
+          {/* USER */}
+          <div style={{ flex: 1 }}>
+            <div style={{ color: dim, fontSize: 9, marginBottom: 8, letterSpacing: 1 }}>// USER</div>
+            
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 9, color: accDim, marginBottom: 4 }}>CALLSIGN</div>
+              {editing === 'callsign' ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input
+                    className="crt-input"
+                    autoFocus
+                    value={editValue}
+                    onChange={e => setEditValue(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') saveCallsignEdit(); if (e.key === 'Escape') setEditing(false); }}
+                    style={{ fontSize: 11, width: 100 }}
+                  />
+                  <button className="topbar-btn" onClick={saveCallsignEdit} style={{ fontSize: 8, padding: '2px 6px' }}>[OK]</button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontFamily: mono, fontSize: 14, color: acc, letterSpacing: 1 }}>{op?.callsign || 'OPERATOR'}</span>
+                  <button onClick={startCallsignEdit} style={{ background: 'transparent', border: 'none', color: accDim, fontSize: 8, cursor: 'pointer' }}>[edit]</button>
+                </div>
+              )}
             </div>
-          ) : customDesignation ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 14, color: 'hsl(var(--accent))' }}>{customDesignation}</span>
-              <button
-                onClick={startEdit}
-                style={{
-                  border: '1px solid hsl(var(--accent-dim))',
-                  color: 'hsl(var(--text-dim))',
-                  background: 'transparent',
-                  fontFamily: "'IBM Plex Mono', monospace",
-                  fontSize: 9,
-                  padding: '2px 6px',
-                  cursor: 'pointer',
-                }}
-              >[ edit ]</button>
+
+            <div>
+              <div style={{ fontSize: 9, color: accDim, marginBottom: 4 }}>DESIGNATION</div>
+              {editing === 'designation' ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input
+                    className="crt-input"
+                    autoFocus
+                    value={editValue}
+                    onChange={e => setEditValue(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') saveDesignationEdit(); if (e.key === 'Escape') setEditing(false); }}
+                    style={{ fontSize: 11, flex: 1 }}
+                  />
+                  <button className="topbar-btn" onClick={saveDesignationEdit} style={{ fontSize: 8, padding: '2px 6px' }}>[OK]</button>
+                </div>
+              ) : op?.designation ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 11, color: dim }}>{op.designation}</span>
+                  <button onClick={startDesignationEdit} style={{ background: 'transparent', border: 'none', color: accDim, fontSize: 8, cursor: 'pointer' }}>[edit]</button>
+                </div>
+              ) : (
+                <button onClick={startDesignationEdit} style={{ background: 'transparent', border: `1px solid ${accDim}`, color: accDim, fontSize: 9, padding: '2px 8px', cursor: 'pointer' }}>+ SET</button>
+              )}
             </div>
-          ) : (
-            <button
-              onClick={startEdit}
-              style={{
-                border: '1px solid hsl(var(--accent-dim))',
-                color: 'hsl(var(--text-dim))',
-                background: 'transparent',
-                fontFamily: "'IBM Plex Mono', monospace",
-                fontSize: 10,
-                padding: '4px 10px',
-                cursor: 'pointer',
-              }}
-            >[ + SET DESIGNATION ]</button>
-          )}
+          </div>
+
+          {/* CLASS */}
+          <div style={{ flex: 1 }}>
+            <div style={{ color: dim, fontSize: 9, marginBottom: 8, letterSpacing: 1 }}>// CLASS</div>
+            <div>
+              <span style={{ fontFamily: mono, fontSize: 14, color: acc }}>{op?.customClass || '—'}</span>
+              <div style={{ fontSize: 9, color: accDim, marginTop: 4 }}>(auto-generated from stats)</div>
+            </div>
+          </div>
         </div>
 
         {/* Master Level */}
-        <div style={{ marginBottom: 24 }}>
-          <div className="char-label">MASTER LEVEL</div>
-          <div className="font-display" style={{ fontSize: 24, color: 'hsl(var(--accent-bright))' }}>
-            LVL {op.level} // {op.title}
+        <div style={{ marginBottom: 8, padding: 10, background: bgT, border: `1px solid ${accDim}` }}>
+          <div style={{ fontSize: 9, color: accDim, marginBottom: 6 }}>MASTER LEVEL</div>
+          <div style={{ fontFamily: mono, fontSize: 16, color: acc, marginBottom: 6 }}>
+            Level {op?.level || 1} // {op?.levelTitle || 'Novice'}
           </div>
-          <div style={{ marginTop: 6 }}>
-            <ProgressBar value={op.xp} max={op.xpToNext} width="100%" height={10} />
+          <ProgressBar value={op?.xpInLevel || 0} max={op?.xpForLevel || 500} width="100%" height={8} />
+          <div style={{ fontSize: 9, color: dim, marginTop: 4 }}>
+            {getXPDisplayValues(op?.totalXp || 0).totalXP.toLocaleString()} / {getXPDisplayValues(op?.totalXp || 0).totalXPToNextLevel.toLocaleString()} XP
           </div>
-          <div style={{ fontSize: 10, color: 'hsl(var(--text-dim))', marginTop: 4 }}>
-            {op.xp.toLocaleString()} / {op.xpToNext.toLocaleString()} XP
+        </div>
+
+        {/* Stats - scrollable if needed */}
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+          <div style={{ fontSize: 9, color: accDim, marginBottom: 8 }}>STATS</div>
+          {stats?.map(s => (
+            <div key={s.key} style={{ marginBottom: 10, opacity: s.dormant ? 0.4 : 1 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+                <span style={{ fontSize: 10 }}>
+                  <span style={{ marginRight: 4 }}>{STAT_META[s.key]?.icon || '?'}</span>
+                  {STAT_META[s.key]?.name || s.key.toUpperCase()}
+                </span>
+                {s.dormant ? (
+                  <span style={{ fontSize: 8, color: dim }}>DORMANT</span>
+                ) : (
+                  <span style={{ fontFamily: mono, fontSize: 10, color: acc }}>LVL {s.level}</span>
+                )}
+              </div>
+              <ProgressBar value={s.xpInLevel} max={s.xpForLevel || 1} width="100%" height={4} />
+              {!s.dormant && (
+                <div style={{ fontSize: 8, color: dim, marginTop: 2 }}>
+                  {s.xp.toLocaleString()} / {s.xpForLevel.toLocaleString()} XP
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* RIGHT COLUMN - SPEC */}
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ color: dim, fontSize: 9, marginBottom: 8, letterSpacing: 1 }}>// SKILLS</div>
+
+        {/* Skills */}
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', gap: 3, marginBottom: 6, flexWrap: 'wrap' }}>
+            {statTabs.map(t => (
+              <button
+                key={t}
+                onClick={() => setSkillTab(t)}
+                style={{
+                  padding: '2px 6px',
+                  fontSize: 8,
+                  fontFamily: mono,
+                  cursor: 'pointer',
+                  border: `1px solid ${skillTab === t ? acc : accDim}`,
+                  background: skillTab === t ? 'rgba(255,176,0,0.1)' : 'transparent',
+                  color: skillTab === t ? acc : dim,
+                }}
+              >
+                {t === 'ALL' ? 'ALL' : STAT_META[t]?.icon || t}
+              </button>
+            ))}
+          </div>
+          <div style={{ background: bgT, border: `1px solid ${accDim}`, padding: 6 }}>
+            {filteredSkills.length === 0 ? (
+              <div style={{ fontSize: 9, color: dim, padding: 4 }}>No skills yet</div>
+            ) : (
+              filteredSkills.map(s => (
+                <div 
+                  key={s.id} 
+                  onClick={() => onSkillClick?.(s.name)}
+                  style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 9, cursor: onSkillClick ? 'pointer' : 'default' }}
+                >
+                  <span style={{ color: dim }}>{s.name}</span>
+                  <span style={{ color: acc }}>LVL {s.level}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Arsenal */}
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
+            <button
+              onClick={() => setArsenalTab('tools')}
+              style={{
+                padding: '2px 8px',
+                fontSize: 9,
+                fontFamily: mono,
+                cursor: 'pointer',
+                border: `1px solid ${arsenalTab === 'tools' ? acc : accDim}`,
+                background: arsenalTab === 'tools' ? 'rgba(255,176,0,0.1)' : 'transparent',
+                color: arsenalTab === 'tools' ? acc : dim,
+              }}
+            >
+              TOOLS
+            </button>
+            <button
+              onClick={() => setArsenalTab('augments')}
+              style={{
+                padding: '2px 8px',
+                fontSize: 9,
+                fontFamily: mono,
+                cursor: 'pointer',
+                border: `1px solid ${arsenalTab === 'augments' ? acc : accDim}`,
+                background: arsenalTab === 'augments' ? 'rgba(255,176,0,0.1)' : 'transparent',
+                color: arsenalTab === 'augments' ? acc : dim,
+              }}
+            >
+              AUGMENTS
+            </button>
+          </div>
+          <div style={{ background: bgT, border: `1px solid ${accDim}`, padding: 6 }}>
+            {(arsenalTab === 'tools' ? tools : augments)?.length === 0 ? (
+              <div style={{ fontSize: 9, color: dim, padding: 4 }}>No {arsenalTab} yet</div>
+            ) : (
+              (arsenalTab === 'tools' ? tools : augments)?.map(item => (
+                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 9 }}>
+                  <span style={{ color: dim }}>{item.name}</span>
+                  <span style={{ color: acc }}>LVL {item.level}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Course / Projects / Media */}
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
+            {(['courses', 'projects', 'media'] as const).map(t => (
+              <button
+                key={t}
+                onClick={() => setSpecTab(t)}
+                style={{
+                  padding: '2px 8px',
+                  fontSize: 9,
+                  fontFamily: mono,
+                  cursor: 'pointer',
+                  border: `1px solid ${specTab === t ? acc : accDim}`,
+                  background: specTab === t ? 'rgba(255,176,0,0.1)' : 'transparent',
+                  color: specTab === t ? acc : dim,
+                }}
+              >
+                {t.toUpperCase()}
+              </button>
+            ))}
+          </div>
+          <div style={{ flex: 1, background: bgT, border: `1px solid ${accDim}`, padding: 6, overflowY: 'auto' }}>
+            {specTab === 'courses' && (
+              recentCourses?.length === 0 ? (
+                <div style={{ fontSize: 9, color: dim }}>No courses yet</div>
+              ) : (
+                recentCourses?.map(c => (
+                  <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 9 }}>
+                    <span style={{ color: dim }}>{c.name}</span>
+                    <span style={{ color: c.status === 'COMPLETE' ? '#44ff88' : acc }}>{c.progress}%</span>
+                  </div>
+                ))
+              )
+            )}
+            {specTab === 'projects' && (
+              recentProjects?.length === 0 ? (
+                <div style={{ fontSize: 9, color: dim }}>No projects yet</div>
+              ) : (
+                recentProjects?.map(p => (
+                  <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 9 }}>
+                    <span style={{ color: dim }}>{p.name}</span>
+                    <span style={{ color: p.status === 'COMPLETE' ? '#44ff88' : acc }}>{p.progress}%</span>
+                  </div>
+                ))
+              )
+            )}
+            {specTab === 'media' && (
+              recentMedia?.length === 0 ? (
+                <div style={{ fontSize: 9, color: dim }}>No media yet</div>
+              ) : (
+                recentMedia?.map(m => (
+                  <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 9 }}>
+                    <span style={{ color: dim }}>{m.title}</span>
+                    <span style={{ color: m.status === 'FINISHED' ? '#44ff88' : acc }}>{m.status}</span>
+                  </div>
+                ))
+              )
+            )}
           </div>
         </div>
 
         {/* Streak */}
-        <div style={{ marginBottom: 24 }}>
-          <div className="char-label">STREAK</div>
+        <div style={{ marginTop: 8, padding: 8, background: bgT, border: `1px solid ${accDim}` }}>
+          <div style={{ fontSize: 9, color: accDim, marginBottom: 4 }}>STREAK</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span className="font-display" style={{ fontSize: 20, color: 'hsl(var(--accent-bright))' }}>
-              {op.streak} DAYS
-            </span>
-            <span className="multiplier-tag">ON FIRE {op.multiplier}×</span>
-          </div>
-        </div>
-
-        {/* Shields */}
-        <div style={{ marginBottom: 24 }}>
-          <div className="char-label">SHIELDS</div>
-          <div style={{ display: 'flex', gap: 8, fontSize: 18 }}>
-            {op.shields.map((s, i) => (
-              <span
-                key={i}
-                style={{
-                  color: s ? 'hsl(var(--accent-bright))' : 'hsl(41 100% 13%)',
-                  textShadow: s ? '0 0 8px hsl(var(--accent-glow) / 0.8)' : 'none',
-                }}
-              >
-                {s ? '▣' : '□'}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        {/* Augmentation */}
-        <div>
-          <div className="char-label">AUGMENTATION SCORE</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ flex: 1 }}>
-              <ProgressBar value={op.augmentation} max={100} width="100%" height={10} />
+            <span style={{ fontFamily: mono, fontSize: 14, color: acc }}>{op?.streak || 0} DAYS</span>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {[true, true, false].map((active, i) => (
+                <span key={i} style={{ fontSize: 12, color: active ? acc : accDim }}>{active ? '▣' : '□'}</span>
+              ))}
             </div>
-            <span style={{ fontSize: 10, color: 'hsl(var(--text-dim))' }}>{op.augmentation} / 100</span>
           </div>
-        </div>
-      </div>
-
-      {/* RIGHT — STATS */}
-      <div className="char-sheet-right" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ color: 'hsl(var(--text-dim))', fontSize: 10, marginBottom: 20 }}>// STATS</div>
-
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-          {statData.map(s => (
-            <div key={s.name} style={{ opacity: s.dormant ? 0.35 : 1 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                <span style={{ fontSize: 11 }}>
-                  <span style={{ marginRight: 6, fontSize: 13 }}>{s.icon}</span>
-                  {s.name}
-                </span>
-                {s.dormant ? (
-                  <span style={{ fontSize: 9, color: 'hsl(var(--text-dim))' }}>DORMANT</span>
-                ) : (
-                  <span className="font-display" style={{ fontSize: 14, color: 'hsl(var(--accent-bright))' }}>LVL {s.level}</span>
-                )}
-              </div>
-              <ProgressBar value={s.xp} max={s.xpToNext || 1} width="100%" height={6} />
-              {!s.dormant && (
-                <div style={{ fontSize: 9, color: 'hsl(var(--text-dim))', marginTop: 3 }}>
-                  {s.xp.toLocaleString()} / {s.xpToNext.toLocaleString()} XP &nbsp;&nbsp; STK: {s.streak}d
-                </div>
-              )}
-              {s.dormant && (
-                <div style={{ fontSize: 9, color: 'hsl(var(--text-dim))', marginTop: 3 }}>DORMANT</div>
-              )}
-            </div>
-          ))}
         </div>
       </div>
     </div>

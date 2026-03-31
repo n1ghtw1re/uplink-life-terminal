@@ -24,7 +24,8 @@ const TopBar = ({ onOpenLog, onOpenCheckin, onOpenSearch }: TopBarProps) => {
   const dateStr = `${time.getFullYear()}.${fmt(time.getMonth() + 1)}.${fmt(time.getDate())}`;
 
   const level      = op?.level      ?? 1;
-  const title      = op?.levelTitle ?? 'INITIALISING';
+  const title      = op?.levelTitle ?? 'Novice';
+  const customClass = op?.customClass ?? '';
   const xpInLevel  = op?.xpInLevel  ?? 0;
   const xpForLevel = op?.xpForLevel ?? 500;
   const streak     = op?.streak     ?? 0;
@@ -56,7 +57,7 @@ const TopBar = ({ onOpenLog, onOpenCheckin, onOpenSearch }: TopBarProps) => {
       ) : (
         <>
           <span className="font-display text-glow" style={{ fontSize: 16, color: 'hsl(var(--accent-bright))' }}>
-            LVL {level} // {title}
+            Level {level} // {title}{customClass ? ` ${customClass}` : ''}
           </span>
           <ProgressBar value={xpInLevel} max={xpForLevel} width="120px" />
           <span style={{ fontSize: 10, color: 'hsl(var(--text-dim))' }}>{totalXP.toLocaleString()} XP</span>

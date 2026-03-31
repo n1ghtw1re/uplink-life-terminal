@@ -6,73 +6,86 @@ interface Props {
 
 interface XpRow {
   level: string;
+  title: string;
   xpForLevel: string;
   totalXp: string;
 }
 
+const MASTER_TITLES = [
+  'Novice', 'Apprentice', 'Initiate', 'Adept', 'Specialist', 
+  'Senior', 'Lead', 'Expert', 'Master', 'Principal', 
+  'Elite', 'Exalted', 'Grandmaster',
+];
+
+const getTitle = (lvl: number) => {
+  if (lvl >= 60) return 'Grandmaster';
+  const idx = Math.floor(lvl / 5);
+  return MASTER_TITLES[idx] ?? 'Novice';
+};
+
 const XP_ROWS: XpRow[] = [
-  { level: '0', xpForLevel: '—', totalXp: '0' },
-  { level: '1', xpForLevel: '1,400', totalXp: '1,400' },
-  { level: '2', xpForLevel: '1,600', totalXp: '3,000' },
-  { level: '3', xpForLevel: '1,800', totalXp: '4,800' },
-  { level: '4', xpForLevel: '2,000', totalXp: '6,800' },
-  { level: '5', xpForLevel: '2,200', totalXp: '9,000' },
-  { level: '6', xpForLevel: '2,400', totalXp: '11,400' },
-  { level: '7', xpForLevel: '2,600', totalXp: '14,000' },
-  { level: '8', xpForLevel: '2,800', totalXp: '16,800' },
-  { level: '9', xpForLevel: '3,000', totalXp: '19,800' },
-  { level: '10', xpForLevel: '3,200', totalXp: '23,000' },
-  { level: '11', xpForLevel: '3,400', totalXp: '26,400' },
-  { level: '12', xpForLevel: '3,600', totalXp: '30,000' },
-  { level: '13', xpForLevel: '3,800', totalXp: '33,800' },
-  { level: '14', xpForLevel: '4,000', totalXp: '37,800' },
-  { level: '15', xpForLevel: '4,200', totalXp: '42,000' },
-  { level: '16', xpForLevel: '4,400', totalXp: '46,400' },
-  { level: '17', xpForLevel: '4,600', totalXp: '51,000' },
-  { level: '18', xpForLevel: '4,800', totalXp: '55,800' },
-  { level: '19', xpForLevel: '5,000', totalXp: '60,800' },
-  { level: '20', xpForLevel: '5,200', totalXp: '66,000' },
-  { level: '21', xpForLevel: '5,400', totalXp: '71,400' },
-  { level: '22', xpForLevel: '5,600', totalXp: '77,000' },
-  { level: '23', xpForLevel: '5,800', totalXp: '82,800' },
-  { level: '24', xpForLevel: '6,000', totalXp: '88,800' },
-  { level: '25', xpForLevel: '6,200', totalXp: '95,000' },
-  { level: '26', xpForLevel: '6,400', totalXp: '101,400' },
-  { level: '27', xpForLevel: '6,600', totalXp: '108,000' },
-  { level: '28', xpForLevel: '6,800', totalXp: '114,800' },
-  { level: '29', xpForLevel: '7,000', totalXp: '121,800' },
-  { level: '30', xpForLevel: '7,200', totalXp: '129,000' },
-  { level: '31', xpForLevel: '7,400', totalXp: '136,400' },
-  { level: '32', xpForLevel: '7,600', totalXp: '144,000' },
-  { level: '33', xpForLevel: '7,800', totalXp: '151,800' },
-  { level: '34', xpForLevel: '8,000', totalXp: '159,800' },
-  { level: '35', xpForLevel: '8,200', totalXp: '168,000' },
-  { level: '36', xpForLevel: '8,400', totalXp: '176,400' },
-  { level: '37', xpForLevel: '8,600', totalXp: '185,000' },
-  { level: '38', xpForLevel: '8,800', totalXp: '193,800' },
-  { level: '39', xpForLevel: '9,000', totalXp: '202,800' },
-  { level: '40', xpForLevel: '9,200', totalXp: '212,000' },
-  { level: '41', xpForLevel: '9,400', totalXp: '221,400' },
-  { level: '42', xpForLevel: '9,600', totalXp: '231,000' },
-  { level: '43', xpForLevel: '9,800', totalXp: '240,800' },
-  { level: '44', xpForLevel: '10,000', totalXp: '250,800' },
-  { level: '45', xpForLevel: '10,200', totalXp: '261,000' },
-  { level: '46', xpForLevel: '10,400', totalXp: '271,400' },
-  { level: '47', xpForLevel: '10,600', totalXp: '282,000' },
-  { level: '48', xpForLevel: '10,800', totalXp: '292,800' },
-  { level: '49', xpForLevel: '11,000', totalXp: '303,800' },
-  { level: '50', xpForLevel: '11,200', totalXp: '315,000' },
-  { level: '51', xpForLevel: '11,400', totalXp: '326,400' },
-  { level: '52', xpForLevel: '11,600', totalXp: '338,000' },
-  { level: '53', xpForLevel: '11,800', totalXp: '349,800' },
-  { level: '54', xpForLevel: '12,000', totalXp: '361,800' },
-  { level: '55', xpForLevel: '12,200', totalXp: '374,000' },
-  { level: '56', xpForLevel: '12,400', totalXp: '386,400' },
-  { level: '57', xpForLevel: '12,600', totalXp: '399,000' },
-  { level: '58', xpForLevel: '12,800', totalXp: '411,800' },
-  { level: '59', xpForLevel: '13,000', totalXp: '424,800' },
-  { level: '60', xpForLevel: '13,200', totalXp: '438,000' },
-  { level: '61+', xpForLevel: '13,200 (flat)', totalXp: '∞' },
+  { level: '0', title: getTitle(0), xpForLevel: '—', totalXp: '0' },
+  { level: '1', title: getTitle(1), xpForLevel: '1,400', totalXp: '1,400' },
+  { level: '2', title: getTitle(2), xpForLevel: '1,600', totalXp: '3,000' },
+  { level: '3', title: getTitle(3), xpForLevel: '1,800', totalXp: '4,800' },
+  { level: '4', title: getTitle(4), xpForLevel: '2,000', totalXp: '6,800' },
+  { level: '5', title: getTitle(5), xpForLevel: '2,200', totalXp: '9,000' },
+  { level: '6', title: getTitle(6), xpForLevel: '2,400', totalXp: '11,400' },
+  { level: '7', title: getTitle(7), xpForLevel: '2,600', totalXp: '14,000' },
+  { level: '8', title: getTitle(8), xpForLevel: '2,800', totalXp: '16,800' },
+  { level: '9', title: getTitle(9), xpForLevel: '3,000', totalXp: '19,800' },
+  { level: '10', title: getTitle(10), xpForLevel: '3,200', totalXp: '23,000' },
+  { level: '11', title: getTitle(11), xpForLevel: '3,400', totalXp: '26,400' },
+  { level: '12', title: getTitle(12), xpForLevel: '3,600', totalXp: '30,000' },
+  { level: '13', title: getTitle(13), xpForLevel: '3,800', totalXp: '33,800' },
+  { level: '14', title: getTitle(14), xpForLevel: '4,000', totalXp: '37,800' },
+  { level: '15', title: getTitle(15), xpForLevel: '4,200', totalXp: '42,000' },
+  { level: '16', title: getTitle(16), xpForLevel: '4,400', totalXp: '46,400' },
+  { level: '17', title: getTitle(17), xpForLevel: '4,600', totalXp: '51,000' },
+  { level: '18', title: getTitle(18), xpForLevel: '4,800', totalXp: '55,800' },
+  { level: '19', title: getTitle(19), xpForLevel: '5,000', totalXp: '60,800' },
+  { level: '20', title: getTitle(20), xpForLevel: '5,200', totalXp: '66,000' },
+  { level: '21', title: getTitle(21), xpForLevel: '5,400', totalXp: '71,400' },
+  { level: '22', title: getTitle(22), xpForLevel: '5,600', totalXp: '77,000' },
+  { level: '23', title: getTitle(23), xpForLevel: '5,800', totalXp: '82,800' },
+  { level: '24', title: getTitle(24), xpForLevel: '6,000', totalXp: '88,800' },
+  { level: '25', title: getTitle(25), xpForLevel: '6,200', totalXp: '95,000' },
+  { level: '26', title: getTitle(26), xpForLevel: '6,400', totalXp: '101,400' },
+  { level: '27', title: getTitle(27), xpForLevel: '6,600', totalXp: '108,000' },
+  { level: '28', title: getTitle(28), xpForLevel: '6,800', totalXp: '114,800' },
+  { level: '29', title: getTitle(29), xpForLevel: '7,000', totalXp: '121,800' },
+  { level: '30', title: getTitle(30), xpForLevel: '7,200', totalXp: '129,000' },
+  { level: '31', title: getTitle(31), xpForLevel: '7,400', totalXp: '136,400' },
+  { level: '32', title: getTitle(32), xpForLevel: '7,600', totalXp: '144,000' },
+  { level: '33', title: getTitle(33), xpForLevel: '7,800', totalXp: '151,800' },
+  { level: '34', title: getTitle(34), xpForLevel: '8,000', totalXp: '159,800' },
+  { level: '35', title: getTitle(35), xpForLevel: '8,200', totalXp: '168,000' },
+  { level: '36', title: getTitle(36), xpForLevel: '8,400', totalXp: '176,400' },
+  { level: '37', title: getTitle(37), xpForLevel: '8,600', totalXp: '185,000' },
+  { level: '38', title: getTitle(38), xpForLevel: '8,800', totalXp: '193,800' },
+  { level: '39', title: getTitle(39), xpForLevel: '9,000', totalXp: '202,800' },
+  { level: '40', title: getTitle(40), xpForLevel: '9,200', totalXp: '212,000' },
+  { level: '41', title: getTitle(41), xpForLevel: '9,400', totalXp: '221,400' },
+  { level: '42', title: getTitle(42), xpForLevel: '9,600', totalXp: '231,000' },
+  { level: '43', title: getTitle(43), xpForLevel: '9,800', totalXp: '240,800' },
+  { level: '44', title: getTitle(44), xpForLevel: '10,000', totalXp: '250,800' },
+  { level: '45', title: getTitle(45), xpForLevel: '10,200', totalXp: '261,000' },
+  { level: '46', title: getTitle(46), xpForLevel: '10,400', totalXp: '271,400' },
+  { level: '47', title: getTitle(47), xpForLevel: '10,600', totalXp: '282,000' },
+  { level: '48', title: getTitle(48), xpForLevel: '10,800', totalXp: '292,800' },
+  { level: '49', title: getTitle(49), xpForLevel: '11,000', totalXp: '303,800' },
+  { level: '50', title: getTitle(50), xpForLevel: '11,200', totalXp: '315,000' },
+  { level: '51', title: getTitle(51), xpForLevel: '11,400', totalXp: '326,400' },
+  { level: '52', title: getTitle(52), xpForLevel: '11,600', totalXp: '338,000' },
+  { level: '53', title: getTitle(53), xpForLevel: '11,800', totalXp: '349,800' },
+  { level: '54', title: getTitle(54), xpForLevel: '12,000', totalXp: '361,800' },
+  { level: '55', title: getTitle(55), xpForLevel: '12,200', totalXp: '374,000' },
+  { level: '56', title: getTitle(56), xpForLevel: '12,400', totalXp: '386,400' },
+  { level: '57', title: getTitle(57), xpForLevel: '12,600', totalXp: '399,000' },
+  { level: '58', title: getTitle(58), xpForLevel: '12,800', totalXp: '411,800' },
+  { level: '59', title: getTitle(59), xpForLevel: '13,000', totalXp: '424,800' },
+  { level: '60', title: getTitle(60), xpForLevel: '13,200', totalXp: '438,000' },
+  { level: '61+', title: 'Grandmaster', xpForLevel: '13,200 (flat)', totalXp: '∞' },
 ];
 
 const mono = "'IBM Plex Mono', monospace";
@@ -280,7 +293,7 @@ export default function XpDocsPage({ onClose }: Props) {
           <div style={{ border: `1px solid ${adim}`, background: bgT, overflow: 'hidden' }}>
             <div style={{
               display: 'grid',
-              gridTemplateColumns: '70px 1fr 1fr',
+              gridTemplateColumns: '50px 90px 1fr 1fr',
               padding: '10px 12px',
               borderBottom: `1px solid ${adim}`,
               fontSize: 9,
@@ -292,6 +305,7 @@ export default function XpDocsPage({ onClose }: Props) {
               zIndex: 2,
             }}>
               <div>LVL</div>
+              <div>TITLE</div>
               <div>XP FOR LEVEL</div>
               <div>TOTAL XP TO REACH</div>
             </div>
@@ -301,7 +315,7 @@ export default function XpDocsPage({ onClose }: Props) {
                 key={row.level}
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: '70px 1fr 1fr',
+                  gridTemplateColumns: '50px 90px 1fr 1fr',
                   padding: '9px 12px',
                   fontSize: 10,
                   color: index % 2 === 0 ? dim : acc,
@@ -310,6 +324,7 @@ export default function XpDocsPage({ onClose }: Props) {
                 }}
               >
                 <div style={{ color: acc }}>{row.level}</div>
+                <div style={{ color: acc }}>{row.title}</div>
                 <div>{row.xpForLevel}</div>
                 <div>{row.totalXp}</div>
               </div>

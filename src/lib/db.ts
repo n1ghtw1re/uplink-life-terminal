@@ -27,6 +27,7 @@ async function initSchema(db: PGlite) {
       id              INTEGER PRIMARY KEY DEFAULT 1,
       callsign        TEXT NOT NULL DEFAULT 'OPERATOR',
       display_name    TEXT,
+      designation     TEXT,
       theme           TEXT NOT NULL DEFAULT 'AMBER',
       custom_class    TEXT,
       birthdate       TEXT,
@@ -378,6 +379,9 @@ async function initSchema(db: PGlite) {
 
   // ── Migrations — safe to run repeatedly ─────────────────────────────────
   // ALTER TABLE with IF NOT EXISTS is idempotent — safe on every boot
+  await db.exec(
+    `ALTER TABLE profile ADD COLUMN IF NOT EXISTS designation TEXT`
+  );
   await db.exec(
     `ALTER TABLE lifepaths ADD COLUMN IF NOT EXISTS description TEXT`
   );
