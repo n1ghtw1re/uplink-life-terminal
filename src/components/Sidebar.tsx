@@ -28,6 +28,7 @@ interface SidebarProps {
   onOpenWidgetManager?: () => void;
   onOpenSocials?: () => void;
   onOpenDailyLog?: () => void;
+  onOpenHabits?: () => void;
   onOpenNotes?: () => void;
   onOpenClockWidget?: () => void;
   onOpenCalculatorWidget?: () => void;
@@ -56,7 +57,7 @@ const Sidebar = ({
   expanded, onToggle, onExpand, theme, onThemeChange,
   onOpenCharacterSheet,
   onOpenStat, onOpenSkills, onOpenLibrary, onOpenCourses,
-  onOpenTools, onOpenResources, onOpenAugments, onOpenProjects, onOpenClassDocs, onOpenXpDocs, onOpenLifepath, onOpenWidgetManager, onOpenSocials, onOpenDailyLog, onOpenNotes,
+  onOpenTools, onOpenResources, onOpenAugments, onOpenProjects, onOpenClassDocs, onOpenXpDocs, onOpenLifepath, onOpenWidgetManager, onOpenSocials, onOpenDailyLog, onOpenHabits, onOpenNotes,
   onOpenClockWidget, onOpenCalculatorWidget, onOpenUnitConverterWidget,
 }: SidebarProps) => {
   const { user } = useAuth();
@@ -339,6 +340,7 @@ const Sidebar = ({
               onClick={() => {
                 if (item.name === 'SOCIALS') onOpenSocials?.();
                 if (item.name === 'DAILY LOG') onOpenDailyLog?.();
+                if (item.name === 'HABITS') onOpenHabits?.();
                 if (item.name === 'NOTES') onOpenNotes?.();
               }}
             >

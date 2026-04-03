@@ -101,19 +101,19 @@ export const MASTER_LEVEL_THRESHOLDS: Record<number, number> = {
 };
 
 export const STREAK_MULTIPLIERS: Record<StreakTier, number> = {
-  STANDARD:   1.0,
+  STANDARD: 1.0,
   HOT_STREAK: 1.5,
-  ON_FIRE:    2.0,
-  LEGENDARY:  3.0,
+  ON_FIRE: 2.0,
+  LEGENDARY: 3.0,
 };
 
 export const STAT_META: Record<StatKey, { icon: string; name: string; domain: string }> = {
-  body:  { icon: '▲', name: 'BODY',  domain: 'Physical fitness, health, movement' },
-  wire:  { icon: '⬡', name: 'WIRE',  domain: 'Technology, tools, digital skills' },
-  mind:  { icon: '◈', name: 'MIND',  domain: 'Learning, knowledge, reading' },
-  cool:  { icon: '◆', name: 'COOL',  domain: 'Career, communication, social presence' },
-  grit:  { icon: '▣', name: 'GRIT',  domain: 'Habits, discipline, mental resilience' },
-  flow:  { icon: '✦', name: 'FLOW',  domain: 'Creativity, making, artistic practice' },
+  body: { icon: '▲', name: 'BODY', domain: 'Physical fitness, health, movement' },
+  wire: { icon: '⬡', name: 'WIRE', domain: 'Technology, tools, digital skills' },
+  mind: { icon: '◈', name: 'MIND', domain: 'Learning, knowledge, reading' },
+  cool: { icon: '◆', name: 'COOL', domain: 'Career, communication, social presence' },
+  grit: { icon: '▣', name: 'GRIT', domain: 'Habits, discipline, mental resilience' },
+  flow: { icon: '✦', name: 'FLOW', domain: 'Creativity, making, artistic practice' },
   ghost: { icon: '░', name: 'GHOST', domain: 'Mindfulness, stillness, inner practice' },
 };
 
@@ -149,24 +149,24 @@ export const STAT_FLAVOR: Record<StatKey, { subtitle: string; description: strin
 };
 
 export const STAT_LEVEL_TITLES: Record<StatKey, string[]> = {
-  body:  ['SEDENTARY', 'STIRRING', 'ACTIVE', 'CONDITIONED', 'ATHLETIC', 'ELITE', 'FORMIDABLE', 'APEX', 'UNKILLABLE', 'LEGENDARY'],
-  wire:  ['OFFLINE', 'CURIOUS', 'CONNECTED', 'CAPABLE', 'PROFICIENT', 'SKILLED', 'ADVANCED', 'EXPERT', 'ARCHITECT', 'ROOT ACCESS'],
-  mind:  ['BLANK SLATE', 'CURIOUS', 'LEARNING', 'INFORMED', 'KNOWLEDGEABLE', 'SCHOLARLY', 'INTELLECTUAL', 'DEEP READER', 'ANALYST', 'ORACLE'],
-  cool:  ['UNKNOWN', 'NOTICED', 'PRESENT', 'CONNECTED', 'INFLUENTIAL', 'RESPECTED', 'AUTHORITATIVE', 'NETWORKED', 'MAGNETIC', 'LEGENDARY'],
-  grit:  ['UNDISCIPLINED', 'TRYING', 'CONSISTENT', 'RELIABLE', 'DISCIPLINED', 'IRONCLAD', 'RELENTLESS', 'UNBREAKABLE', 'MONK-LIKE', 'IMMOVABLE'],
-  flow:  ['SILENT', 'DABBLING', 'MAKING', 'CRAFTING', 'SKILLED', 'ARTISAN', 'CREATOR', 'MASTER', 'VISIONARY', 'ICONIC'],
+  body: ['SEDENTARY', 'STIRRING', 'ACTIVE', 'CONDITIONED', 'ATHLETIC', 'ELITE', 'FORMIDABLE', 'APEX', 'UNKILLABLE', 'LEGENDARY'],
+  wire: ['OFFLINE', 'CURIOUS', 'CONNECTED', 'CAPABLE', 'PROFICIENT', 'SKILLED', 'ADVANCED', 'EXPERT', 'ARCHITECT', 'ROOT ACCESS'],
+  mind: ['BLANK SLATE', 'CURIOUS', 'LEARNING', 'INFORMED', 'KNOWLEDGEABLE', 'SCHOLARLY', 'INTELLECTUAL', 'DEEP READER', 'ANALYST', 'ORACLE'],
+  cool: ['UNKNOWN', 'NOTICED', 'PRESENT', 'CONNECTED', 'INFLUENTIAL', 'RESPECTED', 'AUTHORITATIVE', 'NETWORKED', 'MAGNETIC', 'LEGENDARY'],
+  grit: ['UNDISCIPLINED', 'TRYING', 'CONSISTENT', 'RELIABLE', 'DISCIPLINED', 'IRONCLAD', 'RELENTLESS', 'UNBREAKABLE', 'MONK-LIKE', 'IMMOVABLE'],
+  flow: ['SILENT', 'DABBLING', 'MAKING', 'CRAFTING', 'SKILLED', 'ARTISAN', 'CREATOR', 'MASTER', 'VISIONARY', 'ICONIC'],
   ghost: ['SCATTERED', 'AWARE', 'PRESENT', 'CENTRED', 'GROUNDED', 'STILL', 'DEEP', 'TRANSPARENT', 'VOID', 'SIGNAL'],
 };
 
 export const MULTIPLIER_MAP: Record<StreakTier, number> = {
-  STANDARD:   1.0,
+  STANDARD: 1.0,
   HOT_STREAK: 1.5,
-  ON_FIRE:    2.0,
-  LEGENDARY:  3.0,
+  ON_FIRE: 2.0,
+  LEGENDARY: 3.0,
 };
 
 // Shared level calculation — same curve as xpService, no circular import
-const _T = [0,1400,3000,4800,6800,9000,11400,14000,16800,19800,23000,26400,30000,33800,37800,42000,46400,51000,55800,60800,66000,71400,77000,82800,88800,95000,101400,108000,114800,121800,129000,136400,144000,151800,159800,168000,176400,185000,193800,202800,212000,221400,231000,240800,250800,261000,271400,282000,292800,303800,315000,326400,338000,349800,361800,374000,386400,399000,411800,424800,438000];
+const _T = [0, 1400, 3000, 4800, 6800, 9000, 11400, 14000, 16800, 19800, 23000, 26400, 30000, 33800, 37800, 42000, 46400, 51000, 55800, 60800, 66000, 71400, 77000, 82800, 88800, 95000, 101400, 108000, 114800, 121800, 129000, 136400, 144000, 151800, 159800, 168000, 176400, 185000, 193800, 202800, 212000, 221400, 231000, 240800, 250800, 261000, 271400, 282000, 292800, 303800, 315000, 326400, 338000, 349800, 361800, 374000, 386400, 399000, 411800, 424800, 438000];
 function _calcLevel(xp: number) {
   const x = Math.max(0, xp);
   if (x >= 438000) { const a = x - 438000; return { level: 60 + Math.floor(a / 13200) + 1, xpInLevel: a % 13200, xpForLevel: 13200 }; }
@@ -183,7 +183,7 @@ export function getStatLevel(totalXP: number): { level: number; xpInLevel: numbe
 export function getStreakTier(days: number): StreakTier {
   if (days >= 30) return 'LEGENDARY';
   if (days >= 14) return 'ON_FIRE';
-  if (days >= 7)  return 'HOT_STREAK';
+  if (days >= 7) return 'HOT_STREAK';
   return 'STANDARD';
 }
 
@@ -331,24 +331,32 @@ export interface DailyCheckin {
 
 export interface Habit {
   id: string;
-  userId: string;
   name: string;
-  frequency: HabitFrequency;
-  daysOfWeek: number[] | null;
-  streak: number;
+  stat_key: StatKey;
+  frequency_type: 'DAILY' | 'INTERVAL' | 'SPECIFIC_DAYS';
+  interval_days: number | null;
+  specific_days: number[] | null;
+  target_type: 'BINARY' | 'QUANTITATIVE';
+  target_value: number | null;
+  reminder_time: string | null;
+  streak_goal: number | null;
+  streak_reward: number;
   shields: number;
-  lastCompletedDate: string | null;
-  active: boolean;
-  createdAt: string;
+  current_streak: number;
+  longest_streak: number;
+  status: 'ACTIVE' | 'RETIRED' | 'PAUSED';
+  paused_until: string | null;
+  created_at: string;
 }
 
 export interface HabitLog {
   id: string;
-  userId: string;
-  habitId: string;
-  date: string;
+  habit_id: string;
+  logged_for_date: string;
   completed: boolean;
-  createdAt: string;
+  value: number | null;
+  xp_awarded: number;
+  logged_at: string;
 }
 
 export interface Goal {
@@ -617,3 +625,4 @@ export interface ClassAffinity {
   isSecondary: boolean;
   isRare: boolean;
 }
+

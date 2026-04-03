@@ -161,6 +161,11 @@
   font-family: 'IBM Plex Mono', monospace;
 }
 
+@keyframes ticker {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-100%); }
+}
+
 /* Widget styles */
 .widget {
   background: hsl(var(--bg-secondary));

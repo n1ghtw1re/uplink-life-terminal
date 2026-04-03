@@ -14,7 +14,7 @@ export async function getTodayCheckin() {
 export async function getHabits() {
   const db  = await getDB();
   const res = await db.query(
-    `SELECT * FROM habits WHERE active = true ORDER BY name;`
+    `SELECT * FROM habits WHERE status = 'ACTIVE' ORDER BY name;`
   );
   return res.rows;
 }
@@ -23,7 +23,7 @@ export async function getHabitLogsToday() {
   const db    = await getDB();
   const today = new Date().toISOString().slice(0, 10);
   const res   = await db.query(
-    `SELECT * FROM habit_logs WHERE logged_date = $1;`, [today]
+    `SELECT * FROM habit_logs WHERE logged_for_date = $1;`, [today]
   );
   return res.rows;
 }
@@ -56,16 +56,15 @@ export async function submitCheckin(params: {
 
   // Log habit completions + award GRIT XP
   for (const habitId of params.habitIds) {
-    const hid = crypto.randomUUID();
     await db.query(
-      `INSERT INTO habit_logs (id, habit_id, logged_date, completed)
-       VALUES ($1, $2, $3, true)
-       ON CONFLICT DO NOTHING;`,
-      [hid, habitId, today]
+      `INSERT INTO habit_logs (habit_id, logged_for_date, completed)
+       VALUES ($1, $2, true)
+       ON CONFLICT (habit_id, logged_for_date) DO UPDATE SET completed = true`,
+      [habitId, today]
     );
     // Update habit streak
     await db.exec(
-      `UPDATE habits SET streak = streak + 1 WHERE id = '${habitId}';`
+      `UPDATE habits SET current_streak = current_streak + 1 WHERE id = '${habitId}';`
     );
     // Award 10 GRIT XP per habit completion
     await awardBonusXP({

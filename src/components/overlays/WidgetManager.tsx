@@ -24,7 +24,7 @@ export const WIDGET_REGISTRY: WidgetDef[] = [
   // Current widgets
   { id: 'xp',      name: 'XP & LEVELLING',   icon: '▲', category: 'CORE',    description: 'Master level, XP progress, streak, shields, weekly challenge' },
   { id: 'checkin', name: 'DAILY CHECK-IN',    icon: '⬡', category: 'CORE',    description: 'Domain toggles, habit checkboxes, submit daily activity' },
-  { id: 'heatmap', name: 'STREAK HEATMAP',    icon: '░', category: 'CORE',    description: '12-week activity grid, current and longest streak' },
+  { id: 'heatmap', name: 'STREAK HEATMAP',    icon: '░', category: 'FUTURE',  description: '12-week activity grid, current and longest streak — coming soon' },
   { id: 'stats',   name: 'STAT OVERVIEW',     icon: '◈', category: 'CORE',    description: 'All 7 stats at a glance — level, XP bar, streak, class' },
   { id: 'courses', name: 'COURSES',           icon: '▸', category: 'ARSENAL', description: 'Active and queued courses with progress bars' },
   { id: 'media',   name: 'MEDIA LIBRARY',     icon: '◆', category: 'ARSENAL', description: 'Books, films, TV, albums — tabbed by type, reading progress' },
@@ -39,7 +39,7 @@ export const WIDGET_REGISTRY: WidgetDef[] = [
   { id: 'unitConverter',name: 'UNIT CONVERTER', icon: '⇄', category: 'UTILITY', description: 'Unit conversion tool' },
   { id: 'notes',        name: 'NOTES',           icon: '📝', category: 'UTILITY', description: 'Personal notes and documentation' },
   { id: 'goals',    name: 'GOALS',            icon: '◎', category: 'FUTURE',  description: 'Life, mid, and sprint goals — coming soon' },
-  { id: 'habits',   name: 'HABIT TRACKER',    icon: '✓', category: 'FUTURE',  description: 'Daily habit streaks and completion — coming soon' },
+  { id: 'habits',   name: 'HABITS',             icon: '✓', category: 'CORE',    description: 'Daily habit streaks and completion — filter by active, due, streak, retired' },
   { id: 'terminal', name: 'TERMINAL',         icon: '$', category: 'FUTURE',  description: 'Command-line interface for UPLINK — coming soon' },
 ];
 

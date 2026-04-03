@@ -63,7 +63,12 @@ const CharSheetPage1 = ({ onSkillClick }: CharSheetPage1Props) => {
     queryFn: async () => {
       const db = await getDB();
       const res = await db.query<{ id: string; name: string; status: string; progress: number }>(
-        `SELECT id, name, status, progress FROM projects ORDER BY created_at DESC LIMIT 5;`
+        `SELECT p.id, p.name, p.status, 
+         COALESCE(
+           (SELECT COUNT(*) FROM project_milestones m WHERE m.project_id = p.id AND m.completed_at IS NOT NULL) * 100 / 
+           NULLIF((SELECT COUNT(*) FROM project_milestones m WHERE m.project_id = p.id), 0), 0
+         ) as progress 
+         FROM projects p ORDER BY p.created_at DESC LIMIT 5;`
       );
       return res.rows;
     },

@@ -12,9 +12,10 @@
 //   <DrawerRouter item={item} onClose={onClose} onOpenLog={onOpenLog} />
 // ============================================================
 import CourseDetailDrawer from './CourseDetailDrawer';
+import HabitDrawer from './HabitDrawer';
 
 export interface DrawerItem {
-  type: 'skill' | 'course' | 'book' | 'project' | 'cert' | 'tool' | 'augment' | 'resource';
+  type: 'skill' | 'course' | 'book' | 'project' | 'cert' | 'tool' | 'augment' | 'resource' | 'habit';
   id: string;
 }
 
@@ -30,6 +31,12 @@ export default function DrawerRouter({ item, onClose, onOpenLog }: Props) {
   switch (item.type) {
     case 'course':
       return <CourseDetailDrawer courseId={item.id} onClose={onClose} />;
+    
+    case 'habit':
+      // For habits, we don't fetch by ID - we pass the full habit object via a different mechanism
+      // The HabitDrawer expects a habit object, not an ID
+      // We'll need to use a state to track the selected habit in Index.tsx instead
+      return null;
 
     // Future types slot in here:
     // case 'book':   return <BookDetailDrawer ... />;

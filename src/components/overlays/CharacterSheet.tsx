@@ -3,7 +3,6 @@ import CharSheetPage1 from './CharSheetPage1';
 import CharSheetPage2 from './CharSheetPage2';
 import CharSheetPage3 from './CharSheetPage3';
 import CharSheetPage4 from './CharSheetPage4';
-import CharSheetPage5 from './CharSheetPage5';
 import { useOperator } from '@/hooks/useOperator';
 
 interface CharacterSheetProps {
@@ -11,7 +10,7 @@ interface CharacterSheetProps {
   onSkillClick?: (skillName: string) => void;
 }
 
-const TOTAL_PAGES = 5;
+const TOTAL_PAGES = 4;
 
 const CharacterSheet = ({ onClose, onSkillClick }: CharacterSheetProps) => {
   const { data: op } = useOperator();
@@ -19,7 +18,7 @@ const CharacterSheet = ({ onClose, onSkillClick }: CharacterSheetProps) => {
   const [animClass, setAnimClass] = useState('');
 
   const goToPage = useCallback((page: number) => {
-    if (page === currentPage || page > 5) return;
+    if (page === currentPage || page > TOTAL_PAGES) return;
     setAnimClass('page-exit');
     setTimeout(() => {
       setCurrentPage(page);
@@ -32,9 +31,8 @@ const CharacterSheet = ({ onClose, onSkillClick }: CharacterSheetProps) => {
     switch (currentPage) {
       case 1: return <CharSheetPage1 onSkillClick={onSkillClick} />;
       case 2: return <CharSheetPage2 />;
-      case 3: return <CharSheetPage3 onSkillClick={onSkillClick} />;
+      case 3: return <CharSheetPage3 />;
       case 4: return <CharSheetPage4 />;
-      case 5: return <CharSheetPage5 />;
     }
   };
 
@@ -63,7 +61,6 @@ const CharacterSheet = ({ onClose, onSkillClick }: CharacterSheetProps) => {
             key={page}
             className={`char-sheet-page-btn ${page === currentPage ? 'active' : ''}`}
             onClick={() => goToPage(page)}
-            disabled={false}
           >
             {page}
           </button>

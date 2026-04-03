@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOperator } from '@/hooks/useOperator';
 import ProgressBar from './ProgressBar';
@@ -35,6 +35,12 @@ const TopBar = ({ onOpenLog, onOpenCheckin, onOpenSearch }: TopBarProps) => {
 
   const multClass = multiplier >= 3 ? 'pulse-glow' : multiplier >= 2 ? 'text-glow-bright' : '';
 
+  // Placeholder for habit notifications. In a real scenario, this could come from a hook.
+  const habitNotifications = [
+    streak >= 7 ? `🔥 ${streak} DAY OVERALL STREAK — EXCELLENT WORK OPERATOR` : null,
+    // Add logic for specific habit alerts here if needed
+  ].filter(Boolean);
+
   return (
     <div style={{
       height: 48,
@@ -48,6 +54,7 @@ const TopBar = ({ onOpenLog, onOpenCheckin, onOpenSearch }: TopBarProps) => {
       zIndex: 100,
       position: 'relative',
     }}>
+
       <span className="font-display text-glow-bright" style={{ fontSize: 20, color: 'hsl(var(--accent))' }}>[ UPLINK ]</span>
       <span style={{ fontSize: 11, color: 'hsl(var(--text-dim))' }}>SYS-TIME: {timeStr}</span>
       <span style={{ fontSize: 11, color: 'hsl(var(--text-dim))' }}>DATE: {dateStr}</span>
@@ -87,9 +94,30 @@ const TopBar = ({ onOpenLog, onOpenCheckin, onOpenSearch }: TopBarProps) => {
         </button>
         <button className="topbar-btn" onClick={onOpenCheckin}>⬡ CHECK-IN</button>
       </div>
-      <span style={{ color: 'hsl(var(--text-dim))', opacity: 0.5 }}>│</span>
+      {/* Internal Ticker */}
+      <div style={{ 
+        flex: 1, 
+        margin: '0 16px', 
+        overflow: 'hidden', 
+        display: 'flex', 
+        alignItems: 'center',
+        maskImage: 'linear-gradient(to right, transparent, black 15%, black 85%, transparent)',
+        WebkitMaskImage: 'linear-gradient(to right, transparent, black 15%, black 85%, transparent)'
+      }}>
+        <div className="ticker-text" style={{
+          whiteSpace: 'nowrap',
+          fontSize: 9,
+          color: 'hsl(var(--accent))',
+          paddingLeft: '100%',
+          animation: 'ticker 25s linear infinite',
+          fontFamily: "'IBM Plex Mono', monospace",
+          opacity: 0.8
+        }}>
+          {habitNotifications.length > 0 ? habitNotifications.join('  //  ') : '// SYSTEM STABLE — NO PENDING ALERTS //'}
+        </div>
+      </div>
 
-      <div style={{ marginLeft: 'auto' }}>
+      <div>
         <span className="cursor-blink text-glow" />
       </div>
     </div>

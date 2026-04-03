@@ -23,6 +23,8 @@ const MOCK_ACHIEVEMENTS = [
   { id: 1, title: 'FIRST BLOOD', desc: 'Complete your first sprint goal.', date: '2026-03-20' },
   { id: 2, title: 'NIGHT OWL', desc: 'Log 5 sessions after midnight.', date: '2026-03-24' },
   { id: 3, title: 'JACKED IN', desc: 'Achieve a 7-day login streak.', date: '2026-03-28' },
+  { id: 4, title: 'CODE MONKEY', desc: 'Log 10 hours in Wire / Coding.', date: '2026-04-01' },
+  { id: 5, title: 'IRON WILL', desc: 'Maintain Grit habit for 14 days.', date: '2026-04-05' },
 ];
 
 const THEMES = ['2077', 'DOS', 'AMBER'];
@@ -43,18 +45,19 @@ export default function CharSheetPage3() {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', fontFamily: mono, gap: 24, overflowY: 'auto', paddingRight: 8, scrollbarWidth: 'none' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', fontFamily: mono, gap: 24, paddingRight: 4, overflow: 'hidden' }}>
       
       {/* Header */}
-      <div style={{ borderBottom: `1px solid ${adim}`, paddingBottom: 16 }}>
+      <div style={{ borderBottom: `1px solid ${adim}`, paddingBottom: 16, display: 'flex', alignItems: 'baseline', gap: 16 }}>
         <div style={{ fontFamily: vt, fontSize: 32, color: acc, letterSpacing: 2 }}>ACHIEVEMENTS & BADGES</div>
         <div style={{ fontSize: 10, color: adim, letterSpacing: 1 }}>// OPERATOR MILESTONES AND UNLOCKS</div>
       </div>
 
-      <div style={{ display: 'flex', gap: 24, paddingBottom: 24 }}>
+      {/* Main Grid Area */}
+      <div style={{ display: 'flex', gap: 24, paddingBottom: 24, flex: 1, minHeight: 0 }}>
         
-        {/* Left Col: Titles, Themes, Achievements */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 24 }}>
+        {/* Left Col: Titles, Achievements */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 24, minHeight: 0 }}>
           
           {/* Master Level Titles */}
           <div style={{ padding: 16, background: bgS, border: `1px solid ${adim}` }}>
@@ -75,26 +78,10 @@ export default function CharSheetPage3() {
             </div>
           </div>
 
-          {/* Themes Unlocked */}
-          <div style={{ padding: 16, background: bgS, border: `1px solid ${adim}` }}>
-            <div style={{ fontSize: 12, color: acc, fontFamily: vt, letterSpacing: 1, marginBottom: 16 }}>// THEMES UNLOCKED</div>
-            <div style={{ display: 'flex', gap: 12 }}>
-              {THEMES.map(t => (
-                <button key={t} onClick={() => handleThemeChange(t)} style={{
-                  padding: '6px 16px', background: 'transparent', border: `1px solid ${adim}`,
-                  color: dim, fontFamily: mono, fontSize: 10, cursor: 'pointer', letterSpacing: 1, transition: 'all 150ms'
-                }} onMouseEnter={e => { e.currentTarget.style.color = acc; e.currentTarget.style.borderColor = acc; }}
-                   onMouseLeave={e => { e.currentTarget.style.color = dim; e.currentTarget.style.borderColor = adim; }}>
-                  APPLY [{t}]
-                </button>
-              ))}
-            </div>
-          </div>
-          
           {/* Recent Achievements */}
-          <div style={{ padding: 16, background: bgS, border: `1px solid ${adim}`, flex: 1 }}>
+          <div style={{ padding: 16, background: bgS, border: `1px solid ${adim}`, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             <div style={{ fontSize: 12, color: acc, fontFamily: vt, letterSpacing: 1, marginBottom: 16 }}>// RECENT ACHIEVEMENTS</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto', paddingRight: 8, scrollbarWidth: 'none' }}>
               {MOCK_ACHIEVEMENTS.map(ach => (
                 <div key={ach.id} style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingBottom: 12, borderBottom: `1px solid rgba(153,104,0,0.2)` }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -108,11 +95,29 @@ export default function CharSheetPage3() {
           </div>
         </div>
 
-        {/* Right Col: Badges Matrix */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-          <div style={{ padding: 16, background: bgS, border: `1px solid ${adim}`, flex: 1 }}>
+        {/* Right Col: Themes, Badges */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 24, minHeight: 0 }}>
+          
+          {/* Themes Unlocked */}
+          <div style={{ padding: 16, background: bgS, border: `1px solid ${adim}` }}>
+            <div style={{ fontSize: 12, color: acc, fontFamily: vt, letterSpacing: 1, marginBottom: 16 }}>// THEMES UNLOCKED</div>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              {THEMES.map(t => (
+                <button key={t} onClick={() => handleThemeChange(t)} style={{
+                  padding: '6px 16px', background: 'transparent', border: `1px solid ${adim}`,
+                  color: dim, fontFamily: mono, fontSize: 10, cursor: 'pointer', letterSpacing: 1, transition: 'all 150ms'
+                }} onMouseEnter={e => { e.currentTarget.style.color = acc; e.currentTarget.style.borderColor = acc; }}
+                   onMouseLeave={e => { e.currentTarget.style.color = dim; e.currentTarget.style.borderColor = adim; }}>
+                  APPLY [{t}]
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Badge Collection */}
+          <div style={{ padding: 16, background: bgS, border: `1px solid ${adim}`, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             <div style={{ fontSize: 12, color: acc, fontFamily: vt, letterSpacing: 1, marginBottom: 16 }}>// BADGE COLLECTION</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, 100px)', gap: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, 100px)', gap: 16, overflowY: 'auto', paddingRight: 8, scrollbarWidth: 'none', alignContent: 'start' }}>
               {[1, 2, 3, 4, 5, 6].map(num => (
                 <div key={num} style={{ 
                   width: 100, height: 100, border: `1px solid ${adim}`, background: '#0a0a0a',

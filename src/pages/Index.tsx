@@ -9,6 +9,7 @@ import Sidebar from '@/components/Sidebar';
 import Modal from '@/components/Modal';
 import XPWidget from '@/components/widgets/XPWidget';
 import CheckinWidget from '@/components/widgets/CheckinWidget';
+import HabitsWidget from '@/components/widgets/HabitsWidget';
 import HeatmapWidget from '@/components/widgets/HeatmapWidget';
 import StatOverviewWidget from '@/components/widgets/StatOverviewWidget';
 import CoursesWidget from '@/components/widgets/CoursesWidget';
@@ -29,6 +30,7 @@ import SkillsPage from '@/components/overlays/SkillsPage';
 import LibraryPage from '@/components/overlays/LibraryPage';
 import CoursesPage from '@/components/overlays/CoursesPage';
 import DailyLogPage from '@/components/overlays/DailyLogPage';
+import HabitsPage from '@/components/overlays/HabitsPage';
 import NotesPage from '@/components/overlays/NotesPage';
 import SocialsOverlay from '@/components/overlays/SocialsOverlay';
 import LifepathPage from '@/components/overlays/LifepathPage';
@@ -45,18 +47,19 @@ import DetailDrawer from '@/components/drawer/DetailDrawer';
 import type { DrawerItem } from '@/components/drawer/DetailDrawer';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOperator } from '@/hooks/useOperator';
+import { useHabits } from '@/hooks/useHabits';
 import { StatKey } from '@/types';
 import { applyThemeClass, normalizeTheme, type ThemeCode } from '@/lib/themes';
 
 type LayoutItem = { i: string; x: number; y: number; w: number; h: number; minW?: number; minH?: number };
 
-const ALL_WIDGET_IDS = ['xp', 'checkin', 'heatmap', 'stats', 'courses', 'media', 'skills', 'tools', 'resources', 'augments', 'projects', 'notes', 'clock', 'calculator', 'unitConverter'];
-const DEFAULT_ACTIVE_WIDGET_IDS = ['xp', 'checkin', 'heatmap', 'stats', 'courses', 'media', 'skills'];
+const ALL_WIDGET_IDS = ['xp', 'checkin', 'habits', 'heatmap', 'stats', 'courses', 'media', 'skills', 'tools', 'resources', 'augments', 'projects', 'notes', 'clock', 'calculator', 'unitConverter'];
+const DEFAULT_ACTIVE_WIDGET_IDS = ['xp', 'checkin', 'habits', 'stats', 'courses', 'media', 'skills'];
 
 const defaultLayout: LayoutItem[] = [
   { i: 'xp', x: 0, y: 0, w: 4, h: 4, minW: 2, minH: 2 },
   { i: 'checkin', x: 4, y: 0, w: 3, h: 3, minW: 2, minH: 2 },
-  { i: 'heatmap', x: 7, y: 0, w: 5, h: 3, minW: 3, minH: 2 },
+  { i: 'habits', x: 7, y: 0, w: 5, h: 4, minW: 3, minH: 3 },
   { i: 'stats', x: 0, y: 4, w: 4, h: 4, minW: 2, minH: 2 },
   { i: 'courses', x: 4, y: 3, w: 4, h: 4, minW: 2, minH: 2 },
   { i: 'media', x: 8, y: 3, w: 4, h: 4, minW: 2, minH: 2 },
@@ -71,7 +74,7 @@ const defaultLayout: LayoutItem[] = [
 ];
 
 const widgetNames: Record<string, string> = {
-  xp: 'XP & LEVELLING', checkin: 'DAILY CHECK-IN', heatmap: 'STREAK HEATMAP',
+  xp: 'XP & LEVELLING', checkin: 'DAILY CHECK-IN', habits: 'HABITS', heatmap: 'STREAK HEATMAP',
   stats: 'STAT OVERVIEW', courses: 'COURSES', media: 'MEDIA LIBRARY',
   skills: 'SKILLS', tools: 'TOOLS', resources: 'RESOURCES', augments: 'AUGMENTS', projects: 'PROJECTS', notes: 'NOTES',
   clock: 'CLOCK', calculator: 'CALCULATOR', unitConverter: 'UNIT CONVERTER',
@@ -80,6 +83,7 @@ const widgetNames: Record<string, string> = {
 const Index = () => {
   const { user } = useAuth();
   const { data: op, isLoading: opLoading, refetch: refetchOp } = useOperator(user?.id);
+  const { habits, processMissed } = useHabits();
 
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [theme, setTheme] = useState<ThemeCode>(() => normalizeTheme(localStorage.getItem('uplink-theme')));
@@ -93,6 +97,7 @@ const Index = () => {
   const [showResources, setShowResources] = useState(false);
   const [showAugments, setShowAugments]   = useState(false);
   const [showProjects, setShowProjects]   = useState(false);
+  const [showHabits, setShowHabits]       = useState(false);
   const [showCheckin, setShowCheckin] = useState(false);
   const [showFlash, setShowFlash] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -123,6 +128,7 @@ const Index = () => {
 
   const sidebarWidth = sidebarExpanded ? 220 : 48;
   const openDrawer = (type: DrawerItem['type'], id: string) => { setDrawerItem({ type, id }); setDrawerOpen(true); };
+  const openHabitDrawer = (habit: any) => { setDrawerItem({ type: 'habit', id: habit.id, habitData: habit }); setDrawerOpen(true); };
   const closeDrawer = () => setDrawerOpen(false);
   const drawerWidth = drawerOpen ? 420 : 0;
 
@@ -144,6 +150,21 @@ const Index = () => {
     setTheme(normalizeTheme(t));
   };
 
+  // Process missed habit days on boot
+  useEffect(() => {
+    if (!habits || habits.length === 0) return;
+    try {
+      const key = `uplink-missed-days-checked-${new Date().toISOString().slice(0, 10)}`;
+      if (localStorage.getItem(key)) return;
+      
+      // Process all active habits once per day on boot
+      habits.filter(h => h && h.status === 'ACTIVE').forEach(h => processMissed(h));
+      localStorage.setItem(key, '1');
+    } catch (err) {
+      console.warn('// HABIT_BOOT_EFFECT_ERR:', err);
+    }
+  }, [habits]);
+
   const handleKey = useCallback((e: KeyboardEvent) => {
     const tag = (e.target as HTMLElement).tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA') return;
@@ -157,14 +178,15 @@ const Index = () => {
       if (openStatKey) { setOpenStatKey(null); return; }
       if (drawerOpen) { closeDrawer(); return; }
       if (fullscreenWidget) { setFullscreenWidget(null); return; }
-      setShowLog(false); setShowSearch(false); setShowCheckin(false);
+      setShowLog(false); setShowSearch(false); setShowCheckin(false); setShowHabits(false);
       return;
     }
     if (e.key === ' ') { e.preventDefault(); setShowLog(true); }
     if (e.key === '/') { e.preventDefault(); setShowSearch(true); }
     if (e.key === '[') setSidebarExpanded(false);
     if (e.key === ']') setSidebarExpanded(true);
-  }, [fullscreenWidget, drawerOpen, openStatKey, showXpDocs, showClassDocs, showCharacterSheet, showLifepath, showDailyLog, showNotesPage]);
+    if (e.key === 'h' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); setShowHabits(true); }
+  }, [fullscreenWidget, drawerOpen, openStatKey, showXpDocs, showClassDocs, showCharacterSheet, showLifepath, showDailyLog, showNotesPage, showHabits]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKey);
@@ -251,6 +273,7 @@ const Index = () => {
     switch (id) {
       case 'xp':           return <XPWidget {...props} />;
       case 'checkin':      return <CheckinWidget {...props} />;
+      case 'habits':       return <HabitsWidget {...props} onOpenHabits={() => setShowHabits(true)} onHabitClick={(habit) => openHabitDrawer(habit)} />;
       case 'heatmap':      return <HeatmapWidget {...props} />;
       case 'stats':        return <StatOverviewWidget {...props} onStatClick={(k: string) => setOpenStatKey(k as StatKey)} />;
       case 'courses':      return <CoursesWidget {...props} onOpenCourses={() => setShowCourses(true)} onCourseClick={(id) => openDrawer('course', id)} />;
@@ -304,6 +327,7 @@ const Index = () => {
           onOpenWidgetManager={() => setShowWidgetManager(true)}
           onOpenSocials={() => setShowSocials(true)}
           onOpenDailyLog={() => setShowDailyLog(true)}
+          onOpenHabits={() => setShowHabits(true)}
           onOpenNotes={() => setShowNotesPage(true)}
           onOpenClockWidget={() => handleOpenWidgetById('clock')}
           onOpenCalculatorWidget={() => handleOpenWidgetById('calculator')}
@@ -353,6 +377,7 @@ const Index = () => {
       {showNotesPage     && <NotesPage     onClose={() => setShowNotesPage(false)} />}
       {showLibrary       && <LibraryPage   onClose={() => setShowLibrary(false)} />}
       {showSkills        && <SkillsPage    onClose={() => setShowSkills(false)} onOpenLog={() => { setShowSkills(false); setShowLog(true); }} />}
+      {showHabits        && <HabitsPage    onClose={() => setShowHabits(false)} />}
       {showSocials       && <SocialsOverlay onClose={() => setShowSocials(false)} />}
       {openStatKey       && (
         <StatDetailOverlay
@@ -371,7 +396,7 @@ const Index = () => {
       </Modal>
       <DetailDrawer open={drawerOpen} item={drawerItem} onClose={closeDrawer} onOpenLog={() => setShowLog(true)} />
       <Modal open={showSearch} onClose={() => setShowSearch(false)} title="SEARCH" width={600}><SearchOverlay /></Modal>
-      <Modal open={showCheckin} onClose={() => setShowCheckin(false)} title="DAILY CHECK-IN" width={500}><CheckinWidget /></Modal>
+      <Modal open={showCheckin} onClose={() => setShowCheckin(false)} title="DAILY CHECK-IN" width={500}><CheckinWidget isModal /></Modal>
     </div>
   );
 };

@@ -28,6 +28,7 @@ async function initSchema(db: PGlite) {
       callsign        TEXT NOT NULL DEFAULT 'OPERATOR',
       display_name    TEXT,
       designation     TEXT,
+      avatar          TEXT,
       theme           TEXT NOT NULL DEFAULT 'AMBER',
       custom_class    TEXT,
       birthdate       TEXT,
@@ -39,6 +40,10 @@ async function initSchema(db: PGlite) {
       root_access_meaning TEXT,
       before_uplink   TEXT,
       affiliations    TEXT,
+      height          TEXT,
+      weight          TEXT,
+      blood_type      TEXT,
+      intel_log       TEXT,
       widget_layout   TEXT,
       active_widgets  TEXT,
       wizard_complete BOOLEAN NOT NULL DEFAULT FALSE,
@@ -281,26 +286,6 @@ async function initSchema(db: PGlite) {
       created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
-    CREATE TABLE IF NOT EXISTS habits (
-      id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-      name            TEXT NOT NULL,
-      category        TEXT,
-      frequency       TEXT NOT NULL DEFAULT 'daily',
-      frequency_days  JSONB,
-      stat_primary    TEXT NOT NULL DEFAULT 'grit',
-      stat_secondary  TEXT,
-      active          BOOLEAN NOT NULL DEFAULT TRUE,
-      streak          INTEGER NOT NULL DEFAULT 0,
-      shields         INTEGER NOT NULL DEFAULT 0,
-      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-
-    CREATE TABLE IF NOT EXISTS habit_logs (
-      id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-      habit_id    TEXT NOT NULL REFERENCES habits(id) ON DELETE CASCADE,
-      logged_date DATE NOT NULL,
-      completed   BOOLEAN NOT NULL DEFAULT TRUE
-    );
 
     CREATE TABLE IF NOT EXISTS checkins (
       id            TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -383,7 +368,7 @@ async function initSchema(db: PGlite) {
     CREATE INDEX IF NOT EXISTS idx_sessions_date   ON sessions(logged_at);
     CREATE INDEX IF NOT EXISTS idx_xp_log_tier     ON xp_log(tier);
     CREATE INDEX IF NOT EXISTS idx_xp_log_entity   ON xp_log(entity_id);
-    CREATE INDEX IF NOT EXISTS idx_habit_logs_date ON habit_logs(logged_date);
+    CREATE INDEX IF NOT EXISTS idx_habit_logs_date ON habit_logs(logged_for_date);
     CREATE INDEX IF NOT EXISTS idx_checkins_date   ON checkins(checked_date);
 
   `);
@@ -391,7 +376,19 @@ async function initSchema(db: PGlite) {
   // ── Migrations — safe to run repeatedly ─────────────────────────────────
   // ALTER TABLE with IF NOT EXISTS is idempotent — safe on every boot
   await db.exec(
-    `ALTER TABLE profile ADD COLUMN IF NOT EXISTS designation TEXT`
+    `ALTER TABLE profile ADD COLUMN IF NOT EXISTS avatar TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE profile ADD COLUMN IF NOT EXISTS height TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE profile ADD COLUMN IF NOT EXISTS weight TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE profile ADD COLUMN IF NOT EXISTS blood_type TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE profile ADD COLUMN IF NOT EXISTS intel_log TEXT`
   );
   await db.exec(
     `ALTER TABLE lifepaths ADD COLUMN IF NOT EXISTS description TEXT`
@@ -453,4 +450,131 @@ async function initSchema(db: PGlite) {
     UPDATE tools            SET level = 0 WHERE xp = 0;
     UPDATE augments         SET level = 0 WHERE xp = 0;
   `);
+
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS habits (
+      id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      name            TEXT NOT NULL,
+      stat_key        TEXT NOT NULL,
+      frequency_type  TEXT NOT NULL DEFAULT 'DAILY',
+      interval_days   INTEGER,
+      specific_days   JSONB,
+      target_type     TEXT NOT NULL DEFAULT 'BINARY',
+      target_value    INTEGER,
+      reminder_time   TEXT,
+      streak_goal     INTEGER,
+      streak_reward   INTEGER NOT NULL DEFAULT 100,
+      shields         INTEGER NOT NULL DEFAULT 0,
+      current_streak  INTEGER NOT NULL DEFAULT 0,
+      longest_streak  INTEGER NOT NULL DEFAULT 0,
+      status          TEXT NOT NULL DEFAULT 'ACTIVE',
+      paused_until    TIMESTAMPTZ,
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS habit_logs (
+      id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      habit_id        TEXT NOT NULL REFERENCES habits(id) ON DELETE CASCADE,
+      logged_for_date TEXT NOT NULL,
+      logged_date     DATE NOT NULL DEFAULT CURRENT_DATE,
+      completed       BOOLEAN NOT NULL DEFAULT FALSE,
+      value           INTEGER,
+      xp_awarded      INTEGER NOT NULL DEFAULT 0,
+      logged_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(habit_id, logged_for_date)
+    );
+  `);
+
+  // Robust migrations for habits and logs
+  await db.exec(
+    `ALTER TABLE habits ADD COLUMN IF NOT EXISTS name TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE habits ADD COLUMN IF NOT EXISTS stat_key TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE habits ADD COLUMN IF NOT EXISTS frequency_type TEXT DEFAULT 'DAILY'`
+  );
+  await db.exec(
+    `ALTER TABLE habits ADD COLUMN IF NOT EXISTS interval_days INTEGER`
+  );
+  await db.exec(
+    `ALTER TABLE habits ADD COLUMN IF NOT EXISTS specific_days JSONB`
+  );
+  await db.exec(
+    `ALTER TABLE habits ADD COLUMN IF NOT EXISTS target_type TEXT DEFAULT 'BINARY'`
+  );
+  await db.exec(
+    `ALTER TABLE habits ADD COLUMN IF NOT EXISTS target_value INTEGER`
+  );
+  await db.exec(
+    `ALTER TABLE habits ADD COLUMN IF NOT EXISTS reminder_time TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE habits ADD COLUMN IF NOT EXISTS streak_goal INTEGER`
+  );
+  await db.exec(
+    `ALTER TABLE habits ADD COLUMN IF NOT EXISTS streak_reward INTEGER DEFAULT 100`
+  );
+  await db.exec(
+    `ALTER TABLE habits ADD COLUMN IF NOT EXISTS shields INTEGER DEFAULT 0`
+  );
+  await db.exec(
+    `ALTER TABLE habits ADD COLUMN IF NOT EXISTS current_streak INTEGER DEFAULT 0`
+  );
+  await db.exec(
+    `ALTER TABLE habits ADD COLUMN IF NOT EXISTS longest_streak INTEGER DEFAULT 0`
+  );
+  await db.exec(
+    `ALTER TABLE habits ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'ACTIVE'`
+  );
+  await db.exec(
+    `ALTER TABLE habits ADD COLUMN IF NOT EXISTS paused_until TIMESTAMPTZ`
+  );
+  await db.exec(
+    `ALTER TABLE habits ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`
+  );
+
+  await db.exec(
+    `ALTER TABLE habit_logs ADD COLUMN IF NOT EXISTS habit_id TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE habit_logs ADD COLUMN IF NOT EXISTS logged_for_date TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE habit_logs ADD COLUMN IF NOT EXISTS completed BOOLEAN DEFAULT FALSE`
+  );
+  await db.exec(
+    `ALTER TABLE habit_logs ADD COLUMN IF NOT EXISTS value INTEGER`
+  );
+  await db.exec(
+    `ALTER TABLE habit_logs ADD COLUMN IF NOT EXISTS xp_awarded INTEGER DEFAULT 0`
+  );
+  await db.exec(
+    `ALTER TABLE habit_logs ADD COLUMN IF NOT EXISTS logged_at TIMESTAMPTZ DEFAULT NOW()`
+  );
+  // Fix: ensure logged_date column exists and is NOT NULL
+  await db.exec(
+    `ALTER TABLE habit_logs ADD COLUMN IF NOT EXISTS logged_date DATE`
+  );
+  await db.exec(
+    `UPDATE habit_logs SET logged_date = logged_for_date::date WHERE logged_date IS NULL`
+  );
+  try {
+    await db.exec(
+      `ALTER TABLE habit_logs ALTER COLUMN logged_date SET NOT NULL`
+    );
+  } catch (e) {
+    // May fail if there's still null data
+  }
+
+  try {
+    await db.exec(`
+      UPDATE habits SET status = 'ACTIVE' WHERE status IS NULL OR status = '';
+      UPDATE habits SET frequency_type = 'DAILY' WHERE frequency_type IS NULL OR frequency_type = '';
+      UPDATE habits SET target_type = 'BINARY' WHERE target_type IS NULL OR target_type = '';
+    `);
+  } catch (e) {
+    console.warn('// HABIT_MIGRATION_WARN:', e);
+  }
 }
