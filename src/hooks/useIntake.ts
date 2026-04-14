@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getDB } from '@/lib/db';
-import { refreshAppData } from '@/lib/refreshAppData';
 import type { IntakeLog, IntakeSettings } from '@/types';
 import {
   buildIntakeDaySummaries,
@@ -101,7 +100,6 @@ export function useIntakeActions() {
   const invalidateIntake = async () => {
     await queryClient.invalidateQueries({ queryKey: ['intake-settings'] });
     await queryClient.invalidateQueries({ queryKey: ['intake-logs'] });
-    await refreshAppData(queryClient);
   };
 
   const updateSettings = useMutation({

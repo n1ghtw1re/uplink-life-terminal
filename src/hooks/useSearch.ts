@@ -131,7 +131,7 @@ export function useSearch(query: string, categories: string[]) {
       return allResults.slice(0, 50);
     },
     enabled: shouldSearch,
-    staleTime: 1000,
+    staleTime: Number.POSITIVE_INFINITY,
     refetchOnWindowFocus: false,
   });
 

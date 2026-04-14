@@ -16,38 +16,38 @@ type Stage = 'INIT' | 'BOOTING' | 'READY';
 
 function AppInner() {
   const { ready } = useApp();
-  const [stage, setStage]   = useState<Stage>('INIT');
-  const bootedRef = useRef(false);
+  
+  // Start animation immediately if this is the first boot, otherwise INIT
+  const hasBooted = sessionStorage.getItem('uplink-booted');
+  const [stage, setStage] = useState<Stage>(hasBooted ? 'INIT' : 'BOOTING');
+  const [animDone, setAnimDone] = useState(!!hasBooted);
 
+  // Transition to READY when BOTH the database and animation are finished
   useEffect(() => {
-    if (!ready || bootedRef.current) return;
-    bootedRef.current = true;
-    // Only play boot sequence once per browser session
-    const hasBooted = sessionStorage.getItem('uplink-booted');
-    if (hasBooted) {
+    if (ready && animDone && stage !== 'READY') {
       setStage('READY');
-    } else {
-      setStage('BOOTING');
     }
-  }, [ready]);
+  }, [ready, animDone, stage]);
 
-  // Safety fallback — the full boot animation takes well over 8s, so keep this
-  // comfortably above the normal runtime and only use it as a true failsafe.
+  // Safety fallback — if something hangs, force app to load after 20s
   useEffect(() => {
-    if (stage !== 'BOOTING') return;
-    const t = setTimeout(() => setStage('READY'), 20000);
+    if (stage === 'READY') return;
+    const t = setTimeout(() => {
+      setAnimDone(true);
+      setStage('READY');
+    }, 20000);
     return () => clearTimeout(t);
   }, [stage]);
 
   return (
     <>
-      {stage === 'INIT' && (
+      {stage === 'INIT' && !ready && (
         <div style={{ position: 'fixed', inset: 0, background: '#0d0800' }} />
       )}
-      {stage === 'BOOTING' && (
+      {stage === 'BOOTING' && !animDone && (
         <BootSequence isShort={false} onComplete={() => {
           sessionStorage.setItem('uplink-booted', '1');
-          setStage('READY');
+          setAnimDone(true);
         }} />
       )}
       {stage === 'READY' && (

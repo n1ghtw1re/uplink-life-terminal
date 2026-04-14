@@ -29,7 +29,7 @@ export function useTerminalAutocomplete(input: string) {
       const res = await db.query<{ id: string; name: string }>('SELECT id, name FROM skills ORDER BY name');
       return res.rows;
     },
-    staleTime: 60000,
+    staleTime: Infinity,
   });
 
   const { data: tools = [] } = useQuery({
@@ -39,7 +39,7 @@ export function useTerminalAutocomplete(input: string) {
       const res = await db.query<{ id: string; name: string }>('SELECT id, name FROM tools ORDER BY name');
       return res.rows;
     },
-    staleTime: 60000,
+    staleTime: Infinity,
   });
 
   const { data: augments = [] } = useQuery({
@@ -49,7 +49,7 @@ export function useTerminalAutocomplete(input: string) {
       const res = await db.query<{ id: string; name: string }>('SELECT id, name FROM augments ORDER BY name');
       return res.rows;
     },
-    staleTime: 60000,
+    staleTime: Infinity,
   });
 
   const { data: projects = [] } = useQuery({
@@ -59,7 +59,7 @@ export function useTerminalAutocomplete(input: string) {
       const res = await db.query<{ id: string; name: string }>('SELECT id, name FROM projects ORDER BY name');
       return res.rows;
     },
-    staleTime: 60000,
+    staleTime: Infinity,
   });
 
   const { data: notes = [] } = useQuery({
@@ -69,7 +69,7 @@ export function useTerminalAutocomplete(input: string) {
       const res = await db.query<{ id: string; name: string }>('SELECT id, name FROM notes ORDER BY name');
       return res.rows;
     },
-    staleTime: 60000,
+    staleTime: Infinity,
   });
 
   const { data: media = [] } = useQuery({
@@ -79,7 +79,7 @@ export function useTerminalAutocomplete(input: string) {
       const res = await db.query<{ id: string; title: string }>('SELECT id, title FROM media ORDER BY title');
       return res.rows;
     },
-    staleTime: 60000,
+    staleTime: Infinity,
   });
 
   const { data: habits = [] } = useQuery({
@@ -89,7 +89,7 @@ export function useTerminalAutocomplete(input: string) {
       const res = await db.query<{ id: string; name: string }>('SELECT id, name FROM habits WHERE status = \'ACTIVE\' ORDER BY name');
       return res.rows;
     },
-    staleTime: 60000,
+    staleTime: Infinity,
   });
 
   const { data: courses = [] } = useQuery({
@@ -99,7 +99,7 @@ export function useTerminalAutocomplete(input: string) {
       const res = await db.query<{ id: string; name: string }>('SELECT id, name FROM courses ORDER BY name');
       return res.rows;
     },
-    staleTime: 60000,
+    staleTime: Infinity,
   });
 
   const { data: vaultItems = [] } = useQuery({
@@ -109,7 +109,7 @@ export function useTerminalAutocomplete(input: string) {
       const res = await db.query<{ id: string; title: string }>('SELECT id, title FROM vault_items ORDER BY title');
       return res.rows;
     },
-    staleTime: 60000,
+    staleTime: Infinity,
   });
 
   const { data: recipes = [] } = useQuery({
@@ -119,7 +119,7 @@ export function useTerminalAutocomplete(input: string) {
       const res = await db.query<{ id: string; name: string }>('SELECT id, name FROM recipes ORDER BY name');
       return res.rows;
     },
-    staleTime: 60000,
+    staleTime: Infinity,
   });
 
   const { data: resources = [] } = useQuery({
@@ -129,7 +129,7 @@ export function useTerminalAutocomplete(input: string) {
       const res = await db.query<{ id: string; title: string }>('SELECT id, title FROM resources ORDER BY title');
       return res.rows;
     },
-    staleTime: 60000,
+    staleTime: Infinity,
   });
 
   const { data: ingredients = [] } = useQuery({
@@ -139,7 +139,7 @@ export function useTerminalAutocomplete(input: string) {
       const res = await db.query<{ id: string; name: string }>('SELECT id, name FROM custom_ingredients ORDER BY name');
       return res.rows;
     },
-    staleTime: 60000,
+    staleTime: Infinity,
   });
 
   const suggestions = useMemo((): AutocompleteSuggestion[] => {

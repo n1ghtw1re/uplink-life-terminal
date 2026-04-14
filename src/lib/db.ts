@@ -521,6 +521,17 @@ async function initSchema(db: PGlite) {
     CREATE INDEX IF NOT EXISTS idx_intake_logs_anchor_date ON intake_logs(anchor_date DESC);
     CREATE INDEX IF NOT EXISTS idx_intake_logs_logged_at ON intake_logs(logged_at DESC);
 
+    CREATE TABLE IF NOT EXISTS habit_logs (
+      id                TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      habit_id          TEXT NOT NULL,
+      logged_for_date   TEXT NOT NULL,
+      logged_date       DATE,
+      completed         BOOLEAN NOT NULL DEFAULT FALSE,
+      value             INTEGER,
+      xp_awarded        INTEGER NOT NULL DEFAULT 0,
+      logged_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
     CREATE INDEX IF NOT EXISTS idx_sessions_skill  ON sessions(skill_id);
     CREATE INDEX IF NOT EXISTS idx_sessions_date   ON sessions(logged_at);
     CREATE INDEX IF NOT EXISTS idx_xp_log_tier     ON xp_log(tier);
@@ -530,80 +541,47 @@ async function initSchema(db: PGlite) {
 
   `);
 
-  // ── Migrations — safe to run repeatedly ─────────────────────────────────
-  // ALTER TABLE with IF NOT EXISTS is idempotent — safe on every boot
-  await db.exec(
-    `ALTER TABLE profile ADD COLUMN IF NOT EXISTS avatar TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE profile ADD COLUMN IF NOT EXISTS height TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE profile ADD COLUMN IF NOT EXISTS weight TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE profile ADD COLUMN IF NOT EXISTS blood_type TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE profile ADD COLUMN IF NOT EXISTS intel_log TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE profile ADD COLUMN IF NOT EXISTS week_start TEXT DEFAULT 'MONDAY'`
-  );
-  await db.exec(
-    `ALTER TABLE profile ADD COLUMN IF NOT EXISTS habit_cutoff_time TEXT DEFAULT '06:00'`
-  );
-  await db.exec(
-    `ALTER TABLE lifepaths ADD COLUMN IF NOT EXISTS description TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE courses ADD COLUMN IF NOT EXISTS linked_media_ids JSONB NOT NULL DEFAULT '[]'`
-  );
-  await db.exec(
-    `ALTER TABLE courses ADD COLUMN IF NOT EXISTS is_legacy BOOLEAN NOT NULL DEFAULT FALSE`
-  );
-  await db.exec(
-    `ALTER TABLE courses ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ`
-  );
-  await db.exec(
-    `ALTER TABLE projects ADD COLUMN IF NOT EXISTS linked_media_ids JSONB NOT NULL DEFAULT '[]'`
-  );
-  await db.exec(
-    `ALTER TABLE projects ADD COLUMN IF NOT EXISTS linked_course_ids JSONB NOT NULL DEFAULT '[]'`
-  );
-  await db.exec(
-    `ALTER TABLE sessions ADD COLUMN IF NOT EXISTS project_ids JSONB NOT NULL DEFAULT '[]'`
-  );
-  await db.exec(
-    `ALTER TABLE notes ADD COLUMN IF NOT EXISTS name TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE notes ADD COLUMN IF NOT EXISTS status TEXT`
-  );
-  // Update existing rows that don't have name/status
-  await db.exec(
-    `UPDATE notes SET name = 'Untitled' WHERE name IS NULL OR name = ''`
-  );
-  await db.exec(
-    `UPDATE notes SET status = 'ACTIVE' WHERE status IS NULL OR status = ''`
-  );
-  // Now make them NOT NULL
-  await db.exec(
-    `ALTER TABLE notes ALTER COLUMN name SET NOT NULL`
-  );
-  await db.exec(
-    `ALTER TABLE notes ALTER COLUMN status SET NOT NULL`
-  );
-  await db.exec(
-    `ALTER TABLE notes ALTER COLUMN status SET DEFAULT 'ACTIVE'`
-  );
-  await db.exec(
-    `ALTER TABLE resources ADD COLUMN IF NOT EXISTS description TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE resources ALTER COLUMN url DROP NOT NULL`
-  );
-  // Reset level floors to 0 for new level system (safe — only resets if XP is 0)
+  // ── Migrations — batched for startup performance ─────────────────────────
+  // All ALTER TABLE calls use IF NOT EXISTS — fully idempotent, safe every boot.
+  // Statements with data dependencies (e.g. fill nulls before SET NOT NULL)
+  // are kept in separate sequential batches.
+
+  // ── Batch 1: profile, lifepaths, courses, projects, sessions, resources ──
+  await db.exec(`
+    ALTER TABLE profile ADD COLUMN IF NOT EXISTS avatar TEXT;
+    ALTER TABLE profile ADD COLUMN IF NOT EXISTS height TEXT;
+    ALTER TABLE profile ADD COLUMN IF NOT EXISTS weight TEXT;
+    ALTER TABLE profile ADD COLUMN IF NOT EXISTS blood_type TEXT;
+    ALTER TABLE profile ADD COLUMN IF NOT EXISTS intel_log TEXT;
+    ALTER TABLE profile ADD COLUMN IF NOT EXISTS week_start TEXT DEFAULT 'MONDAY';
+    ALTER TABLE profile ADD COLUMN IF NOT EXISTS habit_cutoff_time TEXT DEFAULT '06:00';
+    ALTER TABLE lifepaths ADD COLUMN IF NOT EXISTS description TEXT;
+    ALTER TABLE courses ADD COLUMN IF NOT EXISTS linked_media_ids JSONB NOT NULL DEFAULT '[]';
+    ALTER TABLE courses ADD COLUMN IF NOT EXISTS is_legacy BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE courses ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
+    ALTER TABLE projects ADD COLUMN IF NOT EXISTS linked_media_ids JSONB NOT NULL DEFAULT '[]';
+    ALTER TABLE projects ADD COLUMN IF NOT EXISTS linked_course_ids JSONB NOT NULL DEFAULT '[]';
+    ALTER TABLE sessions ADD COLUMN IF NOT EXISTS project_ids JSONB NOT NULL DEFAULT '[]';
+    ALTER TABLE resources ADD COLUMN IF NOT EXISTS description TEXT;
+    ALTER TABLE resources ALTER COLUMN url DROP NOT NULL;
+  `);
+
+  // ── Batch 2: notes — add columns, fill nulls, then set constraints ───────
+  await db.exec(`
+    ALTER TABLE notes ADD COLUMN IF NOT EXISTS name TEXT;
+    ALTER TABLE notes ADD COLUMN IF NOT EXISTS status TEXT;
+  `);
+  await db.exec(`
+    UPDATE notes SET name = 'Untitled' WHERE name IS NULL OR name = '';
+    UPDATE notes SET status = 'ACTIVE' WHERE status IS NULL OR status = '';
+  `);
+  await db.exec(`
+    ALTER TABLE notes ALTER COLUMN name SET NOT NULL;
+    ALTER TABLE notes ALTER COLUMN status SET NOT NULL;
+    ALTER TABLE notes ALTER COLUMN status SET DEFAULT 'ACTIVE';
+  `);
+
+  // ── Batch 3: level floor resets ──────────────────────────────────────────
   await db.exec(`
     UPDATE master_progress SET level = 0 WHERE total_xp = 0;
     UPDATE tool_progress    SET level = 0 WHERE total_xp = 0;
@@ -614,6 +592,7 @@ async function initSchema(db: PGlite) {
     UPDATE augments         SET level = 0 WHERE xp = 0;
   `);
 
+  // ── Batch 4: habits table + all habit column migrations ──────────────────
   await db.exec(`
     CREATE TABLE IF NOT EXISTS habits (
       id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -635,94 +614,43 @@ async function initSchema(db: PGlite) {
       paused_until    TIMESTAMPTZ,
       created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    ALTER TABLE habits ADD COLUMN IF NOT EXISTS name TEXT;
+    ALTER TABLE habits ADD COLUMN IF NOT EXISTS stat_key TEXT;
+    ALTER TABLE habits ADD COLUMN IF NOT EXISTS frequency_type TEXT DEFAULT 'DAILY';
+    ALTER TABLE habits ADD COLUMN IF NOT EXISTS interval_days INTEGER;
+    ALTER TABLE habits ADD COLUMN IF NOT EXISTS specific_days JSONB;
+    ALTER TABLE habits ADD COLUMN IF NOT EXISTS target_type TEXT DEFAULT 'BINARY';
+    ALTER TABLE habits ADD COLUMN IF NOT EXISTS target_value INTEGER;
+    ALTER TABLE habits ADD COLUMN IF NOT EXISTS target_period_days INTEGER DEFAULT 7;
+    ALTER TABLE habits ADD COLUMN IF NOT EXISTS reminder_time TEXT;
+    ALTER TABLE habits ADD COLUMN IF NOT EXISTS streak_goal INTEGER;
+    ALTER TABLE habits ADD COLUMN IF NOT EXISTS streak_reward INTEGER DEFAULT 100;
+    ALTER TABLE habits ADD COLUMN IF NOT EXISTS shields INTEGER DEFAULT 0;
+    ALTER TABLE habits ADD COLUMN IF NOT EXISTS current_streak INTEGER DEFAULT 0;
+    ALTER TABLE habits ADD COLUMN IF NOT EXISTS longest_streak INTEGER DEFAULT 0;
+    ALTER TABLE habits ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'ACTIVE';
+    ALTER TABLE habits ADD COLUMN IF NOT EXISTS paused_until TIMESTAMPTZ;
+    ALTER TABLE habits ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
   `);
 
-  // Robust migrations for habits and logs
-  await db.exec(
-    `ALTER TABLE habits ADD COLUMN IF NOT EXISTS name TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE habits ADD COLUMN IF NOT EXISTS stat_key TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE habits ADD COLUMN IF NOT EXISTS frequency_type TEXT DEFAULT 'DAILY'`
-  );
-  await db.exec(
-    `ALTER TABLE habits ADD COLUMN IF NOT EXISTS interval_days INTEGER`
-  );
-  await db.exec(
-    `ALTER TABLE habits ADD COLUMN IF NOT EXISTS specific_days JSONB`
-  );
-  await db.exec(
-    `ALTER TABLE habits ADD COLUMN IF NOT EXISTS target_type TEXT DEFAULT 'BINARY'`
-  );
-  await db.exec(
-    `ALTER TABLE habits ADD COLUMN IF NOT EXISTS target_value INTEGER`
-  );
-  await db.exec(
-    `ALTER TABLE habits ADD COLUMN IF NOT EXISTS target_period_days INTEGER DEFAULT 7`
-  );
-  await db.exec(
-    `ALTER TABLE habits ADD COLUMN IF NOT EXISTS reminder_time TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE habits ADD COLUMN IF NOT EXISTS streak_goal INTEGER`
-  );
-  await db.exec(
-    `ALTER TABLE habits ADD COLUMN IF NOT EXISTS streak_reward INTEGER DEFAULT 100`
-  );
-  await db.exec(
-    `ALTER TABLE habits ADD COLUMN IF NOT EXISTS shields INTEGER DEFAULT 0`
-  );
-  await db.exec(
-    `ALTER TABLE habits ADD COLUMN IF NOT EXISTS current_streak INTEGER DEFAULT 0`
-  );
-  await db.exec(
-    `ALTER TABLE habits ADD COLUMN IF NOT EXISTS longest_streak INTEGER DEFAULT 0`
-  );
-  await db.exec(
-    `ALTER TABLE habits ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'ACTIVE'`
-  );
-  await db.exec(
-    `ALTER TABLE habits ADD COLUMN IF NOT EXISTS paused_until TIMESTAMPTZ`
-  );
-  await db.exec(
-    `ALTER TABLE habits ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`
-  );
-
-  await db.exec(
-    `ALTER TABLE habit_logs ADD COLUMN IF NOT EXISTS habit_id TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE habit_logs ADD COLUMN IF NOT EXISTS logged_for_date TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE habit_logs ADD COLUMN IF NOT EXISTS completed BOOLEAN DEFAULT FALSE`
-  );
-  await db.exec(
-    `ALTER TABLE habit_logs ADD COLUMN IF NOT EXISTS value INTEGER`
-  );
-  await db.exec(
-    `ALTER TABLE habit_logs ADD COLUMN IF NOT EXISTS xp_awarded INTEGER DEFAULT 0`
-  );
-  await db.exec(
-    `ALTER TABLE habit_logs ADD COLUMN IF NOT EXISTS logged_at TIMESTAMPTZ DEFAULT NOW()`
-  );
-  // Fix: ensure logged_date column exists and is NOT NULL
-  await db.exec(
-    `ALTER TABLE habit_logs ADD COLUMN IF NOT EXISTS logged_date DATE`
-  );
+  // ── Batch 5: habit_logs — add columns, fill data, set constraint ─────────
+  await db.exec(`
+    ALTER TABLE habit_logs ADD COLUMN IF NOT EXISTS habit_id TEXT;
+    ALTER TABLE habit_logs ADD COLUMN IF NOT EXISTS logged_for_date TEXT;
+    ALTER TABLE habit_logs ADD COLUMN IF NOT EXISTS completed BOOLEAN DEFAULT FALSE;
+    ALTER TABLE habit_logs ADD COLUMN IF NOT EXISTS value INTEGER;
+    ALTER TABLE habit_logs ADD COLUMN IF NOT EXISTS xp_awarded INTEGER DEFAULT 0;
+    ALTER TABLE habit_logs ADD COLUMN IF NOT EXISTS logged_at TIMESTAMPTZ DEFAULT NOW();
+    ALTER TABLE habit_logs ADD COLUMN IF NOT EXISTS logged_date DATE;
+  `);
   await db.exec(
     `UPDATE habit_logs SET logged_date = logged_for_date::date WHERE logged_date IS NULL`
   );
   try {
-    await db.exec(
-      `ALTER TABLE habit_logs ALTER COLUMN logged_date SET NOT NULL`
-    );
+    await db.exec(`ALTER TABLE habit_logs ALTER COLUMN logged_date SET NOT NULL`);
   } catch (e) {
-    // May fail if there's still null data
+    // May fail if there is still null data — non-fatal
   }
-
   try {
     await db.exec(`
       UPDATE habits SET status = 'ACTIVE' WHERE status IS NULL OR status = '';
@@ -733,289 +661,117 @@ async function initSchema(db: PGlite) {
     console.warn('// HABIT_MIGRATION_WARN:', e);
   }
 
-  await db.exec(
-    `ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS title TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS date DATE`
-  );
-  await db.exec(
-    `ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS time TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS completed BOOLEAN DEFAULT FALSE`
-  );
-  await db.exec(
-    `ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS recurrence_type TEXT DEFAULT 'NONE'`
-  );
-  await db.exec(
-    `ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS recurrence_interval INTEGER DEFAULT 1`
-  );
-  await db.exec(
-    `ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS recurrence_days_of_week JSONB`
-  );
-  await db.exec(
-    `ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS recurrence_end_type TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS recurrence_end_date DATE`
-  );
-  await db.exec(
-    `ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS recurrence_count INTEGER`
-  );
-  await db.exec(
-    `ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`
-  );
-  await db.exec(
-    `ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`
-  );
-  await db.exec(
-    `ALTER TABLE planner_exceptions ADD COLUMN IF NOT EXISTS entry_id TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE planner_exceptions ADD COLUMN IF NOT EXISTS occurrence_date DATE`
-  );
-  await db.exec(
-    `ALTER TABLE planner_exceptions ADD COLUMN IF NOT EXISTS title TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE planner_exceptions ADD COLUMN IF NOT EXISTS date DATE`
-  );
-  await db.exec(
-    `ALTER TABLE planner_exceptions ADD COLUMN IF NOT EXISTS time TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE planner_exceptions ADD COLUMN IF NOT EXISTS completed BOOLEAN`
-  );
-  await db.exec(
-    `ALTER TABLE planner_exceptions ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE`
-  );
-  await db.exec(
-    `ALTER TABLE planner_exceptions ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`
-  );
-  await db.exec(
-    `ALTER TABLE vault_items ADD COLUMN IF NOT EXISTS title TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE vault_items ADD COLUMN IF NOT EXISTS category TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE vault_items ADD COLUMN IF NOT EXISTS completed_date DATE`
-  );
-  await db.exec(
-    `ALTER TABLE vault_items ADD COLUMN IF NOT EXISTS notes TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE vault_items ADD COLUMN IF NOT EXISTS metadata JSONB`
-  );
-  await db.exec(
-    `ALTER TABLE vault_items ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`
-  );
-  await db.exec(
-    `ALTER TABLE vault_items ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`
-  );
-  await db.exec(
-    `ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS start_time TIMESTAMPTZ`
-  );
-  await db.exec(
-    `ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS end_time TIMESTAMPTZ`
-  );
-  await db.exec(
-    `ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS duration_minutes INTEGER`
-  );
-  await db.exec(
-    `ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS quality INTEGER`
-  );
-  await db.exec(
-    `ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS notes TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`
-  );
-  await db.exec(
-    `ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`
-  );
-  await db.exec(
-    `ALTER TABLE recovery_settings ADD COLUMN IF NOT EXISTS daily_goal_minutes INTEGER DEFAULT 480`
-  );
-  await db.exec(
-    `ALTER TABLE custom_ingredients ADD COLUMN IF NOT EXISTS name TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE custom_ingredients ADD COLUMN IF NOT EXISTS category TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE custom_ingredients ADD COLUMN IF NOT EXISTS calories REAL`
-  );
-  await db.exec(
-    `ALTER TABLE custom_ingredients ADD COLUMN IF NOT EXISTS protein_g REAL`
-  );
-  await db.exec(
-    `ALTER TABLE custom_ingredients ADD COLUMN IF NOT EXISTS carbs_g REAL`
-  );
-  await db.exec(
-    `ALTER TABLE custom_ingredients ADD COLUMN IF NOT EXISTS fat_g REAL`
-  );
-  await db.exec(
-    `ALTER TABLE custom_ingredients ADD COLUMN IF NOT EXISTS notes TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE custom_ingredients ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`
-  );
-  await db.exec(
-    `ALTER TABLE custom_ingredients ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`
-  );
-  await db.exec(
-    `ALTER TABLE recipes ADD COLUMN IF NOT EXISTS name TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE recipes ADD COLUMN IF NOT EXISTS category TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE recipes ADD COLUMN IF NOT EXISTS is_prepared_meal BOOLEAN DEFAULT FALSE`
-  );
-  await db.exec(
-    `ALTER TABLE recipes ADD COLUMN IF NOT EXISTS servings INTEGER DEFAULT 1`
-  );
-  await db.exec(
-    `ALTER TABLE recipes ADD COLUMN IF NOT EXISTS total_calories REAL DEFAULT 0`
-  );
-  await db.exec(
-    `ALTER TABLE recipes ADD COLUMN IF NOT EXISTS total_protein_g REAL DEFAULT 0`
-  );
-  await db.exec(
-    `ALTER TABLE recipes ADD COLUMN IF NOT EXISTS total_carbs_g REAL DEFAULT 0`
-  );
-  await db.exec(
-    `ALTER TABLE recipes ADD COLUMN IF NOT EXISTS total_fat_g REAL DEFAULT 0`
-  );
-  await db.exec(
-    `ALTER TABLE recipes ADD COLUMN IF NOT EXISTS per_serving_calories REAL DEFAULT 0`
-  );
-  await db.exec(
-    `ALTER TABLE recipes ADD COLUMN IF NOT EXISTS per_serving_protein_g REAL DEFAULT 0`
-  );
-  await db.exec(
-    `ALTER TABLE recipes ADD COLUMN IF NOT EXISTS per_serving_carbs_g REAL DEFAULT 0`
-  );
-  await db.exec(
-    `ALTER TABLE recipes ADD COLUMN IF NOT EXISTS per_serving_fat_g REAL DEFAULT 0`
-  );
-  await db.exec(
-    `ALTER TABLE recipes ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`
-  );
-  await db.exec(
-    `ALTER TABLE recipes ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`
-  );
-  await db.exec(
-    `ALTER TABLE recipe_ingredients ADD COLUMN IF NOT EXISTS recipe_id TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE recipe_ingredients ADD COLUMN IF NOT EXISTS ingredient_id TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE recipe_ingredients ADD COLUMN IF NOT EXISTS ingredient_name TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE recipe_ingredients ADD COLUMN IF NOT EXISTS ingredient_source TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE recipe_ingredients ADD COLUMN IF NOT EXISTS input_text TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE recipe_ingredients ADD COLUMN IF NOT EXISTS grams REAL`
-  );
-  await db.exec(
-    `ALTER TABLE recipe_ingredients ADD COLUMN IF NOT EXISTS calories_total REAL DEFAULT 0`
-  );
-  await db.exec(
-    `ALTER TABLE recipe_ingredients ADD COLUMN IF NOT EXISTS protein_g_total REAL DEFAULT 0`
-  );
-  await db.exec(
-    `ALTER TABLE recipe_ingredients ADD COLUMN IF NOT EXISTS carbs_g_total REAL DEFAULT 0`
-  );
-  await db.exec(
-    `ALTER TABLE recipe_ingredients ADD COLUMN IF NOT EXISTS fat_g_total REAL DEFAULT 0`
-  );
-  await db.exec(
-    `ALTER TABLE recipe_ingredients ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0`
-  );
-  await db.exec(
-    `ALTER TABLE recipe_steps ADD COLUMN IF NOT EXISTS recipe_id TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE recipe_steps ADD COLUMN IF NOT EXISTS step_number INTEGER DEFAULT 1`
-  );
-  await db.exec(
-    `ALTER TABLE recipe_steps ADD COLUMN IF NOT EXISTS instruction_text TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE intake_settings ADD COLUMN IF NOT EXISTS daily_calorie_goal INTEGER DEFAULT 2000`
-  );
-  await db.exec(
-    `ALTER TABLE intake_settings ADD COLUMN IF NOT EXISTS protein_percent INTEGER DEFAULT 40`
-  );
-  await db.exec(
-    `ALTER TABLE intake_settings ADD COLUMN IF NOT EXISTS carbs_percent INTEGER DEFAULT 30`
-  );
-  await db.exec(
-    `ALTER TABLE intake_settings ADD COLUMN IF NOT EXISTS fat_percent INTEGER DEFAULT 30`
-  );
-  await db.exec(
-    `ALTER TABLE intake_settings ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`
-  );
-  await db.exec(
-    `ALTER TABLE intake_settings ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`
-  );
-  await db.exec(
-    `ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS logged_at TIMESTAMPTZ`
-  );
-  await db.exec(
-    `ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS anchor_date DATE`
-  );
-  await db.exec(
-    `ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS meal_label TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS notes TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS source_kind TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS source_id TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS source_name TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS source_origin TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS grams REAL`
-  );
-  await db.exec(
-    `ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS servings REAL`
-  );
-  await db.exec(
-    `ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS input_text TEXT`
-  );
-  await db.exec(
-    `ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS calories REAL DEFAULT 0`
-  );
-  await db.exec(
-    `ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS protein_g REAL DEFAULT 0`
-  );
-  await db.exec(
-    `ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS carbs_g REAL DEFAULT 0`
-  );
-  await db.exec(
-    `ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS fat_g REAL DEFAULT 0`
-  );
-  await db.exec(
-    `ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`
-  );
-  await db.exec(
-    `ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`
-  );
+  // ── Batch 6: planner entries + exceptions ────────────────────────────────
+  await db.exec(`
+    ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS title TEXT;
+    ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS date DATE;
+    ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS time TEXT;
+    ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS completed BOOLEAN DEFAULT FALSE;
+    ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS recurrence_type TEXT DEFAULT 'NONE';
+    ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS recurrence_interval INTEGER DEFAULT 1;
+    ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS recurrence_days_of_week JSONB;
+    ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS recurrence_end_type TEXT;
+    ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS recurrence_end_date DATE;
+    ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS recurrence_count INTEGER;
+    ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+    ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+    ALTER TABLE planner_exceptions ADD COLUMN IF NOT EXISTS entry_id TEXT;
+    ALTER TABLE planner_exceptions ADD COLUMN IF NOT EXISTS occurrence_date DATE;
+    ALTER TABLE planner_exceptions ADD COLUMN IF NOT EXISTS title TEXT;
+    ALTER TABLE planner_exceptions ADD COLUMN IF NOT EXISTS date DATE;
+    ALTER TABLE planner_exceptions ADD COLUMN IF NOT EXISTS time TEXT;
+    ALTER TABLE planner_exceptions ADD COLUMN IF NOT EXISTS completed BOOLEAN;
+    ALTER TABLE planner_exceptions ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE;
+    ALTER TABLE planner_exceptions ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+  `);
+
+  // ── Batch 7: vault, sleep, recovery ──────────────────────────────────────
+  await db.exec(`
+    ALTER TABLE vault_items ADD COLUMN IF NOT EXISTS title TEXT;
+    ALTER TABLE vault_items ADD COLUMN IF NOT EXISTS category TEXT;
+    ALTER TABLE vault_items ADD COLUMN IF NOT EXISTS completed_date DATE;
+    ALTER TABLE vault_items ADD COLUMN IF NOT EXISTS notes TEXT;
+    ALTER TABLE vault_items ADD COLUMN IF NOT EXISTS metadata JSONB;
+    ALTER TABLE vault_items ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+    ALTER TABLE vault_items ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+    ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS start_time TIMESTAMPTZ;
+    ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS end_time TIMESTAMPTZ;
+    ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS duration_minutes INTEGER;
+    ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS quality INTEGER;
+    ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS notes TEXT;
+    ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+    ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+    ALTER TABLE recovery_settings ADD COLUMN IF NOT EXISTS daily_goal_minutes INTEGER DEFAULT 480;
+  `);
+
+  // ── Batch 8: ingredients, recipes, intake ────────────────────────────────
+  await db.exec(`
+    ALTER TABLE custom_ingredients ADD COLUMN IF NOT EXISTS name TEXT;
+    ALTER TABLE custom_ingredients ADD COLUMN IF NOT EXISTS category TEXT;
+    ALTER TABLE custom_ingredients ADD COLUMN IF NOT EXISTS calories REAL;
+    ALTER TABLE custom_ingredients ADD COLUMN IF NOT EXISTS protein_g REAL;
+    ALTER TABLE custom_ingredients ADD COLUMN IF NOT EXISTS carbs_g REAL;
+    ALTER TABLE custom_ingredients ADD COLUMN IF NOT EXISTS fat_g REAL;
+    ALTER TABLE custom_ingredients ADD COLUMN IF NOT EXISTS notes TEXT;
+    ALTER TABLE custom_ingredients ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+    ALTER TABLE custom_ingredients ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+    ALTER TABLE recipes ADD COLUMN IF NOT EXISTS name TEXT;
+    ALTER TABLE recipes ADD COLUMN IF NOT EXISTS category TEXT;
+    ALTER TABLE recipes ADD COLUMN IF NOT EXISTS is_prepared_meal BOOLEAN DEFAULT FALSE;
+    ALTER TABLE recipes ADD COLUMN IF NOT EXISTS servings INTEGER DEFAULT 1;
+    ALTER TABLE recipes ADD COLUMN IF NOT EXISTS total_calories REAL DEFAULT 0;
+    ALTER TABLE recipes ADD COLUMN IF NOT EXISTS total_protein_g REAL DEFAULT 0;
+    ALTER TABLE recipes ADD COLUMN IF NOT EXISTS total_carbs_g REAL DEFAULT 0;
+    ALTER TABLE recipes ADD COLUMN IF NOT EXISTS total_fat_g REAL DEFAULT 0;
+    ALTER TABLE recipes ADD COLUMN IF NOT EXISTS per_serving_calories REAL DEFAULT 0;
+    ALTER TABLE recipes ADD COLUMN IF NOT EXISTS per_serving_protein_g REAL DEFAULT 0;
+    ALTER TABLE recipes ADD COLUMN IF NOT EXISTS per_serving_carbs_g REAL DEFAULT 0;
+    ALTER TABLE recipes ADD COLUMN IF NOT EXISTS per_serving_fat_g REAL DEFAULT 0;
+    ALTER TABLE recipes ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+    ALTER TABLE recipes ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+    ALTER TABLE recipe_ingredients ADD COLUMN IF NOT EXISTS recipe_id TEXT;
+    ALTER TABLE recipe_ingredients ADD COLUMN IF NOT EXISTS ingredient_id TEXT;
+    ALTER TABLE recipe_ingredients ADD COLUMN IF NOT EXISTS ingredient_name TEXT;
+    ALTER TABLE recipe_ingredients ADD COLUMN IF NOT EXISTS ingredient_source TEXT;
+    ALTER TABLE recipe_ingredients ADD COLUMN IF NOT EXISTS input_text TEXT;
+    ALTER TABLE recipe_ingredients ADD COLUMN IF NOT EXISTS grams REAL;
+    ALTER TABLE recipe_ingredients ADD COLUMN IF NOT EXISTS calories_total REAL DEFAULT 0;
+    ALTER TABLE recipe_ingredients ADD COLUMN IF NOT EXISTS protein_g_total REAL DEFAULT 0;
+    ALTER TABLE recipe_ingredients ADD COLUMN IF NOT EXISTS carbs_g_total REAL DEFAULT 0;
+    ALTER TABLE recipe_ingredients ADD COLUMN IF NOT EXISTS fat_g_total REAL DEFAULT 0;
+    ALTER TABLE recipe_ingredients ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0;
+    ALTER TABLE recipe_steps ADD COLUMN IF NOT EXISTS recipe_id TEXT;
+    ALTER TABLE recipe_steps ADD COLUMN IF NOT EXISTS step_number INTEGER DEFAULT 1;
+    ALTER TABLE recipe_steps ADD COLUMN IF NOT EXISTS instruction_text TEXT;
+    ALTER TABLE intake_settings ADD COLUMN IF NOT EXISTS daily_calorie_goal INTEGER DEFAULT 2000;
+    ALTER TABLE intake_settings ADD COLUMN IF NOT EXISTS protein_percent INTEGER DEFAULT 40;
+    ALTER TABLE intake_settings ADD COLUMN IF NOT EXISTS carbs_percent INTEGER DEFAULT 30;
+    ALTER TABLE intake_settings ADD COLUMN IF NOT EXISTS fat_percent INTEGER DEFAULT 30;
+    ALTER TABLE intake_settings ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+    ALTER TABLE intake_settings ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+    ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS logged_at TIMESTAMPTZ;
+    ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS anchor_date DATE;
+    ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS meal_label TEXT;
+    ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS notes TEXT;
+    ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS source_kind TEXT;
+    ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS source_id TEXT;
+    ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS source_name TEXT;
+    ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS source_origin TEXT;
+    ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS grams REAL;
+    ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS servings REAL;
+    ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS input_text TEXT;
+    ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS calories REAL DEFAULT 0;
+    ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS protein_g REAL DEFAULT 0;
+    ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS carbs_g REAL DEFAULT 0;
+    ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS fat_g REAL DEFAULT 0;
+    ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+    ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+  `);
+
+  // ── Batch 9: Performance Indexes ─────────────────────────────────────────
+  await db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_habits_status ON habits(status);
+    CREATE INDEX IF NOT EXISTS idx_sessions_logged_at ON sessions(logged_at);
+    CREATE INDEX IF NOT EXISTS idx_media_status ON media(status);
+  `);
 }

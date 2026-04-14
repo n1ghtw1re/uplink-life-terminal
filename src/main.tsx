@@ -14,8 +14,11 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
-      staleTime: 0,
-      refetchOnMount: 'always',
+      // 30s window: shared query keys (habits, operator, stats, etc.) are
+      // fetched once and reused across all widgets instead of refetching
+      // on every component mount. Mutations still invalidate immediately.
+      staleTime: 30_000,
+      refetchOnMount: true,       // only refetch if data is actually stale
       refetchOnReconnect: true,
       refetchOnWindowFocus: false,
     },

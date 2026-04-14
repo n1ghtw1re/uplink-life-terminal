@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getDB } from '@/lib/db';
-import { refreshAppData } from '@/lib/refreshAppData';
 import type { Ingredient } from '@/types';
 import {
   buildIngredientCategories,
@@ -81,7 +80,6 @@ export function useIngredientActions() {
   const invalidateIngredients = async () => {
     await queryClient.invalidateQueries({ queryKey: ['ingredients-custom'] });
     await queryClient.invalidateQueries({ queryKey: ['terminal-ingredients-list'] });
-    await refreshAppData(queryClient);
   };
 
   const createIngredient = useMutation({

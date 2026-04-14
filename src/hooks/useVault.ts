@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getDB } from '@/lib/db';
-import { refreshAppData } from '@/lib/refreshAppData';
 import type { VaultCategory, VaultItem } from '@/types';
 import { compareVaultItems, normalizeVaultItemRow, sanitizeVaultItemInput, type VaultItemInput } from '@/services/vaultService';
 
@@ -62,7 +61,7 @@ export function useVaultActions() {
   const invalidateVault = async () => {
     await queryClient.invalidateQueries({ queryKey: ['vault-items'] });
     await queryClient.invalidateQueries({ queryKey: ['vault-item'] });
-    await refreshAppData(queryClient);
+    await queryClient.invalidateQueries({ queryKey: ['terminal-vault-list'] });
   };
 
   const createItem = useMutation({

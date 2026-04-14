@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getDB } from '@/lib/db';
-import { refreshAppData } from '@/lib/refreshAppData';
 import type { RecoverySettings, SleepSession } from '@/types';
 import {
   groupSleepSessionsByAnchorDate,
@@ -67,7 +66,6 @@ export function useRecoveryActions() {
   const invalidateRecovery = async () => {
     await queryClient.invalidateQueries({ queryKey: ['sleep-sessions'] });
     await queryClient.invalidateQueries({ queryKey: ['recovery-settings'] });
-    await refreshAppData(queryClient);
   };
 
   const createSleepSession = useMutation({

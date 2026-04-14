@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getDB } from '@/lib/db';
-import { refreshAppData } from '@/lib/refreshAppData';
 import type { Recipe } from '@/types';
 import {
   compareRecipes,
@@ -66,7 +65,7 @@ export function useRecipeActions() {
   const invalidateRecipes = async () => {
     await queryClient.invalidateQueries({ queryKey: ['recipes'] });
     await queryClient.invalidateQueries({ queryKey: ['recipe'] });
-    await refreshAppData(queryClient);
+    await queryClient.invalidateQueries({ queryKey: ['terminal-recipes-list'] });
   };
 
   const createRecipe = useMutation({

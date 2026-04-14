@@ -78,21 +78,26 @@ const Sidebar = ({
   const { data: counts } = useQuery({
     queryKey: ['arsenal-counts'],
     queryFn: async () => {
-      const [courses, media, skills, tools, augments, projects] = await Promise.all([
-        supabase.from('courses').select('id', { count: 'exact', head: true }),
-        supabase.from('media').select('id', { count: 'exact', head: true }),
-        supabase.from('skills').select('id', { count: 'exact', head: true }),
-        supabase.from('tools').select('id', { count: 'exact', head: true }),
-        supabase.from('augments').select('id', { count: 'exact', head: true }),
-        supabase.from('projects').select('id', { count: 'exact', head: true }),
-      ]);
+      const { getDB } = await import('@/lib/db');
+      const db = await getDB();
+      const res = await db.query(`
+        SELECT 
+          (SELECT COUNT(*) FROM courses) as courses,
+          (SELECT COUNT(*) FROM media) as library,
+          (SELECT COUNT(*) FROM skills) as skills,
+          (SELECT COUNT(*) FROM tools) as tools,
+          (SELECT COUNT(*) FROM augments) as augments,
+          (SELECT COUNT(*) FROM projects) as projects
+      `);
+      
+      const row = res.rows[0] as any;
       return {
-        courses: courses.count ?? 0,
-        library: media.count ?? 0,
-        skills: skills.count ?? 0,
-        tools: tools.count ?? 0,
-        augments: augments.count ?? 0,
-        projects: projects.count ?? 0,
+        courses: Number(row?.courses ?? 0),
+        library: Number(row?.library ?? 0),
+        skills: Number(row?.skills ?? 0),
+        tools: Number(row?.tools ?? 0),
+        augments: Number(row?.augments ?? 0),
+        projects: Number(row?.projects ?? 0),
       };
     },
   });

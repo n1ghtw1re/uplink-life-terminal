@@ -59,6 +59,6 @@ export async function refreshAppData(queryClient: QueryClient) {
   await Promise.all(
     APP_QUERY_KEYS.map((queryKey) => queryClient.invalidateQueries({ queryKey }))
   );
-
-  await queryClient.refetchQueries({ type: 'active' });
+  // Note: invalidateQueries already triggers refetches on active subscribers.
+  // The explicit refetchQueries call was redundant and caused a second wave of fetches.
 }

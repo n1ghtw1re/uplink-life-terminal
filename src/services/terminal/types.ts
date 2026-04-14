@@ -21,7 +21,7 @@ export interface CommandResult {
 
 export interface AutocompleteSuggestion {
   value: string;
-  type: 'command' | 'skill' | 'tool' | 'augment' | 'course' | 'project' | 'media' | 'note' | 'stat' | 'duration' | 'timeunit' | 'widget';
+  type: 'command' | 'skill' | 'tool' | 'augment' | 'course' | 'project' | 'media' | 'note' | 'stat' | 'duration' | 'timeunit' | 'widget' | 'habit' | 'vault' | 'recipe' | 'resource' | 'ingredient';
   score: number;
 }
 
