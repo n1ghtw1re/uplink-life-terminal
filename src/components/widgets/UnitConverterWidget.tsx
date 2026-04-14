@@ -131,12 +131,12 @@ const UnitConverterWidget = ({ onClose, onFullscreen, isFullscreen, isFocused }:
   return (
     <WidgetWrapper title="UNIT CONVERTER" onClose={onClose} onFullscreen={onFullscreen} isFullscreen={isFullscreen}>
       <div ref={containerRef} tabIndex={0} style={{ outline: 'none' }}>
-        <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 10 }}>
           {Object.entries(CATEGORY_LABELS).map(([key, label]) => (
             <button
               key={key}
               className={`topbar-btn ${category === key ? 'active' : ''}`}
-              style={{ fontSize: 10, flex: 1 }}
+              style={{ fontSize: 9, padding: '4px 8px' }}
               onClick={() => handleCategoryChange(key as ConversionCategory)}
             >
               {label}

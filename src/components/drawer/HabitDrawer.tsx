@@ -2,9 +2,12 @@
 // src/components/drawer/HabitDrawer.tsx
 // ============================================================
 import { useState, useEffect } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-import { Habit, STAT_META, StatKey } from '@/types';
-import { useHabits, useHabitLogs, useTodayLogs } from '@/hooks/useHabits';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getDB } from '@/lib/db';
+import { getLevelFromXP } from '@/services/xpService';
+import { getNextDueDateLabel, normalizeHabitDate, todayStr, calcCheckInXP, MAX_SHIELDS } from '@/services/habitService';
+import { useOperator } from '@/hooks/useOperator';
+import { Habit, StatKey } from '@/types';
 
 const mono = "'IBM Plex Mono', monospace";
 const vt   = "'VT323', monospace";
@@ -15,31 +18,32 @@ const bgS  = 'hsl(var(--bg-secondary))';
 const bgT  = 'hsl(var(--bg-tertiary))';
 const green = '#44ff88';
 
-const STATS: StatKey[] = ['body', 'wire', 'mind', 'cool', 'grit', 'flow', 'ghost'];
+const STATS = ['body', 'wire', 'mind', 'cool', 'grit', 'flow', 'ghost'] as const;
 const DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
-interface HabitDrawerProps {
-  habit: Habit;
+const STAT_META: Record<string, { icon: string }> = {
+  body: { icon: '⚡' }, wire: { icon: '🔌' }, mind: { icon: '🧠' },
+  cool: { icon: '😎' }, grit: { icon: '💪' }, flow: { icon: '🌊' }, ghost: { icon: '👻' },
+};
+
+type StatKey = 'body' | 'wire' | 'mind' | 'cool' | 'grit' | 'flow' | 'ghost';
+
+interface Props {
+  habitId: string;
   onClose: () => void;
 }
 
-export default function HabitDrawer({ habit, onClose }: HabitDrawerProps) {
-  const queryClient = useQueryClient();
-  const { reactivateHabit, unpauseHabit, updateHabit, retireHabit, deleteHabit, pauseHabit, checkIn } = useHabits();
-  const { data: logs = [] } = useHabitLogs(habit.id);
-  const { data: todayMap = {} } = useTodayLogs();
-  
-  const isDoneToday = todayMap[habit.id]?.completed ?? false;
-  
+export default function HabitDrawer({ habitId, onClose }: Props) {
+  // All useState calls FIRST - exactly like ToolDetailDrawer
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [pauseDate, setPauseDate] = useState('');
   const [showPause, setShowPause] = useState(false);
   const [quantityValue, setQuantityValue] = useState<number | ''>('');
-
+  
   // Edit form state
   const [editName, setEditName] = useState('');
-  const [editStatKey, setEditStatKey] = useState<StatKey>('body');
+  const [editStatKey, setEditStatKey] = useState<string>('body');
   const [editFreqType, setEditFreqType] = useState<'DAILY' | 'INTERVAL' | 'SPECIFIC_DAYS'>('DAILY');
   const [editIntervalDays, setEditIntervalDays] = useState(2);
   const [editSpecificDays, setEditSpecificDays] = useState<number[]>([]);
@@ -49,14 +53,226 @@ export default function HabitDrawer({ habit, onClose }: HabitDrawerProps) {
   const [editStreakGoal, setEditStreakGoal] = useState<number | ''>(21);
   const [editStreakReward, setEditStreakReward] = useState<number | ''>(100);
 
-  // Reset states when habit changes
+  // Reset edit/delete states when habitId changes - exactly like ToolDetailDrawer
   useEffect(() => {
     setEditing(false);
     setConfirmDelete(false);
     setShowPause(false);
     setPauseDate('');
     setQuantityValue('');
-  }, [habit.id]);
+  }, [habitId]);
+
+  const { data: operator } = useOperator();
+  const cutoffTime = operator?.habitCutoffTime;
+  const queryClient = useQueryClient();
+
+  // useQuery for habit data - same pattern as ToolDetailDrawer
+  const { data: habit, isLoading } = useQuery({
+    queryKey: ['habit', habitId],
+    enabled: !!habitId,
+    queryFn: async () => {
+      const db = await getDB();
+      const res = await db.query(
+        `SELECT * FROM habits WHERE id = $1 LIMIT 1`,
+        [habitId]
+      );
+      return res.rows[0] ?? null;
+    },
+  });
+
+  // useQuery for habit logs
+  const { data: logs = [] } = useQuery({
+    queryKey: ['habit-logs', habitId],
+    enabled: !!habitId,
+    queryFn: async () => {
+      const db = await getDB();
+      const res = await db.query(
+        `SELECT * FROM habit_logs WHERE habit_id=$1 ORDER BY logged_for_date DESC LIMIT 90`,
+        [habitId]
+      );
+      return res.rows;
+    },
+  });
+
+  // useQuery for today's completion status
+  const { data: todayMap = {} } = useQuery({
+    queryKey: ['habit-logs-today-map', cutoffTime],
+    queryFn: async () => {
+      const db = await getDB();
+      const today = todayStr(cutoffTime);
+      const res = await db.query<{ habit_id: string; completed: boolean; value: number }>(
+        `SELECT habit_id, completed, COALESCE(value, 0) as value FROM habit_logs WHERE logged_for_date=$1`,
+        [today]
+      );
+      const map: Record<string, { completed: boolean; value: number }> = {};
+      for (const row of res.rows) {
+        map[row.habit_id] = { completed: row.completed, value: row.value };
+      }
+      return map;
+    },
+  });
+
+  const isDoneToday = habit ? (todayMap[habit.id]?.completed ?? false) : false;
+
+  const checkInMutation = useMutation({
+    mutationFn: async ({ habit, value, cutoffTime }: { habit: Habit; value?: number; cutoffTime?: string | null }) => {
+      const db = await getDB();
+      const today = todayStr(cutoffTime);
+
+      const existingLogs = await db.query<{ id: string; value: number; completed: boolean }>(
+        `SELECT id, value, completed FROM habit_logs WHERE habit_id=$1 AND logged_for_date=$2`,
+        [habit.id, today]
+      );
+
+      const currentValue = existingLogs.rows.reduce((sum, log) => sum + (log.value || 0), 0);
+      const newValue = (value ?? 1);
+      const cumulativeValue = currentValue + newValue;
+
+      let isCompleted = false;
+      if (habit.target_type === 'BINARY') {
+        isCompleted = true;
+      } else if (habit.target_type === 'QUANTITATIVE' && habit.target_value) {
+        isCompleted = cumulativeValue >= habit.target_value;
+      }
+
+      await db.query(`
+        INSERT INTO habit_logs (habit_id, logged_for_date, logged_date, completed, value, xp_awarded)
+        VALUES ($1, $2, $3, $4, $5, 0)
+      `, [habit.id, today, today, isCompleted, newValue]);
+
+      if (isCompleted && !existingLogs.rows.some(l => l.completed)) {
+        const newStreak = habit.current_streak + 1;
+        const { statXp, masterXp, bonuses } = calcCheckInXP(habit, newStreak);
+        const totalXp = statXp + masterXp + bonuses.reduce((s, b) => s + b.amount, 0);
+
+        const newShields = newStreak % 7 === 0
+          ? Math.min(habit.shields + 1, MAX_SHIELDS)
+          : habit.shields;
+
+        await db.query(`
+          UPDATE habits
+          SET current_streak=$1, longest_streak=GREATEST(longest_streak,$1), shields=$2
+          WHERE id=$3
+        `, [newStreak, newShields, habit.id]);
+
+        const statLevelCase = getLevelFromXP(0);
+        await db.exec(`
+          UPDATE stats SET xp=xp+${statXp}, level=${statLevelCase.level}, dormant=false
+          WHERE stat_key='${habit.stat_key}';
+          UPDATE master_progress SET total_xp=total_xp+${masterXp} WHERE id=1;
+        `);
+
+        const statRow = await db.query<{ xp: number }>(`SELECT xp FROM stats WHERE stat_key='${habit.stat_key}'`);
+        const statNewLevel = getLevelFromXP(statRow.rows[0]?.xp ?? 0).level;
+        await db.exec(`UPDATE stats SET level=${statNewLevel} WHERE stat_key='${habit.stat_key}'`);
+
+        const masterRow = await db.query<{ total_xp: number }>(`SELECT total_xp FROM master_progress WHERE id=1`);
+        const masterNewLevel = getLevelFromXP(masterRow.rows[0]?.total_xp ?? 0).level;
+        await db.exec(`UPDATE master_progress SET level=${masterNewLevel} WHERE id=1`);
+
+        for (const bonus of bonuses) {
+          const half = Math.floor(bonus.amount / 2);
+          await db.exec(`
+            UPDATE stats SET xp=xp+${half} WHERE stat_key='${habit.stat_key}';
+            UPDATE master_progress SET total_xp=total_xp+${bonus.amount - half} WHERE id=1;
+          `);
+        }
+
+        await db.query(`
+          INSERT INTO xp_log (id, source, source_id, tier, entity_id, amount, notes, logged_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+        `, [crypto.randomUUID(), 'habit', habit.id, 'stat', habit.stat_key, totalXp, `Habit streak: ${newStreak}`]);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['habit', habitId] });
+      queryClient.invalidateQueries({ queryKey: ['habit-logs', habitId] });
+      queryClient.invalidateQueries({ queryKey: ['habit-logs-today-map'] });
+      queryClient.invalidateQueries({ queryKey: ['habits'] });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async (updates: Partial<Habit> & { id: string }) => {
+      const db = await getDB();
+      const sets: string[] = [];
+      const values: any[] = [];
+      let idx = 1;
+      if (updates.name !== undefined) { sets.push(`name=$${idx++}`); values.push(updates.name); }
+      if (updates.stat_key !== undefined) { sets.push(`stat_key=$${idx++}`); values.push(updates.stat_key); }
+      if (updates.frequency_type !== undefined) { sets.push(`frequency_type=$${idx++}`); values.push(updates.frequency_type); }
+      if (updates.interval_days !== undefined) { sets.push(`interval_days=$${idx++}`); values.push(updates.interval_days); }
+      if (updates.specific_days !== undefined) { sets.push(`specific_days=$${idx++}::jsonb`); values.push(JSON.stringify(updates.specific_days)); }
+      if (updates.target_type !== undefined) { sets.push(`target_type=$${idx++}`); values.push(updates.target_type); }
+      if (updates.target_value !== undefined) { sets.push(`target_value=$${idx++}`); values.push(updates.target_value); }
+      if (updates.reminder_time !== undefined) { sets.push(`reminder_time=$${idx++}`); values.push(updates.reminder_time); }
+      if (updates.streak_goal !== undefined) { sets.push(`streak_goal=$${idx++}`); values.push(updates.streak_goal); }
+      if (updates.streak_reward !== undefined) { sets.push(`streak_reward=$${idx++}`); values.push(updates.streak_reward); }
+      if (sets.length === 0) return;
+      values.push(updates.id);
+      await db.query(`UPDATE habits SET ${sets.join(', ')} WHERE id=$${idx}`, values);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['habits'] });
+      queryClient.invalidateQueries({ queryKey: ['habit', habitId] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (habitId: string) => {
+      const db = await getDB();
+      await db.query(`DELETE FROM habits WHERE id=$1`, [habitId]);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['habits'] }),
+  });
+
+  const retireMutation = useMutation({
+    mutationFn: async (habitId: string) => {
+      const db = await getDB();
+      await db.query(`UPDATE habits SET status='RETIRED' WHERE id=$1`, [habitId]);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['habits'] });
+      queryClient.invalidateQueries({ queryKey: ['habit', habitId] });
+    },
+  });
+
+  const reactivateMutation = useMutation({
+    mutationFn: async (habitId: string) => {
+      const db = await getDB();
+      await db.query(`UPDATE habits SET status='ACTIVE' WHERE id=$1`, [habitId]);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['habits'] });
+      queryClient.invalidateQueries({ queryKey: ['habit', habitId] });
+    },
+  });
+
+  const pauseMutation = useMutation({
+    mutationFn: async ({ habitId, until }: { habitId: string; until: string }) => {
+      const db = await getDB();
+      await db.query(`UPDATE habits SET status='PAUSED', paused_until=$1 WHERE id=$2`, [until, habitId]);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['habits'] });
+      queryClient.invalidateQueries({ queryKey: ['habit', habitId] });
+    },
+  });
+
+  const unpauseMutation = useMutation({
+    mutationFn: async (habitId: string) => {
+      const db = await getDB();
+      await db.query(`UPDATE habits SET status='ACTIVE', paused_until=NULL WHERE id=$1`, [habitId]);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['habits'] });
+      queryClient.invalidateQueries({ queryKey: ['habit', habitId] });
+    },
+  });
+
+  // CONDITIONAL RETURNS AFTER ALL HOOKS - exactly like ToolDetailDrawer
+  if (isLoading) return <div style={{ padding: 20, fontFamily: mono, fontSize: 11, color: dim }}>LOADING...</div>;
+  if (!habit) return <div style={{ padding: 20, fontFamily: mono, fontSize: 11, color: dim }}>HABIT NOT FOUND</div>;
 
   const startEdit = () => {
     setEditName(habit.name);
@@ -73,7 +289,7 @@ export default function HabitDrawer({ habit, onClose }: HabitDrawerProps) {
   };
 
   const handleUpdate = async () => {
-    await updateHabit({
+    await updateMutation.mutateAsync({
       id: habit.id,
       name: editName.trim(),
       stat_key: editStatKey,
@@ -90,7 +306,7 @@ export default function HabitDrawer({ habit, onClose }: HabitDrawerProps) {
   };
 
   const handleRetire = async () => {
-    await retireHabit(habit.id);
+    await retireMutation.mutateAsync(habit.id);
     onClose();
   };
 
@@ -102,7 +318,7 @@ export default function HabitDrawer({ habit, onClose }: HabitDrawerProps) {
       : undefined;
     
     try {
-      const result = await checkIn({ habit, value });
+      await checkInMutation.mutateAsync({ habit, value, cutoffTime });
       setQuantityValue('');
     } catch (e) {
       console.error('Check-in failed:', e);
@@ -110,23 +326,23 @@ export default function HabitDrawer({ habit, onClose }: HabitDrawerProps) {
   };
 
   const handleDelete = async () => {
-    await deleteHabit(habit.id);
+    await deleteMutation.mutateAsync(habit.id);
     onClose();
   };
 
   const handlePause = async () => {
     if (!pauseDate) return;
-    await pauseHabit({ habitId: habit.id, until: new Date(pauseDate).toISOString() });
+    await pauseMutation.mutateAsync({ habitId: habit.id, until: new Date(pauseDate).toISOString() });
     onClose();
   };
 
   const handleUnpause = async () => {
-    await unpauseHabit(habit.id);
+    await unpauseMutation.mutateAsync(habit.id);
     onClose();
   };
 
   const handleReactivate = async () => {
-    await reactivateHabit(habit.id);
+    await reactivateMutation.mutateAsync(habit.id);
     onClose();
   };
 
@@ -149,6 +365,8 @@ export default function HabitDrawer({ habit, onClose }: HabitDrawerProps) {
   const freqLabel = habit.frequency_type === 'DAILY' ? 'Every day'
     : habit.frequency_type === 'INTERVAL' ? `Every ${habit.interval_days} days`
     : (['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].filter((_, i) => habit.specific_days?.includes(i))).join(' / ');
+  const createdLabel = habit.created_at ? normalizeHabitDate(habit.created_at as string | Date) : '—';
+  const dueDateLabel = getNextDueDateLabel(habit, isDoneToday);
 
   const segBtn = (active: boolean, onClick: () => void) => (
     <button onClick={onClick} style={{
@@ -290,40 +508,47 @@ export default function HabitDrawer({ habit, onClose }: HabitDrawerProps) {
         </div>
 
         {/* Today's Progress for QUANTITATIVE habits */}
-        {habit.target_type === 'QUANTITATIVE' && habit.target_value && (
-          <div style={{ padding: 14, background: bgT, border: `1px solid ${adim}`, marginTop: 10 }}>
-            <div style={{ fontSize: 10, color: acc, fontFamily: vt, letterSpacing: 1, marginBottom: 8 }}>
-              // TODAY'S PROGRESS
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ 
-                flex: 1, 
-                height: 8, 
-                background: 'hsl(var(--bg-primary))', 
-                border: `1px solid ${adim}`,
-                position: 'relative',
-              }}>
-                <div style={{ 
-                  width: `${Math.min(100, (todayMap[habit.id]?.value ?? 0) / habit.target_value * 100)}%`, 
-                  height: '100%', 
-                  background: (todayMap[habit.id]?.completed ?? false) ? green : acc,
-                }} />
+        {habit.target_type === 'QUANTITATIVE' && habit.target_value && (() => {
+          const currentVal = todayMap[habit.id]?.value ?? 0;
+          const targetVal = habit.target_value;
+          const excess = currentVal > targetVal ? currentVal - targetVal : 0;
+          const isOver = excess > 0;
+          return (
+            <div style={{ padding: 14, background: bgT, border: `1px solid ${adim}`, marginTop: 10 }}>
+              <div style={{ fontSize: 10, color: acc, fontFamily: vt, letterSpacing: 1, marginBottom: 8 }}>
+                // TODAY'S PROGRESS
               </div>
-              <span style={{ 
-                fontFamily: vt, 
-                fontSize: 18, 
-                color: (todayMap[habit.id]?.completed ?? false) ? green : acc,
-              }}>
-                {todayMap[habit.id]?.value ?? 0} / {habit.target_value}
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ 
+                  flex: 1, 
+                  height: 8, 
+                  background: 'hsl(var(--bg-primary))', 
+                  border: `1px solid ${adim}`,
+                  position: 'relative',
+                }}>
+                  <div style={{ 
+                    width: `${Math.min(100, currentVal / targetVal * 100)}%`, 
+                    height: '100%', 
+                    background: (todayMap[habit.id]?.completed ?? false) ? green : acc,
+                  }} />
+                </div>
+                <span style={{ 
+                  fontFamily: vt, 
+                  fontSize: 18, 
+                  color: (todayMap[habit.id]?.completed ?? false) || isOver ? green : acc,
+                }}>
+                  {currentVal} / {targetVal}
+                  {isOver && <span style={{ fontSize: 12, color: green }}> (+{excess})</span>}
+                </span>
+              </div>
+              <div style={{ fontSize: 9, color: dim, marginTop: 6, textAlign: 'center' }}>
+                {(todayMap[habit.id]?.completed ?? false) 
+                  ? (isOver ? `+${excess} over goal!` : '✓ GOAL REACHED') 
+                  : `${targetVal - currentVal} remaining to goal`}
+              </div>
             </div>
-            <div style={{ fontSize: 9, color: dim, marginTop: 6, textAlign: 'center' }}>
-              {(todayMap[habit.id]?.completed ?? false) 
-                ? '✓ GOAL REACHED' 
-                : `${habit.target_value - (todayMap[habit.id]?.value ?? 0)} remaining to goal`}
-            </div>
-          </div>
-        )}
+          );
+        })()}
 
         {editing ? (
           /* Inline Edit Form */
@@ -432,6 +657,7 @@ export default function HabitDrawer({ habit, onClose }: HabitDrawerProps) {
                 ['REMINDER', habit.reminder_time || '—'],
                 ['GOAL',     habit.streak_goal ? `${habit.streak_goal} days (+${habit.streak_reward} XP)` : '—'],
                 ['CREATED',  habit.created_at ? (typeof habit.created_at === 'string' ? habit.created_at.slice(0, 10) : new Date(habit.created_at).toISOString().slice(0, 10)) : '—'],
+                ['DUE DATE', dueDateLabel],
               ].map(([k, v]) => (
                 <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}>
                   <span style={{ color: adim }}>{k}:</span>

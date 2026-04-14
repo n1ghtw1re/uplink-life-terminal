@@ -26,7 +26,7 @@ const CharSheetPage1 = ({ onSkillClick }: CharSheetPage1Props) => {
   const [editValue, setEditValue] = useState('');
   const [skillTab, setSkillTab] = useState<StatTabKey>('ALL');
   const [arsenalTab, setArsenalTab] = useState<'tools' | 'augments'>('tools');
-  const [specTab, setSpecTab] = useState<'courses' | 'projects' | 'media'>('courses');
+  const [specTab, setSpecTab] = useState<'courses' | 'projects' | 'media' | 'vault'>('courses');
   const [showImageModal, setShowImageModal] = useState(false);
 
   const { data: tools } = useQuery({
@@ -82,6 +82,28 @@ const CharSheetPage1 = ({ onSkillClick }: CharSheetPage1Props) => {
         `SELECT id, title, type, status FROM media ORDER BY created_at DESC LIMIT 5;`
       );
       return res.rows;
+    },
+  });
+
+  const { data: recentVault } = useQuery({
+    queryKey: ['vault-recent'],
+    queryFn: async () => {
+      const db = await getDB();
+      const res = await db.query<{ id: string; title: string; category: string; completed_date: string }>(
+        `SELECT id, title, category, completed_date FROM vault_items ORDER BY created_at DESC LIMIT 5;`
+      );
+      return res.rows;
+    },
+  });
+
+  const { data: firstSessionDate } = useQuery({
+    queryKey: ['first-session-date'],
+    queryFn: async () => {
+      const db = await getDB();
+      const res = await db.query<{ logged_at: string }>(
+        `SELECT logged_at FROM sessions ORDER BY logged_at ASC LIMIT 1;`
+      );
+      return res.rows[0]?.logged_at;
     },
   });
 
@@ -234,6 +256,21 @@ const CharSheetPage1 = ({ onSkillClick }: CharSheetPage1Props) => {
                 <button onClick={startDesignationEdit} style={{ background: 'transparent', border: `1px solid ${accDim}`, color: accDim, fontSize: 9, padding: '2px 8px', cursor: 'pointer' }}>+ SET</button>
               )}
             </div>
+
+            {/* Program Initialized */}
+            <div style={{ marginTop: 8 }}>
+              <div style={{ fontSize: 9, color: accDim, marginBottom: 2 }}>PROGRAM_INITIALIZED</div>
+              {firstSessionDate ? (
+                <span style={{ fontSize: 11, color: dim }}>
+                  {(() => {
+                    const d = new Date(firstSessionDate);
+                    return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;
+                  })()}
+                </span>
+              ) : (
+                <span style={{ fontSize: 9, color: accDim }}>—</span>
+              )}
+            </div>
           </div>
         </div>
 
@@ -256,7 +293,7 @@ const CharSheetPage1 = ({ onSkillClick }: CharSheetPage1Props) => {
               <ProgressBar value={s.xpInLevel} max={s.xpForLevel || 1} width="100%" height={4} />
               {!s.dormant && (
                 <div style={{ fontSize: 8, color: dim, marginTop: 2 }}>
-                  {s.xp.toLocaleString()} / {s.xpForLevel.toLocaleString()} XP
+                  {s.xp.toLocaleString()} / {getXPDisplayValues(s.xp).totalXPToNextLevel.toLocaleString()} XP
                 </div>
               )}
             </div>
@@ -365,10 +402,10 @@ const CharSheetPage1 = ({ onSkillClick }: CharSheetPage1Props) => {
           </div>
         </div>
 
-        {/* Course / Projects / Media */}
+        {/* Course / Projects / Media / Vault */}
         <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
-            {(['courses', 'projects', 'media'] as const).map(t => (
+            {(['courses', 'projects', 'media', 'vault'] as const).map(t => (
               <button
                 key={t}
                 onClick={() => setSpecTab(t)}
@@ -423,19 +460,18 @@ const CharSheetPage1 = ({ onSkillClick }: CharSheetPage1Props) => {
                 ))
               )
             )}
-          </div>
-        </div>
-
-        {/* Streak */}
-        <div style={{ marginTop: 8, padding: 8, background: bgT, border: `1px solid ${accDim}` }}>
-          <div style={{ fontSize: 9, color: accDim, marginBottom: 4 }}>STREAK</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontFamily: mono, fontSize: 14, color: acc }}>{op?.streak || 0} DAYS</span>
-            <div style={{ display: 'flex', gap: 4 }}>
-              {[true, true, false].map((active, i) => (
-                <span key={i} style={{ fontSize: 12, color: active ? acc : accDim }}>{active ? '▣' : '□'}</span>
-              ))}
-            </div>
+            {specTab === 'vault' && (
+              recentVault?.length === 0 ? (
+                <div style={{ fontSize: 9, color: dim }}>No vault items yet</div>
+              ) : (
+                recentVault?.map(v => (
+                  <div key={v.id} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 9, gap: 8 }}>
+                    <span style={{ color: dim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.title}</span>
+                    <span style={{ color: acc, flexShrink: 0 }}>{v.category}</span>
+                  </div>
+                ))
+              )
+            )}
           </div>
         </div>
       </div>

@@ -4,6 +4,7 @@
 // ============================================================
 import { useState } from 'react';
 import { useHabits, useTodayLogs } from '@/hooks/useHabits';
+import { useOperator } from '@/hooks/useOperator';
 import { STAT_META, StatKey, Habit } from '@/types';
 import WidgetWrapper from '../WidgetWrapper';
 import Modal from '../Modal';
@@ -38,8 +39,10 @@ interface Props {
 }
 
 export default function CheckinWidget({ onClose, onFullscreen, isFullscreen, isModal }: Props) {
-  const { habits, isLoading, checkIn } = useHabits();
-  const { data: todayMap = {} } = useTodayLogs();
+  const { data: operator } = useOperator();
+  const cutoffTime = operator?.habitCutoffTime;
+  const { habits, isLoading, checkIn } = useHabits(cutoffTime);
+  const { data: todayMap = {} } = useTodayLogs(cutoffTime);
   const [statFilter, setStatFilter] = useState<FilterKey>('all');
   const [showAdd, setShowAdd] = useState(false);
   const [quantityValues, setQuantityValues] = useState<Record<string, number | ''>>({});
@@ -47,12 +50,9 @@ export default function CheckinWidget({ onClose, onFullscreen, isFullscreen, isM
   const activeHabits = habits.filter(h => h.status === 'ACTIVE');
   
   const displayHabits = activeHabits
-    .filter(h => statFilter === 'all' || h.stat_key === statFilter)
-    .slice(0, 8);
+    .filter(h => statFilter === 'all' || h.stat_key === statFilter);
 
   const handleCheckIn = async (habit: Habit) => {
-    if (todayMap[habit.id]?.completed) return;
-    
     const value = habit.target_type === 'QUANTITATIVE' && habit.target_value
       ? (Number(quantityValues[habit.id]) || 1)
       : undefined;
@@ -118,6 +118,9 @@ export default function CheckinWidget({ onClose, onFullscreen, isFullscreen, isM
         <div>
           {displayHabits.map(habit => {
             const isDone = todayMap[habit.id]?.completed;
+            const currentValue = todayMap[habit.id]?.value ?? 0;
+            const targetValue = habit.target_value ?? 1;
+            const excess = currentValue > targetValue ? currentValue - targetValue : 0;
             const statIcon = STAT_META[habit.stat_key as StatKey]?.icon ?? '?';
             const isQuantity = habit.target_type === 'QUANTITATIVE' && habit.target_value;
             const quantityVal = quantityValues[habit.id] ?? '';
@@ -125,12 +128,12 @@ export default function CheckinWidget({ onClose, onFullscreen, isFullscreen, isM
             return (
               <div 
                 key={habit.id}
-                onClick={() => !isDone && handleCheckIn(habit)}
+                onClick={() => handleCheckIn(habit)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 8,
                   marginBottom: 6,
                   padding: '4px 6px',
-                  cursor: isDone ? 'default' : 'pointer',
+                  cursor: isQuantity ? 'default' : 'pointer',
                   background: isDone ? 'rgba(68,255,136,0.05)' : 'transparent',
                   border: `1px solid ${isDone ? 'rgba(68,255,136,0.3)' : 'transparent'}`,
                 }}
@@ -153,11 +156,15 @@ export default function CheckinWidget({ onClose, onFullscreen, isFullscreen, isM
                   whiteSpace: 'nowrap', fontFamily: mono,
                 }}>
                   {habit.name}
-                  {isQuantity && !isDone && <span style={{ color: adim, marginLeft: 4 }}>({habit.target_value})</span>}
+                  {isQuantity && (
+                    <span style={{ color: adim, marginLeft: 4 }}>
+                      ({currentValue}/{targetValue}{excess > 0 && <span style={{ color: green }}> +{excess}</span>})
+                    </span>
+                  )}
                 </span>
 
                 {/* Quantity input for QUANTITATIVE */}
-                {isQuantity && !isDone && (
+                {isQuantity && (
                   <input
                     type="number"
                     min={1}
@@ -165,6 +172,7 @@ export default function CheckinWidget({ onClose, onFullscreen, isFullscreen, isM
                     onChange={e => handleQuantityChange(habit.id, e.target.value === '' ? '' : Number(e.target.value))}
                     onKeyDown={e => { if (e.key === 'Enter') handleCheckIn(habit); }}
                     placeholder="#"
+                    onClick={e => e.stopPropagation()}
                     style={{
                       width: 40,
                       padding: '2px 4px',

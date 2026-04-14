@@ -8,9 +8,13 @@ import ToolDetailDrawer from './ToolDetailDrawer';
 import NoteDetailDrawer from './NoteDetailDrawer';
 import ResourceDetailDrawer from './ResourceDetailDrawer';
 import HabitDrawer from './HabitDrawer';
+import VaultItemDrawer from './VaultItemDrawer';
+import IngredientDrawer from './IngredientDrawer';
+import RecipeDrawer from './RecipeDrawer';
+import IntakeDrawer from './IntakeDrawer';
 
 export interface DrawerItem {
-  type: 'skill' | 'course' | 'book' | 'project' | 'cert' | 'tool' | 'augment' | 'resource' | 'media' | 'note' | 'habit';
+  type: 'skill' | 'course' | 'book' | 'project' | 'cert' | 'tool' | 'augment' | 'resource' | 'media' | 'note' | 'habit' | 'vault' | 'ingredient' | 'recipe' | 'intake';
   id: string;
   habitData?: any; // For passing full habit object
 }
@@ -83,9 +87,13 @@ const DetailDrawer = ({ open, item, onClose, onOpenLog }: DetailDrawerProps) => 
       {item?.type === 'tool'    && <ToolDetailDrawer toolId={item.id} onClose={onClose} />}
       {item?.type === 'book'    && <MediaDetailDrawer mediaId={item.id} onClose={onClose} />}
       {item?.type === 'project'  && <ProjectDetailDrawer projectId={item.id} onClose={onClose} />}
+      {item?.type === 'vault' && <VaultItemDrawer itemId={item.id} onClose={onClose} />}
+      {item?.type === 'ingredient' && <IngredientDrawer ingredientId={item.id} onClose={onClose} />}
+      {item?.type === 'recipe' && <RecipeDrawer recipeId={item.id} onClose={onClose} />}
+      {item?.type === 'intake' && <IntakeDrawer logId={item.id} onClose={onClose} />}
       {item?.type === 'note'   && <NoteDetailDrawer noteId={item.id} embedded onClose={onClose} />}
       {item?.type === 'resource' && <ResourceDetailDrawer resourceId={item.id} onClose={onClose} />}
-      {item?.type === 'habit' && item.habitData && <HabitDrawer habit={item.habitData} onClose={onClose} />}
+      {item?.type === 'habit' && item.id && <HabitDrawer habitId={item.id} onClose={onClose} />}
       {!item?.type && null}
       </div>
     </div>

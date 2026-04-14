@@ -54,6 +54,7 @@ export default function AddResourceModal({ onClose }: Props) {
       );
 
       queryClient.invalidateQueries({ queryKey: ['resources'] });
+      queryClient.invalidateQueries({ queryKey: ['terminal-resources-list'] });
       toast({ title: '✓ RESOURCE ADDED', description: name.trim() });
       onClose();
     } catch (err) {

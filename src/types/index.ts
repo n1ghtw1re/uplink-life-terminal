@@ -78,6 +78,11 @@ export type ResourceStatus = 'UNREAD' | 'READ' | 'SAVED';
 export type SocialStatus = 'ACTIVE' | 'DORMANT' | 'PRIVATE';
 export type HabitFrequency = 'daily' | 'weekly';
 export type ProjectType = 'software' | 'creative' | 'business' | 'physical' | 'research' | 'other';
+export type VaultCategory = 'SIGNAL' | 'FREQUENCY' | 'ARCHIVE' | 'MATTER' | 'PULSE';
+export type IngredientSource = 'USDA' | 'CUSTOM';
+export type RecipeCategory = 'Breakfast' | 'Lunch' | 'Dinner' | 'Snacks' | 'Drinks';
+export type IntakeSourceKind = 'INGREDIENT' | 'RECIPE';
+export type MealLabel = 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK';
 
 // ─── CONSTANTS ───────────────────────────────────────────────
 
@@ -333,11 +338,12 @@ export interface Habit {
   id: string;
   name: string;
   stat_key: StatKey;
-  frequency_type: 'DAILY' | 'INTERVAL' | 'SPECIFIC_DAYS';
+  frequency_type: 'DAILY' | 'INTERVAL' | 'SPECIFIC_DAYS' | 'TARGET';
   interval_days: number | null;
   specific_days: number[] | null;
   target_type: 'BINARY' | 'QUANTITATIVE';
   target_value: number | null;
+  target_period_days: number | null;
   reminder_time: string | null;
   streak_goal: number | null;
   streak_reward: number;
@@ -357,6 +363,235 @@ export interface HabitLog {
   value: number | null;
   xp_awarded: number;
   logged_at: string;
+}
+
+export type PlannerRecurrenceType = 'NONE' | 'DAILY' | 'WEEKLY' | 'MONTHLY';
+export type PlannerRecurrenceEndType = 'NEVER' | 'ON_DATE' | 'AFTER_COUNT';
+
+export interface PlannerRecurrenceRule {
+  type: PlannerRecurrenceType;
+  interval: number;
+  days_of_week: number[] | null;
+  end_type: PlannerRecurrenceEndType | null;
+  end_date: string | null;
+  count: number | null;
+}
+
+export interface PlannerEntry {
+  id: string;
+  title: string;
+  date: string;
+  time: string | null;
+  completed: boolean;
+  recurrence_type: PlannerRecurrenceType;
+  recurrence_interval: number;
+  recurrence_days_of_week: number[] | null;
+  recurrence_end_type: PlannerRecurrenceEndType | null;
+  recurrence_end_date: string | null;
+  recurrence_count: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PlannerOccurrenceException {
+  id: string;
+  entry_id: string;
+  occurrence_date: string;
+  title: string | null;
+  date: string | null;
+  time: string | null;
+  completed: boolean | null;
+  is_deleted: boolean;
+  created_at: string;
+}
+
+export interface PlannerOccurrence {
+  entry_id: string;
+  occurrence_date: string;
+  title: string;
+  date: string;
+  time: string | null;
+  completed: boolean;
+  isRecurring: boolean;
+  sourceEntry: PlannerEntry;
+  exception: PlannerOccurrenceException | null;
+}
+
+export interface VaultSignalMetadata {
+  version?: string | null;
+  platform?: string | null;
+  stack?: string | null;
+  link_url?: string | null;
+}
+
+export interface VaultFrequencyMetadata {
+  duration?: string | null;
+  format?: string | null;
+  collaborators?: string | null;
+  link_url?: string | null;
+}
+
+export interface VaultArchiveMetadata {
+  word_count?: number | null;
+  page_count?: number | null;
+  publisher?: string | null;
+  edition?: string | null;
+  link_url?: string | null;
+}
+
+export interface VaultMatterMetadata {
+  materials?: string | null;
+  dimensions?: string | null;
+  weight?: string | null;
+}
+
+export interface VaultPulseMetadata {
+  venue?: string | null;
+  event_date?: string | null;
+  audience_size?: number | null;
+  role?: string | null;
+}
+
+export type VaultMetadata =
+  | VaultSignalMetadata
+  | VaultFrequencyMetadata
+  | VaultArchiveMetadata
+  | VaultMatterMetadata
+  | VaultPulseMetadata;
+
+export interface VaultItem {
+  id: string;
+  title: string;
+  category: VaultCategory;
+  completed_date: string;
+  notes: string | null;
+  metadata: VaultMetadata | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SleepSession {
+  id: string;
+  start_time: string;
+  end_time: string;
+  duration_minutes: number;
+  quality: number | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RecoverySettings {
+  id: number;
+  daily_goal_minutes: number;
+}
+
+export interface SleepDaySummary {
+  anchor_date: string;
+  total_minutes: number;
+  session_count: number;
+  avg_quality: number | null;
+  sessions: SleepSession[];
+}
+
+export interface Ingredient {
+  id: string;
+  name: string;
+  category: string;
+  source: IngredientSource;
+  calories: number | null;
+  protein_g: number | null;
+  carbs_g: number | null;
+  fat_g: number | null;
+  notes: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface RecipeIngredient {
+  id: string;
+  recipe_id: string;
+  ingredient_id: string | null;
+  ingredient_name: string;
+  ingredient_source: IngredientSource | null;
+  input_text: string | null;
+  grams: number;
+  calories_total: number;
+  protein_g_total: number;
+  carbs_g_total: number;
+  fat_g_total: number;
+  sort_order: number;
+}
+
+export interface RecipeStep {
+  id: string;
+  recipe_id: string;
+  step_number: number;
+  instruction_text: string;
+}
+
+export interface Recipe {
+  id: string;
+  name: string;
+  category: RecipeCategory;
+  is_prepared_meal: boolean;
+  servings: number;
+  total_calories: number;
+  total_protein_g: number;
+  total_carbs_g: number;
+  total_fat_g: number;
+  per_serving_calories: number;
+  per_serving_protein_g: number;
+  per_serving_carbs_g: number;
+  per_serving_fat_g: number;
+  created_at: string;
+  updated_at: string;
+  ingredients?: RecipeIngredient[];
+  steps?: RecipeStep[];
+}
+
+export interface IntakeSettings {
+  id: number;
+  daily_calorie_goal: number;
+  protein_percent: number;
+  carbs_percent: number;
+  fat_percent: number;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface IntakeLog {
+  id: string;
+  logged_at: string;
+  anchor_date: string;
+  meal_label: MealLabel | null;
+  notes: string | null;
+  source_kind: IntakeSourceKind;
+  source_id: string | null;
+  source_name: string;
+  source_origin: IngredientSource | 'RECIPE' | null;
+  grams: number | null;
+  servings: number | null;
+  input_text: string | null;
+  calories: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IntakeDaySummary {
+  anchor_date: string;
+  logs: IntakeLog[];
+  total_calories: number;
+  total_protein_g: number;
+  total_carbs_g: number;
+  total_fat_g: number;
+  protein_percent_actual: number;
+  carbs_percent_actual: number;
+  fat_percent_actual: number;
+  calorie_goal_hit: boolean;
 }
 
 export interface Goal {

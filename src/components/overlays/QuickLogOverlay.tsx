@@ -659,7 +659,7 @@ export default function QuickLogOverlay({ open, onClose }: Props) {
       );
 
       // Award XP
-      const xpResult = await awardSessionXP({ sessionId, skillId, durationMinutes: effectiveDuration, statSplit, toolIds, augmentIds: augIds, isLegacy });
+      const xpResult = await awardSessionXP({ sessionId, skillId, skillName, durationMinutes: effectiveDuration, statSplit, toolIds, augmentIds: augIds, isLegacy });
 
       if (toolIds.length > 0 && xpResult.perToolXP > 0) {
         queryClient.setQueryData(['tools'], (prev: any[] | undefined) =>

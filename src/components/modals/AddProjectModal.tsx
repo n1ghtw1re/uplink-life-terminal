@@ -1,8 +1,11 @@
 // src/components/modals/AddProjectModal.tsx
 import { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { getDB } from '@/lib/db';
 import { toast } from '@/hooks/use-toast';
+import { SortableObjectiveInput } from '@/components/ui/SortableObjective';
 
 const mono = "'IBM Plex Mono', monospace";
 const acc  = 'hsl(var(--accent))';
@@ -91,6 +94,8 @@ function LinkedIdsInput({ label, tableName, nameField, subField, selectedIds, on
 
 interface Props { onClose: () => void; }
 
+interface ObjectiveItem { id: string; value: string; }
+
 export default function AddProjectModal({ onClose }: Props) {
   const queryClient               = useQueryClient();
   const [name, setName]           = useState('');
@@ -99,16 +104,32 @@ export default function AddProjectModal({ onClose }: Props) {
   const [url, setUrl]             = useState('');
   const [description, setDescription] = useState('');
   const [notes, setNotes]         = useState('');
-  const [objectives, setObjectives] = useState<string[]>(['']);
+  const [objectives, setObjectives] = useState<ObjectiveItem[]>([{ id: crypto.randomUUID(), value: '' }]);
   const [toolIds, setToolIds]     = useState<string[]>([]);
   const [augIds, setAugIds]       = useState<string[]>([]);
   const [mediaIds, setMediaIds]   = useState<string[]>([]);
   const [courseIds, setCourseIds] = useState<string[]>([]);
   const [saving, setSaving]       = useState(false);
 
-  const addObjective    = () => setObjectives(p => [...p, '']);
-  const updateObjective = (i: number, v: string) => setObjectives(p => p.map((o, idx) => idx === i ? v : o));
-  const removeObjective = (i: number) => setObjectives(p => p.filter((_, idx) => idx !== i));
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  const addObjective    = () => setObjectives(p => [...p, { id: crypto.randomUUID(), value: '' }]);
+  const updateObjective = (id: string, v: string) => setObjectives(p => p.map(o => o.id === id ? { ...o, value: v } : o));
+  const removeObjective = (id: string) => setObjectives(p => p.filter(o => o.id !== id));
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      setObjectives(items => {
+        const oldIndex = items.findIndex(i => i.id === active.id);
+        const newIndex = items.findIndex(i => i.id === over.id);
+        return arrayMove(items, oldIndex, newIndex);
+      });
+    }
+  };
 
   const handleSubmit = async () => {
     if (!name.trim()) return;
@@ -126,7 +147,7 @@ export default function AddProjectModal({ onClose }: Props) {
          JSON.stringify(toolIds), JSON.stringify(augIds),
          JSON.stringify(mediaIds), JSON.stringify(courseIds), now]
       );
-      const validObjs = objectives.map((o, i) => ({ title: o.trim(), sort_order: i })).filter(o => o.title.length > 0);
+       const validObjs = objectives.map((o, i) => ({ title: o.value.trim(), sort_order: i })).filter(o => o.title.length > 0);
       for (const obj of validObjs) {
         await db.query(
           `INSERT INTO project_milestones (id,project_id,title,sort_order) VALUES ($1,$2,$3,$4)`,
@@ -134,6 +155,7 @@ export default function AddProjectModal({ onClose }: Props) {
         );
       }
       queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ['terminal-projects-list'] });
       toast({ title: '✓ PROJECT ADDED', description: name.trim() });
       onClose();
     } catch (err) {
@@ -199,18 +221,22 @@ export default function AddProjectModal({ onClose }: Props) {
 
       {/* Objectives */}
       <div>{fieldLabel('OBJECTIVES', true)}
-        {objectives.map((obj, i) => (
-          <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-            <input className="crt-input" style={{ flex: 1 }} placeholder={`Objective ${i + 1}...`}
-              value={obj} onChange={e => updateObjective(i, e.target.value)} />
-            {objectives.length > 1 && (
-              <button onClick={() => removeObjective(i)} style={{ background: 'transparent', border: '1px solid rgba(153,104,0,0.4)', color: dim, fontFamily: mono, fontSize: 11, padding: '0 8px', cursor: 'pointer' }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = '#ff4400'; e.currentTarget.style.color = '#ff4400'; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(153,104,0,0.4)'; e.currentTarget.style.color = dim; }}>×</button>
-            )}
-          </div>
-        ))}
-        <button onClick={addObjective} style={{ background: 'transparent', border: 'none', color: adim, fontFamily: mono, fontSize: 9, cursor: 'pointer', padding: 0, letterSpacing: 1 }}
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={objectives.map(o => o.id)} strategy={verticalListSortingStrategy}>
+            {objectives.map((obj, i) => (
+              <SortableObjectiveInput
+                key={obj.id}
+                id={obj.id}
+                value={obj.value}
+                index={i}
+                onChange={(v) => updateObjective(obj.id, v)}
+                onDelete={() => removeObjective(obj.id)}
+                canDelete={objectives.length > 1}
+              />
+            ))}
+          </SortableContext>
+        </DndContext>
+        <button onClick={addObjective} style={{ background: 'transparent', border: 'none', color: adim, fontFamily: mono, fontSize: 9, cursor: 'pointer', padding: 0, letterSpacing: 1, marginTop: 4 }}
           onMouseEnter={e => e.currentTarget.style.color = acc}
           onMouseLeave={e => e.currentTarget.style.color = adim}>+ ADD OBJECTIVE</button>
       </div>

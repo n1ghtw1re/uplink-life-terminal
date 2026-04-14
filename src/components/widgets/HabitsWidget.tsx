@@ -3,6 +3,7 @@
 // ============================================================
 import { useState } from 'react';
 import { useHabits, useTodayLogs } from '@/hooks/useHabits';
+import { useOperator } from '@/hooks/useOperator';
 import { STAT_META, StatKey, Habit } from '@/types';
 import WidgetWrapper from '../WidgetWrapper';
 import Modal from '../Modal';
@@ -33,8 +34,10 @@ interface Props {
 }
 
 export default function HabitsWidget({ onClose, onFullscreen, isFullscreen, onOpenHabits, onHabitClick }: Props) {
-  const { habits, isLoading } = useHabits();
-  const { data: todayMap = {} } = useTodayLogs();
+  const { data: operator } = useOperator();
+  const cutoffTime = operator?.habitCutoffTime;
+  const { habits, isLoading } = useHabits(cutoffTime);
+  const { data: todayMap = {} } = useTodayLogs(cutoffTime);
   const [showAdd, setShowAdd]     = useState(false);
   const [filter, setFilter]       = useState<FilterKey>(() => (localStorage.getItem('widget-habits-filter') as FilterKey) || 'active');
   const [search, setSearch]       = useState('');

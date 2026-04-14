@@ -3,6 +3,7 @@
 // Modal for creating/editing notes with markdown support
 // ============================================================
 import { useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { NoteService } from '@/services/noteService';
 import { toast } from '@/hooks/use-toast';
 
@@ -20,6 +21,7 @@ const bgS = 'hsl(var(--bg-secondary))';
 const bgT = 'hsl(var(--bg-tertiary))';
 
 export default function AddNoteModal({ onClose, editingNote, onSave }: Props) {
+  const queryClient = useQueryClient();
   const [name, setName] = useState('');
   const [content, setContent] = useState('');
   const [saving, setSaving] = useState(false);
@@ -51,6 +53,8 @@ export default function AddNoteModal({ onClose, editingNote, onSave }: Props) {
           name: name.trim(),
           content: content.trim(),
         });
+        queryClient.invalidateQueries({ queryKey: ['notes'] });
+        queryClient.invalidateQueries({ queryKey: ['terminal-notes-list'] });
         toast({
           title: 'NOTE UPDATED',
           description: `"${name.trim()}" has been updated.`,
@@ -61,6 +65,8 @@ export default function AddNoteModal({ onClose, editingNote, onSave }: Props) {
           name: name.trim(),
           content: content.trim(),
         });
+        queryClient.invalidateQueries({ queryKey: ['notes'] });
+        queryClient.invalidateQueries({ queryKey: ['terminal-notes-list'] });
         toast({
           title: 'NOTE CREATED',
           description: `"${name.trim()}" has been added to your notes.`,

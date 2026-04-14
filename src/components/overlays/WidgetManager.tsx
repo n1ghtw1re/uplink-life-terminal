@@ -17,7 +17,7 @@ export interface WidgetDef {
   name: string;
   description: string;
   icon: string;
-  category: 'CORE' | 'ARSENAL' | 'TRACKING' | 'UTILITY' | 'FUTURE';
+  category: 'CORE' | 'ARSENAL' | 'BIOSYSTEM' | 'TRACKING' | 'UTILITY' | 'FUTURE';
 }
 
 export const WIDGET_REGISTRY: WidgetDef[] = [
@@ -33,20 +33,27 @@ export const WIDGET_REGISTRY: WidgetDef[] = [
   { id: 'resources', name: 'RESOURCES', icon: '▤', category: 'ARSENAL', description: 'Websites, links, and documents — filter by read/unread' },
   { id: 'augments', name: 'AUGMENTS', icon: '⬡', category: 'ARSENAL', description: 'AI augments with augmentXP progress — filter by cluster and usage' },
   { id: 'projects', name: 'PROJECTS', icon: '◎', category: 'ARSENAL', description: 'Active projects with objective progress bars and status' },
+  { id: 'vault', name: 'VAULT', icon: '[]', category: 'ARSENAL', description: 'Completed works archive with categories and metadata' },
+  { id: 'recovery', name: 'RECOVERY', icon: 'Zz', category: 'BIOSYSTEM', description: 'Sleep sessions, wake-date tracking, daily goal, and recovery streaks' },
+  { id: 'ingredients', name: 'INGREDIENTS', icon: '::', category: 'BIOSYSTEM', description: 'USDA and custom ingredients with category filters and macro details' },
+  { id: 'intake', name: 'INTAKE', icon: '++', category: 'BIOSYSTEM', description: 'Daily food logging with calorie goals, macro totals, and streak tracking' },
+  { id: 'recipes', name: 'RECIPES', icon: 'Rx', category: 'BIOSYSTEM', description: 'Saved recipes with servings, ingredient snapshots, and macro totals' },
   // Future widgets (greyed out, not yet available)
   { id: 'clock',        name: 'CLOCK',          icon: '◷', category: 'UTILITY', description: 'Live clock with timer and pomodoro' },
   { id: 'calculator',   name: 'CALCULATOR',     icon: '⌨', category: 'UTILITY', description: 'CRT-style calculator' },
   { id: 'unitConverter',name: 'UNIT CONVERTER', icon: '⇄', category: 'UTILITY', description: 'Unit conversion tool' },
   { id: 'notes',        name: 'NOTES',           icon: '📝', category: 'UTILITY', description: 'Personal notes and documentation' },
+  { id: 'planner',      name: 'PLANNER',         icon: '◷', category: 'TRACKING', description: 'Month planner, recurring events, day drawer, and today queue' },
   { id: 'goals',    name: 'GOALS',            icon: '◎', category: 'FUTURE',  description: 'Life, mid, and sprint goals — coming soon' },
   { id: 'habits',   name: 'HABITS',             icon: '✓', category: 'CORE',    description: 'Daily habit streaks and completion — filter by active, due, streak, retired' },
-  { id: 'terminal', name: 'TERMINAL',         icon: '$', category: 'FUTURE',  description: 'Command-line interface for UPLINK — coming soon' },
+  { id: 'terminal', name: 'TERMINAL',         icon: '$', category: 'UTILITY',  description: 'Command-line interface for UPLink — type help for commands' },
 ];
 
-const CATEGORIES = ['CORE', 'ARSENAL', 'UTILITY', 'TRACKING', 'FUTURE'] as const;
+const CATEGORIES = ['CORE', 'ARSENAL', 'BIOSYSTEM', 'UTILITY', 'TRACKING', 'FUTURE'] as const;
 const CATEGORY_LABELS: Record<string, string> = {
   CORE: '// CORE',
   ARSENAL: '// ARSENAL',
+  BIOSYSTEM: '// BIOSYSTEM',
   UTILITY: '// UTILITY',
   TRACKING: '// TRACKING',
   FUTURE: '// COMING SOON',

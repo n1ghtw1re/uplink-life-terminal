@@ -4,6 +4,7 @@
 // ============================================================
 import { useState } from 'react';
 import { useHabits, useTodayLogs } from '@/hooks/useHabits';
+import { useOperator, useUpdateHabitCutoffTime } from '@/hooks/useOperator';
 import { STAT_META, StatKey, Habit } from '@/types';
 import { isDueToday, daysAgoStr } from '@/services/habitService';
 import AddHabitModal from '@/components/modals/AddHabitModal';
@@ -42,8 +43,10 @@ interface HabitsPageProps { onClose: () => void; }
 
 // ── Page 1: Dashboard ─────────────────────────────────────────
 function DashboardPage({ onOpenHabit }: { onOpenHabit: (h: Habit) => void }) {
-  const { habits, todaysHabits, checkIn, isLoading } = useHabits();
-  const { data: todayMap = {} } = useTodayLogs();
+  const { data: operator } = useOperator();
+  const cutoffTime = operator?.habitCutoffTime;
+  const { habits, todaysHabits, checkIn, isLoading } = useHabits(cutoffTime);
+  const { data: todayMap = {} } = useTodayLogs(cutoffTime);
 
   const active = habits.filter(h => h.status === 'ACTIVE');
   const doneToday = todaysHabits.filter(h => todayMap[h.id]).length;
@@ -180,7 +183,9 @@ function BadgesPage() {
 
 // ── Page 3: All Habits ────────────────────────────────────────
 function AllHabitsPage({ onOpenHabit }: { onOpenHabit: (h: Habit) => void }) {
-  const { habits, isLoading } = useHabits();
+  const { data: operator } = useOperator();
+  const cutoffTime = operator?.habitCutoffTime;
+  const { habits, isLoading } = useHabits(cutoffTime);
   const [statTab, setStatTab]  = useState<StatKey | 'ALL'>('ALL');
   const [search, setSearch]    = useState('');
   const [sort, setSort]        = useState<'name' | 'streak' | 'created'>('streak');
@@ -350,6 +355,9 @@ function AllHabitsPage({ onOpenHabit }: { onOpenHabit: (h: Habit) => void }) {
 export default function HabitsPage({ onClose }: HabitsPageProps) {
   const [page, setPage]            = useState<1 | 2 | 3>(1);
   const [drawerHabit, setDrawerHabit] = useState<Habit | null>(null);
+  const { data: operator } = useOperator();
+  const updateCutoffTime = useUpdateHabitCutoffTime();
+  const cutoffTime = operator?.habitCutoffTime || '06:00';
 
   return (
     <div style={{
@@ -395,6 +403,24 @@ export default function HabitsPage({ onClose }: HabitsPageProps) {
               </button>
             );
           })}
+        </div>
+
+        {/* Cutoff Time */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 9, color: adim }}>CUTOFF:</span>
+          <input
+            type="time"
+            value={cutoffTime}
+            onChange={e => updateCutoffTime.mutate(e.target.value)}
+            style={{
+              background: bgT,
+              border: `1px solid ${adim}`,
+              color: acc,
+              fontFamily: mono,
+              fontSize: 10,
+              padding: '2px 6px',
+            }}
+          />
         </div>
 
         {/* Close */}

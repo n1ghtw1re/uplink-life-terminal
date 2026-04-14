@@ -55,6 +55,7 @@ export default function AddAugmentModal({ onClose }: Props) {
          url.trim() || null, description.trim() || null, notes.trim() || null, now]
       );
       queryClient.invalidateQueries({ queryKey: ['augments'] });
+      queryClient.invalidateQueries({ queryKey: ['terminal-augments-list'] });
       toast({ title: '✓ AUGMENT ADDED', description: name.trim() });
       onClose();
     } catch (err) {

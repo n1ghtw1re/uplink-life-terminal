@@ -103,6 +103,7 @@ const AddSkillModal = ({ onClose }: AddSkillModalProps) => {
       if (error) throw error;
       queryClient.invalidateQueries({ queryKey: ['skills'] });
       queryClient.invalidateQueries({ queryKey: ['lifepath-skills-all'] });
+      queryClient.invalidateQueries({ queryKey: ['terminal-skills-list'] });
       toast({ title: '✓ SKILL ADDED', description: name.trim() });
       onClose();
     } catch (err) {

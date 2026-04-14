@@ -144,6 +144,7 @@ const uid = () => crypto.randomUUID();
 export async function awardSessionXP(params: {
   sessionId: string;
   skillId: string;
+  skillName?: string;
   durationMinutes: number;
   statSplit: { stat: string; percent: number }[];
   toolIds: string[];
@@ -151,7 +152,7 @@ export async function awardSessionXP(params: {
   isLegacy?: boolean;
 }) {
   const db = await getDB();
-  const { sessionId, skillId, durationMinutes, statSplit, toolIds, augmentIds, isLegacy = false } = params;
+  const { sessionId, skillId, skillName = '', durationMinutes, statSplit, toolIds, augmentIds, isLegacy = false } = params;
   const factor   = isLegacy ? LEGACY_RATE : 1.0;
   const base     = durationMinutes * XP_PER_MINUTE * factor;
   const skillXP  = Math.floor(base * SKILL_SHARE);
@@ -200,16 +201,18 @@ export async function awardSessionXP(params: {
   }
 
   // XP log
+  const notesSQL = skillName ? `'${skillName.replace(/'/g, "''")}'` : 'NULL';
+  
   const logEntries = [
-    `('${uid()}', 'session', '${sessionId}', 'skill',  '${skillId}', ${skillXP}, '${now}')`,
-    `('${uid()}', 'session', '${sessionId}', 'master', 'master',     ${masterXP}, '${now}')`,
-    ...statXPMap.filter(s => s.amount > 0).map(s => `('${uid()}', 'session', '${sessionId}', 'stat', '${s.stat}', ${s.amount}, '${now}')`),
-    ...toolIds.filter(() => perTool > 0).map(id => `('${uid()}', 'session', '${sessionId}', 'tool', '${id}', ${perTool}, '${now}')`),
-    ...augmentIds.filter(() => perAug > 0).map(id => `('${uid()}', 'session', '${sessionId}', 'augment', '${id}', ${perAug}, '${now}')`),
+    `('${uid()}', 'session', '${sessionId}', 'skill',  '${skillId}', ${skillXP}, ${notesSQL}, '${now}')`,
+    `('${uid()}', 'session', '${sessionId}', 'master', 'master',     ${masterXP}, ${notesSQL}, '${now}')`,
+    ...statXPMap.filter(s => s.amount > 0).map(s => `('${uid()}', 'session', '${sessionId}', 'stat', '${s.stat}', ${s.amount}, ${notesSQL}, '${now}')`),
+    ...toolIds.filter(() => perTool > 0).map(id => `('${uid()}', 'session', '${sessionId}', 'tool', '${id}', ${perTool}, ${notesSQL}, '${now}')`),
+    ...augmentIds.filter(() => perAug > 0).map(id => `('${uid()}', 'session', '${sessionId}', 'augment', '${id}', ${perAug}, ${notesSQL}, '${now}')`),
   ];
 
   if (logEntries.length > 0) {
-    await db.exec(`INSERT INTO xp_log (id, source, source_id, tier, entity_id, amount, logged_at) VALUES ${logEntries.join(',')};`);
+    await db.exec(`INSERT INTO xp_log (id, source, source_id, tier, entity_id, amount, notes, logged_at) VALUES ${logEntries.join(',')};`);
   }
 
   return { skillXP, statXPMap, masterXP, perToolXP: perTool, perAugmentXP: perAug, masterLeveledUp, newMasterLevel, masterTotalXP };

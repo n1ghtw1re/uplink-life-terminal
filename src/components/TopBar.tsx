@@ -1,6 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOperator } from '@/hooks/useOperator';
+import { useHabits, useTodayLogs } from '@/hooks/useHabits';
+import { usePlannerToday } from '@/hooks/usePlanner';
+import { joinTopBarAlerts, buildTopBarAlerts, TOP_BAR_STABLE_MESSAGE } from '@/services/topBarAlerts';
 import ProgressBar from './ProgressBar';
 
 interface TopBarProps {
@@ -13,6 +16,10 @@ const TopBar = ({ onOpenLog, onOpenCheckin, onOpenSearch }: TopBarProps) => {
   const [time, setTime] = useState(new Date());
   const { user } = useAuth();
   const { data: op, isLoading } = useOperator(user?.id);
+  const cutoffTime = op?.habitCutoffTime;
+  const { todaysHabits } = useHabits(cutoffTime);
+  const { data: todayMap = {} } = useTodayLogs(cutoffTime);
+  const { occurrences: plannerToday } = usePlannerToday();
 
   useEffect(() => {
     const iv = setInterval(() => setTime(new Date()), 1000);
@@ -23,23 +30,23 @@ const TopBar = ({ onOpenLog, onOpenCheckin, onOpenSearch }: TopBarProps) => {
   const timeStr = `${fmt(time.getHours())}:${fmt(time.getMinutes())}:${fmt(time.getSeconds())}`;
   const dateStr = `${time.getFullYear()}.${fmt(time.getMonth() + 1)}.${fmt(time.getDate())}`;
 
-  const level      = op?.level      ?? 1;
-  const title      = op?.levelTitle ?? 'Novice';
+  const level = op?.level ?? 1;
+  const title = op?.levelTitle ?? 'Novice';
   const customClass = op?.customClass ?? '';
-  const callsign   = op?.callsign   ?? '';
-  const xpInLevel  = op?.xpInLevel  ?? 0;
+  const callsign = op?.callsign ?? '';
+  const xpInLevel = op?.xpInLevel ?? 0;
   const xpForLevel = op?.xpForLevel ?? 500;
-  const streak     = op?.streak     ?? 0;
-  const multiplier = streak >= 30 ? 3.0 : streak >= 14 ? 2.0 : streak >= 7 ? 1.5 : 1.0;
-  const totalXP    = op?.totalXp    ?? 0;
+  const totalXP = op?.totalXp ?? 0;
 
-  const multClass = multiplier >= 3 ? 'pulse-glow' : multiplier >= 2 ? 'text-glow-bright' : '';
+  const tickerAlerts = useMemo(
+    () => buildTopBarAlerts(plannerToday, todaysHabits, todayMap),
+    [plannerToday, todaysHabits, todayMap],
+  );
 
-  // Placeholder for habit notifications. In a real scenario, this could come from a hook.
-  const habitNotifications = [
-    streak >= 7 ? `🔥 ${streak} DAY OVERALL STREAK — EXCELLENT WORK OPERATOR` : null,
-    // Add logic for specific habit alerts here if needed
-  ].filter(Boolean);
+  const tickerText = useMemo(
+    () => joinTopBarAlerts(tickerAlerts),
+    [tickerAlerts],
+  );
 
   return (
     <div style={{
@@ -54,11 +61,10 @@ const TopBar = ({ onOpenLog, onOpenCheckin, onOpenSearch }: TopBarProps) => {
       zIndex: 100,
       position: 'relative',
     }}>
-
       <span className="font-display text-glow-bright" style={{ fontSize: 20, color: 'hsl(var(--accent))' }}>[ UPLINK ]</span>
       <span style={{ fontSize: 11, color: 'hsl(var(--text-dim))' }}>SYS-TIME: {timeStr}</span>
       <span style={{ fontSize: 11, color: 'hsl(var(--text-dim))' }}>DATE: {dateStr}</span>
-      <span style={{ color: 'hsl(var(--text-dim))', opacity: 0.5 }}>│</span>
+      <span style={{ color: 'hsl(var(--text-dim))', opacity: 0.5 }}>|</span>
 
       {isLoading ? (
         <span style={{ fontSize: 11, color: 'hsl(var(--text-dim))' }}>CONNECTING...</span>
@@ -69,7 +75,7 @@ const TopBar = ({ onOpenLog, onOpenCheckin, onOpenSearch }: TopBarProps) => {
               <span className="font-display text-glow" style={{ fontSize: 16, color: 'hsl(var(--accent))' }}>
                 {callsign}
               </span>
-              <span style={{ color: 'hsl(var(--text-dim))', opacity: 0.5 }}> │ </span>
+              <span style={{ color: 'hsl(var(--text-dim))', opacity: 0.5 }}> | </span>
             </>
           )}
           <span className="font-display text-glow" style={{ fontSize: 16, color: 'hsl(var(--accent-bright))' }}>
@@ -77,13 +83,9 @@ const TopBar = ({ onOpenLog, onOpenCheckin, onOpenSearch }: TopBarProps) => {
           </span>
           <ProgressBar value={xpInLevel} max={xpForLevel} width="120px" />
           <span style={{ fontSize: 10, color: 'hsl(var(--text-dim))' }}>{totalXP.toLocaleString()} XP</span>
-          <span style={{ fontSize: 10, color: 'hsl(var(--text-dim))' }}>STK: {streak}d</span>
-          <span className={multClass} style={{ fontSize: 10, color: 'hsl(var(--accent-bright))' }}>
-            {multiplier.toFixed(1)}x
-          </span>
         </>
       )}
-      <span style={{ color: 'hsl(var(--text-dim))', opacity: 0.5 }}> │ </span>
+      <span style={{ color: 'hsl(var(--text-dim))', opacity: 0.5 }}> | </span>
 
       <div style={{ display: 'flex', gap: 4 }}>
         <button className="topbar-btn" onClick={onOpenSearch}>
@@ -94,15 +96,15 @@ const TopBar = ({ onOpenLog, onOpenCheckin, onOpenSearch }: TopBarProps) => {
         </button>
         <button className="topbar-btn" onClick={onOpenCheckin}>⬡ CHECK-IN</button>
       </div>
-      {/* Internal Ticker */}
-      <div style={{ 
-        flex: 1, 
-        margin: '0 16px', 
-        overflow: 'hidden', 
-        display: 'flex', 
+
+      <div style={{
+        flex: 1,
+        margin: '0 16px',
+        overflow: 'hidden',
+        display: 'flex',
         alignItems: 'center',
         maskImage: 'linear-gradient(to right, transparent, black 15%, black 85%, transparent)',
-        WebkitMaskImage: 'linear-gradient(to right, transparent, black 15%, black 85%, transparent)'
+        WebkitMaskImage: 'linear-gradient(to right, transparent, black 15%, black 85%, transparent)',
       }}>
         <div className="ticker-text" style={{
           whiteSpace: 'nowrap',
@@ -111,9 +113,9 @@ const TopBar = ({ onOpenLog, onOpenCheckin, onOpenSearch }: TopBarProps) => {
           paddingLeft: '100%',
           animation: 'ticker 25s linear infinite',
           fontFamily: "'IBM Plex Mono', monospace",
-          opacity: 0.8
+          opacity: 0.8,
         }}>
-          {habitNotifications.length > 0 ? habitNotifications.join('  //  ') : '// SYSTEM STABLE — NO PENDING ALERTS //'}
+          {tickerText || TOP_BAR_STABLE_MESSAGE}
         </div>
       </div>
 

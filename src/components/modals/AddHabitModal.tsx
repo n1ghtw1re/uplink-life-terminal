@@ -3,6 +3,7 @@
 // ============================================================
 import { useState, Fragment } from 'react';
 import { useHabits } from '@/hooks/useHabits';
+import { useUpdateWeekStart, useOperator } from '@/hooks/useOperator';
 import { StatKey, STAT_META } from '@/types';
 import Modal from '../Modal';
 
@@ -41,20 +42,28 @@ export default function AddHabitModal({ open, isModal = true, onClose }: AddHabi
 
 function FormContent({ onClose }: { onClose: () => void }) {
   const { createHabit } = useHabits();
+  const { data: operator } = useOperator();
+  const updateWeekStart = useUpdateWeekStart();
 
   const [name, setName] = useState('');
   const [statKey, setStatKey] = useState<StatKey>('body');
 
-  const [freqType, setFreqType] = useState<'DAILY' | 'INTERVAL' | 'SPECIFIC_DAYS'>('DAILY');
+  const [freqType, setFreqType] = useState<'DAILY' | 'INTERVAL' | 'SPECIFIC_DAYS' | 'TARGET'>('DAILY');
   const [intervalDays, setIntervalDays] = useState(2);
   const [specificDays, setSpecificDays] = useState<number[]>([]);
 
   const [targetType, setTargetType] = useState<'BINARY' | 'QUANTITATIVE'>('BINARY');
   const [targetValue, setTargetValue] = useState<number | ''>(8);
+  const [targetPeriodDays, setTargetPeriodDays] = useState<number | ''>(7);
 
   const [reminder, setReminder] = useState<string>('');
   const [streakGoal, setStreakGoal] = useState<number | ''>(21);
   const [streakReward, setStreakReward] = useState<number | ''>(100);
+  const currentWeekStart = (operator?.weekStart as 'MONDAY' | 'SUNDAY') || 'MONDAY';
+
+  const handleWeekStartChange = (val: 'MONDAY' | 'SUNDAY') => {
+    updateWeekStart.mutate(val);
+  };
 
   const toggleDay = (d: number) => {
     setSpecificDays(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d].sort());
@@ -70,6 +79,7 @@ function FormContent({ onClose }: { onClose: () => void }) {
       specific_days: freqType === 'SPECIFIC_DAYS' && specificDays.length > 0 ? specificDays : null,
       target_type: targetType,
       target_value: targetType === 'QUANTITATIVE' ? (Number(targetValue) || 1) : null,
+      target_period_days: freqType === 'TARGET' ? (Number(targetPeriodDays) || 7) : null,
       reminder_time: reminder || null,
       streak_goal: Number(streakGoal) || null,
       streak_reward: Number(streakReward) || 100,
@@ -124,10 +134,11 @@ function FormContent({ onClose }: { onClose: () => void }) {
           {/* Frequency */}
           <div style={{ flex: 1, background: bgT, border: `1px solid ${adim}`, padding: 14 }}>
             <div style={{ fontSize: 10, color: adim, letterSpacing: 1, marginBottom: 12 }}>// EXECUTION SCHEDULE</div>
-            <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
               <button onClick={() => setFreqType('DAILY')} style={segBtn(freqType === 'DAILY')}>DAILY</button>
               <button onClick={() => setFreqType('SPECIFIC_DAYS')} style={segBtn(freqType === 'SPECIFIC_DAYS')}>SET DAYS</button>
               <button onClick={() => setFreqType('INTERVAL')} style={segBtn(freqType === 'INTERVAL')}>INTERVAL</button>
+              <button onClick={() => setFreqType('TARGET')} style={segBtn(freqType === 'TARGET')}>TARGET</button>
             </div>
 
             {freqType === 'INTERVAL' && (
@@ -147,6 +158,25 @@ function FormContent({ onClose }: { onClose: () => void }) {
                     {d}
                   </button>
                 ))}
+              </div>
+            )}
+
+            {freqType === 'TARGET' && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontSize: 9, color: dim, marginBottom: 8, lineHeight: 1.4 }}>
+                  Complete this habit <span style={{ color: acc }}>{targetValue || 3}</span> times in <span style={{ color: acc }}>{targetPeriodDays || 7}</span> days
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 10, color: dim }}>TIMES:</span>
+                  <input type="number" min={1} max={30} value={targetValue}
+                    onChange={e => setTargetValue(e.target.value === '' ? '' : Number(e.target.value))}
+                    className="crt-input" style={{ width: 50, textAlign: 'center' }} />
+                  <span style={{ fontSize: 10, color: dim }}>IN</span>
+                  <input type="number" min={1} max={30} value={targetPeriodDays}
+                    onChange={e => setTargetPeriodDays(e.target.value === '' ? '' : Number(e.target.value))}
+                    className="crt-input" style={{ width: 50, textAlign: 'center' }} />
+                  <span style={{ fontSize: 10, color: dim }}>DAYS</span>
+                </div>
               </div>
             )}
           </div>
@@ -200,6 +230,13 @@ function FormContent({ onClose }: { onClose: () => void }) {
         <div style={{ padding: '10px 14px', border: `1px solid ${adim}`, background: 'rgba(255,176,0,0.04)', fontSize: 9, color: dim, lineHeight: 1.8 }}>
           <span style={{ color: adim }}>AUTO REWARDS: </span>
           Complete daily <span style={{ color: acc }}>+10 XP</span> | 7-day streak <span style={{ color: acc }}>+50 XP</span> | 30-day streak <span style={{ color: acc }}>+500 XP</span>
+        </div>
+
+        {/* Week Start Preference */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 10, color: adim }}>
+          <span style={{ letterSpacing: 1 }}>// WEEK STARTS ON:</span>
+          <button onClick={() => handleWeekStartChange('MONDAY')} style={segBtn(currentWeekStart === 'MONDAY')}>MONDAY</button>
+          <button onClick={() => handleWeekStartChange('SUNDAY')} style={segBtn(currentWeekStart === 'SUNDAY')}>SUNDAY</button>
         </div>
 
         {/* Actions */}

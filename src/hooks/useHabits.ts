@@ -9,7 +9,7 @@ import {
 
 // ── Selectors ─────────────────────────────────────────────────
 
-export function useHabits() {
+export function useHabits(cutoffTime?: string | null) {
   const queryClient = useQueryClient();
 
   const { data: habits = [], isLoading } = useQuery({
@@ -21,7 +21,7 @@ export function useHabits() {
     },
   });
 
-  const todaysHabits = habits.filter(isDueToday);
+  const todaysHabits = habits.filter(h => isDueToday(h, cutoffTime));
 
   // ── Create ────────────────────────────────────────────────────
   const createMutation = useMutation({
@@ -34,14 +34,15 @@ export function useHabits() {
         await db.query(`
           INSERT INTO habits (
             name, stat_key, frequency_type, interval_days, specific_days,
-            target_type, target_value, reminder_time, streak_goal, streak_reward, status
-          ) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11)
+            target_type, target_value, target_period_days, reminder_time, streak_goal, streak_reward, status
+          ) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11, $12)
         `, [
           h.name, h.stat_key, h.frequency_type,
           h.interval_days ?? null,
           h.specific_days ? JSON.stringify(h.specific_days) : null,
           h.target_type,
           h.target_value ?? null,
+          h.target_period_days ?? null,
           h.reminder_time ?? null,
           h.streak_goal ?? null,
           h.streak_reward,
@@ -56,14 +57,15 @@ export function useHabits() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['habits'] });
       queryClient.invalidateQueries({ queryKey: ['habit-logs-today-map'] });
+      queryClient.invalidateQueries({ queryKey: ['terminal-habits-list'] });
     },
   });
 
   // ── Check-In ──────────────────────────────────────────────────
   const checkInMutation = useMutation({
-    mutationFn: async ({ habit, value }: { habit: Habit; value?: number }) => {
+    mutationFn: async ({ habit, value, cutoffTime }: { habit: Habit; value?: number; cutoffTime?: string | null }) => {
       const db  = await getDB();
-      const today = todayStr();
+      const today = todayStr(cutoffTime);
 
       // Get existing logs for today
       const existingLogs = await db.query<{ id: string; value: number; completed: boolean }>(
@@ -149,6 +151,7 @@ export function useHabits() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['habits'] });
+      queryClient.invalidateQueries({ queryKey: ['habit-logs'] });
       queryClient.invalidateQueries({ queryKey: ['habit-logs-today-map'] });
       queryClient.invalidateQueries({ queryKey: ['operator'] });
       queryClient.invalidateQueries({ queryKey: ['stats'] });
@@ -291,12 +294,12 @@ export function useHabitLogs(habitId: string | null) {
 }
 
 // ── Today's completion map  ────────────────────────────────────
-export function useTodayLogs() {
+export function useTodayLogs(cutoffTime?: string | null) {
   return useQuery({
     queryKey: ['habit-logs-today-map'],
     queryFn: async (): Promise<Record<string, { completed: boolean; value: number }>> => {
       const db  = await getDB();
-      const today = todayStr();
+      const today = todayStr(cutoffTime);
       const res = await db.query<{ habit_id: string; completed: boolean; value: number }>(
         `SELECT habit_id, completed, COALESCE(value, 0) as value FROM habit_logs WHERE logged_for_date=$1`,
         [today]

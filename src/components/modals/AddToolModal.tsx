@@ -92,6 +92,7 @@ export default function AddToolModal({ onClose, initialLifepathId }: Props) {
 
       queryClient.invalidateQueries({ queryKey: ['tools'] });
       queryClient.invalidateQueries({ queryKey: ['tools-for-lifepath'] });
+      queryClient.invalidateQueries({ queryKey: ['terminal-tools-list'] });
       toast({ title: '✓ TOOL ADDED', description: name.trim() });
       onClose();
     } catch (err) {

@@ -23,6 +23,13 @@ import ResourcesWidget from '@/components/widgets/ResourcesWidget';
 import AugmentsWidget from '@/components/widgets/AugmentsWidget';
 import ProjectsWidget from '@/components/widgets/ProjectsWidget';
 import NotesWidget from '@/components/widgets/NotesWidget';
+import PlannerWidget from '@/components/widgets/PlannerWidget';
+import VaultWidget from '@/components/widgets/VaultWidget';
+import RecoveryWidget from '@/components/widgets/RecoveryWidget';
+import IngredientsWidget from '@/components/widgets/IngredientsWidget';
+import IntakeWidget from '@/components/widgets/IntakeWidget';
+import RecipesWidget from '@/components/widgets/RecipesWidget';
+import TerminalWidget from '@/components/widgets/TerminalWidget';
 import QuickLogOverlay from '@/components/overlays/QuickLogOverlay';
 import SearchOverlay from '@/components/overlays/SearchOverlay';
 import StatDetailOverlay from '@/components/overlays/StatDetailOverlay';
@@ -32,6 +39,12 @@ import CoursesPage from '@/components/overlays/CoursesPage';
 import DailyLogPage from '@/components/overlays/DailyLogPage';
 import HabitsPage from '@/components/overlays/HabitsPage';
 import NotesPage from '@/components/overlays/NotesPage';
+import PlannerPage from '@/components/overlays/PlannerPage';
+import VaultPage from '@/components/overlays/VaultPage';
+import RecoveryPage from '@/components/overlays/RecoveryPage';
+import IngredientsPage from '@/components/overlays/IngredientsPage';
+import IntakePage from '@/components/overlays/IntakePage';
+import RecipesPage from '@/components/overlays/RecipesPage';
 import SocialsOverlay from '@/components/overlays/SocialsOverlay';
 import LifepathPage from '@/components/overlays/LifepathPage';
 import ToolsPage from '@/components/overlays/ToolsPage';
@@ -53,31 +66,40 @@ import { applyThemeClass, normalizeTheme, type ThemeCode } from '@/lib/themes';
 
 type LayoutItem = { i: string; x: number; y: number; w: number; h: number; minW?: number; minH?: number };
 
-const ALL_WIDGET_IDS = ['xp', 'checkin', 'habits', 'heatmap', 'stats', 'courses', 'media', 'skills', 'tools', 'resources', 'augments', 'projects', 'notes', 'clock', 'calculator', 'unitConverter'];
-const DEFAULT_ACTIVE_WIDGET_IDS = ['xp', 'checkin', 'habits', 'stats', 'courses', 'media', 'skills'];
+const ALL_WIDGET_IDS = ['xp', 'checkin', 'habits', 'planner', 'recovery', 'ingredients', 'intake', 'recipes', 'heatmap', 'stats', 'courses', 'media', 'skills', 'tools', 'resources', 'augments', 'projects', 'vault', 'notes', 'clock', 'calculator', 'unitConverter', 'terminal'];
+const DEFAULT_ACTIVE_WIDGET_IDS = ['xp', 'checkin', 'habits', 'planner', 'stats', 'courses', 'media', 'skills', 'terminal'];
 
 const defaultLayout: LayoutItem[] = [
-  { i: 'xp', x: 0, y: 0, w: 4, h: 4, minW: 2, minH: 2 },
-  { i: 'checkin', x: 4, y: 0, w: 3, h: 3, minW: 2, minH: 2 },
-  { i: 'habits', x: 7, y: 0, w: 5, h: 4, minW: 3, minH: 3 },
-  { i: 'stats', x: 0, y: 4, w: 4, h: 4, minW: 2, minH: 2 },
-  { i: 'courses', x: 4, y: 3, w: 4, h: 4, minW: 2, minH: 2 },
-  { i: 'media', x: 8, y: 3, w: 4, h: 4, minW: 2, minH: 2 },
-  { i: 'skills', x: 4, y: 7, w: 4, h: 4, minW: 2, minH: 2 },
-  { i: 'tools',    x: 0, y: 8, w: 4, h: 4, minW: 2, minH: 2 },
-  { i: 'resources', x: 4, y: 8, w: 4, h: 4, minW: 2, minH: 2 },
-  { i: 'augments',  x: 8, y: 8, w: 4, h: 4, minW: 2, minH: 2 },
-  { i: 'projects',  x: 8, y: 8, w: 4, h: 4, minW: 2, minH: 2 },
-  { i: 'clock', x: 8, y: 7, w: 4, h: 4, minW: 2, minH: 2 },
-  { i: 'calculator', x: 0, y: 9, w: 4, h: 4, minW: 2, minH: 2 },
-  { i: 'unitConverter', x: 4, y: 9, w: 4, h: 4, minW: 2, minH: 2 },
+  { i: 'terminal', x: 0, y: 0, w: 3, h: 5, minW: 2, minH: 3 },
+  { i: 'xp', x: 3, y: 0, w: 3, h: 4, minW: 2, minH: 2 },
+  { i: 'checkin', x: 6, y: 0, w: 3, h: 3, minW: 2, minH: 2 },
+  { i: 'habits', x: 9, y: 0, w: 3, h: 4, minW: 3, minH: 3 },
+  { i: 'stats', x: 9, y: 0, w: 3, h: 4, minW: 2, minH: 2 },
+  { i: 'planner', x: 0, y: 4, w: 3, h: 4, minW: 3, minH: 3 },
+  { i: 'recovery', x: 3, y: 4, w: 3, h: 4, minW: 3, minH: 3 },
+  { i: 'ingredients', x: 6, y: 4, w: 3, h: 4, minW: 3, minH: 3 },
+  { i: 'intake', x: 9, y: 4, w: 3, h: 4, minW: 3, minH: 3 },
+  { i: 'recipes', x: 0, y: 8, w: 3, h: 4, minW: 3, minH: 3 },
+  { i: 'courses', x: 3, y: 8, w: 3, h: 4, minW: 2, minH: 2 },
+  { i: 'media', x: 6, y: 8, w: 3, h: 4, minW: 2, minH: 2 },
+  { i: 'skills', x: 9, y: 8, w: 3, h: 4, minW: 2, minH: 2 },
+  { i: 'tools',    x: 0, y: 12, w: 3, h: 4, minW: 2, minH: 2 },
+  { i: 'resources', x: 3, y: 12, w: 3, h: 4, minW: 2, minH: 2 },
+  { i: 'augments',  x: 6, y: 12, w: 3, h: 4, minW: 2, minH: 2 },
+  { i: 'projects',  x: 9, y: 12, w: 3, h: 4, minW: 2, minH: 2 },
+  { i: 'vault', x: 0, y: 16, w: 3, h: 4, minW: 2, minH: 2 },
+  { i: 'clock', x: 3, y: 16, w: 3, h: 4, minW: 2, minH: 2 },
+  { i: 'calculator', x: 6, y: 16, w: 3, h: 4, minW: 2, minH: 2 },
+  { i: 'unitConverter', x: 9, y: 16, w: 3, h: 4, minW: 2, minH: 2 },
+  { i: 'notes', x: 0, y: 20, w: 3, h: 4, minW: 2, minH: 2 },
+  { i: 'heatmap', x: 3, y: 20, w: 3, h: 4, minW: 2, minH: 2 },
 ];
 
 const widgetNames: Record<string, string> = {
   xp: 'XP & LEVELLING', checkin: 'DAILY CHECK-IN', habits: 'HABITS', heatmap: 'STREAK HEATMAP',
   stats: 'STAT OVERVIEW', courses: 'COURSES', media: 'MEDIA LIBRARY',
-  skills: 'SKILLS', tools: 'TOOLS', resources: 'RESOURCES', augments: 'AUGMENTS', projects: 'PROJECTS', notes: 'NOTES',
-  clock: 'CLOCK', calculator: 'CALCULATOR', unitConverter: 'UNIT CONVERTER',
+  skills: 'SKILLS', tools: 'TOOLS', resources: 'RESOURCES', augments: 'AUGMENTS', projects: 'PROJECTS', vault: 'VAULT', notes: 'NOTES', planner: 'PLANNER', recovery: 'RECOVERY', ingredients: 'INGREDIENTS', intake: 'INTAKE', recipes: 'RECIPES',
+  clock: 'CLOCK', calculator: 'CALCULATOR', unitConverter: 'UNIT CONVERTER', terminal: 'TERMINAL',
 };
 
 const Index = () => {
@@ -92,6 +114,10 @@ const Index = () => {
   const [showSocials, setShowSocials] = useState(false);
   const [showDailyLog, setShowDailyLog] = useState(false);
   const [showNotesPage, setShowNotesPage] = useState(false);
+  const [showPlanner, setShowPlanner] = useState(false);
+  const [showVault, setShowVault] = useState(false);
+  const [showRecovery, setShowRecovery] = useState(false);
+  const [showIngredients, setShowIngredients] = useState(false);
   const [showLifepath, setShowLifepath] = useState(false);
   const [showTools, setShowTools]         = useState(false);
   const [showResources, setShowResources] = useState(false);
@@ -125,12 +151,40 @@ const Index = () => {
   const [showClassDocs, setShowClassDocs] = useState(false);
   const [showXpDocs, setShowXpDocs] = useState(false);
   const [showWidgetManager, setShowWidgetManager] = useState(false);
+  const [showCerts, setShowCerts] = useState(false);
+  const [showIntake, setShowIntake] = useState(false);
+  const [showOutput, setShowOutput] = useState(false);
+  const [showRecipes, setShowRecipes] = useState(false);
+  const [showGoals, setShowGoals] = useState(false);
+  const [showTerminal, setShowTerminal] = useState(false);
 
   const sidebarWidth = sidebarExpanded ? 220 : 48;
   const openDrawer = (type: DrawerItem['type'], id: string) => { setDrawerItem({ type, id }); setDrawerOpen(true); };
-  const openHabitDrawer = (habit: any) => { setDrawerItem({ type: 'habit', id: habit.id, habitData: habit }); setDrawerOpen(true); };
   const closeDrawer = () => setDrawerOpen(false);
   const drawerWidth = drawerOpen ? 420 : 0;
+
+  const handleSearchNavigate = (type: string, id: string) => {
+    setShowSearch(false);
+    switch (type) {
+      case 'skill': setShowSkills(true); break;
+      case 'tool': setShowTools(true); break;
+      case 'augment': setShowAugments(true); break;
+      case 'course': setShowCourses(true); break;
+      case 'habit': setShowHabits(true); break;
+      case 'project': setShowProjects(true); break;
+      case 'ingredient': setShowIngredients(true); break;
+      case 'recipe': setShowRecipes(true); break;
+      case 'resource': setShowResources(true); break;
+      case 'social': setShowSocials(true); break;
+      case 'vault': setShowVault(true); break;
+      case 'goal': setShowHabits(true); break;
+      case 'doc':
+        if (id === 'classes') setShowClassDocs(true);
+        else if (id === 'xp-levelling') setShowXpDocs(true);
+        break;
+      default: break;
+    }
+  };
 
   useEffect(() => {
     const update = () => setGridSize({ width: window.innerWidth - sidebarWidth - drawerWidth, height: window.innerHeight - 48 });
@@ -173,6 +227,12 @@ const Index = () => {
       if (showClassDocs) { setShowClassDocs(false); return; }
       if (showCharacterSheet) { setShowCharacterSheet(false); return; }
       if (showLifepath) { setShowLifepath(false); return; }
+      if (showVault) { setShowVault(false); return; }
+      if (showRecovery) { setShowRecovery(false); return; }
+      if (showIngredients) { setShowIngredients(false); return; }
+      if (showIntake) { setShowIntake(false); return; }
+      if (showRecipes) { setShowRecipes(false); return; }
+      if (showPlanner) { setShowPlanner(false); return; }
       if (showDailyLog) { setShowDailyLog(false); return; }
       if (showNotesPage) { setShowNotesPage(false); return; }
       if (openStatKey) { setOpenStatKey(null); return; }
@@ -185,8 +245,7 @@ const Index = () => {
     if (e.key === '/') { e.preventDefault(); setShowSearch(true); }
     if (e.key === '[') setSidebarExpanded(false);
     if (e.key === ']') setSidebarExpanded(true);
-    if (e.key === 'h' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); setShowHabits(true); }
-  }, [fullscreenWidget, drawerOpen, openStatKey, showXpDocs, showClassDocs, showCharacterSheet, showLifepath, showDailyLog, showNotesPage, showHabits]);
+  }, [fullscreenWidget, drawerOpen, openStatKey, showXpDocs, showClassDocs, showCharacterSheet, showLifepath, showVault, showRecovery, showIngredients, showIntake, showRecipes, showPlanner, showDailyLog, showNotesPage, showHabits]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKey);
@@ -258,6 +317,29 @@ const Index = () => {
     if (!activeWidgets.includes(id)) handleRestore(id);
   };
 
+  const handleCloseWidgetById = (id: string) => {
+    setLayout(prev => prev.filter(i => i.i !== id));
+    setActiveWidgets(prev => prev.filter(w => w !== id));
+    localStorage.setItem('uplink-layout', JSON.stringify(layout.filter(i => i.i !== id)));
+    localStorage.setItem('uplink-active-widgets', JSON.stringify(activeWidgets.filter(w => w !== id)));
+  };
+
+  const widgetHandler = (action: 'open' | 'close', widgetId: string) => {
+    if (action === 'open') {
+      handleOpenWidgetById(widgetId);
+    } else {
+      handleCloseWidgetById(widgetId);
+    }
+  };
+
+  const drawerHandler = (type: string, name: string) => {
+    openDrawer(type as DrawerItem['type'], name);
+  };
+
+  const closeDrawerHandler = () => {
+    closeDrawer();
+  };
+
   const visibleLayout = layout.filter(item => activeWidgets.includes(item.i));
   const closedWidgets = ALL_WIDGET_IDS.filter(id => !activeWidgets.includes(id));
 
@@ -273,7 +355,13 @@ const Index = () => {
     switch (id) {
       case 'xp':           return <XPWidget {...props} />;
       case 'checkin':      return <CheckinWidget {...props} />;
-      case 'habits':       return <HabitsWidget {...props} onOpenHabits={() => setShowHabits(true)} onHabitClick={(habit) => openHabitDrawer(habit)} />;
+      case 'habits':       return <HabitsWidget {...props} onOpenHabits={() => setShowHabits(true)} onHabitClick={(habit) => openDrawer('habit', habit.id)} />;
+      case 'planner':      return <PlannerWidget {...props} onOpenPlanner={() => setShowPlanner(true)} />;
+      case 'recovery':     return <RecoveryWidget {...props} onOpenRecovery={() => setShowRecovery(true)} />;
+      case 'ingredients':  return <IngredientsWidget {...props} onOpenIngredients={() => setShowIngredients(true)} onIngredientClick={(id) => openDrawer('ingredient', id)} />;
+      case 'intake':       return <IntakeWidget {...props} onOpenIntake={() => setShowIntake(true)} onLogClick={(id) => openDrawer('intake', id)} />;
+      case 'recipes':      return <RecipesWidget {...props} onOpenRecipes={() => setShowRecipes(true)} onRecipeClick={(id) => openDrawer('recipe', id)} />;
+      case 'vault':        return <VaultWidget {...props} onOpenVault={() => setShowVault(true)} onVaultClick={(id) => openDrawer('vault', id)} />;
       case 'heatmap':      return <HeatmapWidget {...props} />;
       case 'stats':        return <StatOverviewWidget {...props} onStatClick={(k: string) => setOpenStatKey(k as StatKey)} />;
       case 'courses':      return <CoursesWidget {...props} onOpenCourses={() => setShowCourses(true)} onCourseClick={(id) => openDrawer('course', id)} />;
@@ -287,6 +375,7 @@ const Index = () => {
       case 'clock':        return <ClockWidget {...props} />;
       case 'calculator':   return <CalculatorWidget {...props} />;
       case 'unitConverter':return <UnitConverterWidget {...props} />;
+      case 'terminal':     return <TerminalWidget {...props} widgetHandler={widgetHandler} drawerHandler={drawerHandler} closeDrawerHandler={closeDrawerHandler} />;
       default: return null;
     }
   };
@@ -322,6 +411,7 @@ const Index = () => {
           onOpenResources={() => setShowResources(true)}
           onOpenAugments={() => setShowAugments(true)}
           onOpenProjects={() => setShowProjects(true)}
+          onOpenVault={() => setShowVault(true)}
           onOpenClassDocs={() => setShowClassDocs(true)}
           onOpenXpDocs={() => setShowXpDocs(true)}
           onOpenWidgetManager={() => setShowWidgetManager(true)}
@@ -329,6 +419,15 @@ const Index = () => {
           onOpenDailyLog={() => setShowDailyLog(true)}
           onOpenHabits={() => setShowHabits(true)}
           onOpenNotes={() => setShowNotesPage(true)}
+          onOpenPlanner={() => setShowPlanner(true)}
+          onOpenRecovery={() => setShowRecovery(true)}
+          onOpenIngredients={() => setShowIngredients(true)}
+          onOpenCerts={() => setShowCerts(true)}
+          onOpenIntake={() => setShowIntake(true)}
+          onOpenOutput={() => setShowOutput(true)}
+          onOpenRecipes={() => setShowRecipes(true)}
+          onOpenGoals={() => setShowGoals(true)}
+          onOpenTerminal={() => handleOpenWidgetById('terminal')}
           onOpenClockWidget={() => handleOpenWidgetById('clock')}
           onOpenCalculatorWidget={() => handleOpenWidgetById('calculator')}
           onOpenUnitConverterWidget={() => handleOpenWidgetById('unitConverter')}
@@ -371,9 +470,15 @@ const Index = () => {
       {showResources && <ResourcesPage onClose={() => setShowResources(false)} />}
       {showAugments  && <AugmentsPage  onClose={() => setShowAugments(false)} />}
       {showProjects  && <ProjectsPage  onClose={() => setShowProjects(false)} />}
+      {showVault     && <VaultPage     onClose={() => setShowVault(false)} />}
       {showWidgetManager && <WidgetManager activeWidgets={activeWidgets} onRestore={handleRestore} onClose={handleClose} onDismiss={() => setShowWidgetManager(false)} />}
       {showCourses       && <CoursesPage   onClose={() => setShowCourses(false)} />}
       {showDailyLog      && <DailyLogPage  onClose={() => setShowDailyLog(false)} />}
+      {showPlanner       && <PlannerPage   onClose={() => setShowPlanner(false)} />}
+      {showRecovery      && <RecoveryPage  onClose={() => setShowRecovery(false)} />}
+      {showIngredients   && <IngredientsPage onClose={() => setShowIngredients(false)} />}
+      {showIntake        && <IntakePage onClose={() => setShowIntake(false)} />}
+      {showRecipes       && <RecipesPage onClose={() => setShowRecipes(false)} />}
       {showNotesPage     && <NotesPage     onClose={() => setShowNotesPage(false)} />}
       {showLibrary       && <LibraryPage   onClose={() => setShowLibrary(false)} />}
       {showSkills        && <SkillsPage    onClose={() => setShowSkills(false)} onOpenLog={() => { setShowSkills(false); setShowLog(true); }} />}
@@ -395,7 +500,7 @@ const Index = () => {
         <QuickLogOverlay open={showLog} onClose={() => setShowLog(false)} />
       </Modal>
       <DetailDrawer open={drawerOpen} item={drawerItem} onClose={closeDrawer} onOpenLog={() => setShowLog(true)} />
-      <Modal open={showSearch} onClose={() => setShowSearch(false)} title="SEARCH" width={600}><SearchOverlay /></Modal>
+      <Modal open={showSearch} onClose={() => setShowSearch(false)} title="SEARCH" width={600}><SearchOverlay onClose={() => setShowSearch(false)} onNavigate={handleSearchNavigate} /></Modal>
       <Modal open={showCheckin} onClose={() => setShowCheckin(false)} title="DAILY CHECK-IN" width={500}><CheckinWidget isModal /></Modal>
     </div>
   );

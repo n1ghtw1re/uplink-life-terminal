@@ -11,6 +11,12 @@ const TABLES = [
   'media', 'courses', 'course_sections', 'course_lessons',
   'projects', 'project_milestones', 'certifications',
   'habits', 'habit_logs', 'checkins',
+  'planner_entries', 'planner_exceptions',
+  'vault_items',
+  'sleep_sessions', 'recovery_settings',
+  'custom_ingredients',
+  'recipes', 'recipe_ingredients', 'recipe_steps',
+  'intake_settings', 'intake_logs',
   'resources', 'socials', 'social_logs',
   'goals', 'notes',
 ];

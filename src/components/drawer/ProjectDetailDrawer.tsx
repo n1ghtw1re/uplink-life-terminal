@@ -1,9 +1,11 @@
 // src/components/drawer/ProjectDetailDrawer.tsx
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { getDB } from '@/lib/db';
-import { refreshAppData } from '@/lib/refreshAppData';
 import { toast } from '@/hooks/use-toast';
+import { SortableObjective } from '@/components/ui/SortableObjective';
 
 const mono  = "'IBM Plex Mono', monospace";
 const vt    = "'VT323', monospace";
@@ -160,6 +162,12 @@ export default function ProjectDetailDrawer({ projectId, onClose }: Props) {
   const [editAugIds, setEditAugIds]       = useState<string[]>([]);
   const [editMediaIds, setEditMediaIds]   = useState<string[]>([]);
   const [editCourseIds, setEditCourseIds] = useState<string[]>([]);
+  const [optimisticOrder, setOptimisticOrder] = useState<string[] | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
   // Reset edit/delete states when projectId changes
   useEffect(() => {
@@ -209,7 +217,6 @@ export default function ProjectDetailDrawer({ projectId, onClose }: Props) {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['project-objectives', projectId] });
-      await refreshAppData(queryClient);
     },
   });
 
@@ -225,7 +232,6 @@ export default function ProjectDetailDrawer({ projectId, onClose }: Props) {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['project-objectives', projectId] });
-      await refreshAppData(queryClient);
     },
   });
 
@@ -236,9 +242,35 @@ export default function ProjectDetailDrawer({ projectId, onClose }: Props) {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['project-objectives', projectId] });
-      await refreshAppData(queryClient);
     },
   });
+
+  const reorderObjectives = useMutation({
+    mutationFn: async ({ orderedIds }: { orderedIds: string[] }) => {
+      const db = await getDB();
+      for (let i = 0; i < orderedIds.length; i++) {
+        await db.query(
+          `UPDATE project_milestones SET sort_order = $1 WHERE id = $2`,
+          [i, orderedIds[i]]
+        );
+      }
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['project-objectives', projectId] });
+    },
+  });
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      const ids = optimisticOrder ?? objectives.map(o => o.id);
+      const oldIndex = ids.findIndex(id => id === active.id);
+      const newIndex = ids.findIndex(id => id === over.id);
+      const newOrder = arrayMove(ids, oldIndex, newIndex);
+      setOptimisticOrder(newOrder);
+      reorderObjectives.mutate({ orderedIds: newOrder });
+    }
+  };
 
   const saveEdit = useMutation({
     mutationFn: async () => {
@@ -318,15 +350,25 @@ export default function ProjectDetailDrawer({ projectId, onClose }: Props) {
 
         <SectionLabel label="OBJECTIVES" />
         {objectives.length === 0 && <div style={{ fontSize: 10, color: dim, opacity: 0.5, marginBottom: 8 }}>No objectives yet.</div>}
-        {objectives.map(obj => (
-          <div key={obj.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-            <span onClick={() => toggleObjective.mutate(obj)} style={{ width: 14, height: 14, border: `1px solid ${obj.completed_at ? green : adim}`, background: obj.completed_at ? 'rgba(68,255,136,0.15)' : 'transparent', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: green }}>{obj.completed_at ? '✓' : ''}</span>
-            <span style={{ fontSize: 10, color: obj.completed_at ? dim : acc, flex: 1, textDecoration: obj.completed_at ? 'line-through' : 'none', opacity: obj.completed_at ? 0.5 : 1 }}>{obj.title}</span>
-            <span onClick={() => deleteObjective.mutate(obj.id)} style={{ fontSize: 9, color: adim, cursor: 'pointer', opacity: 0.5 }}
-              onMouseEnter={e => { e.currentTarget.style.color = '#ff4400'; e.currentTarget.style.opacity = '1'; }}
-              onMouseLeave={e => { e.currentTarget.style.color = adim; e.currentTarget.style.opacity = '0.5'; }}>x</span>
-          </div>
-        ))}
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={(optimisticOrder ?? objectives.map(o => o.id))} strategy={verticalListSortingStrategy}>
+            {(optimisticOrder ?? objectives.map(o => o.id)).map(id => {
+              const obj = objectives.find(o => o.id === id);
+              if (!obj) return null;
+              return (
+                <SortableObjective
+                  key={obj.id}
+                  id={obj.id}
+                  title={obj.title}
+                  completed={!!obj.completed_at}
+                  onToggle={() => toggleObjective.mutate(obj)}
+                  onDelete={() => deleteObjective.mutate(obj.id)}
+                  mode="drawer"
+                />
+              );
+            })}
+          </SortableContext>
+        </DndContext>
         <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
           <input value={newObjTitle} onChange={e => setNewObjTitle(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && addObjective.mutate()}

@@ -1,7 +1,7 @@
 // ============================================================
 // src/components/overlays/ToolsPage.tsx
 // ============================================================
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getDB } from '@/lib/db';
 import { getLevelFromXP, getXPDisplayValues } from '@/services/xpService';
@@ -243,9 +243,24 @@ function ToolDrawerContent({ tool, onClose, onUpdated }: { tool: ToolOption; onC
   const [nameValue, setNameValue]     = useState('');
   const [editingNotes, setEditingNotes] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editType, setEditType] = useState(tool.type);
+  const [editUrl, setEditUrl] = useState(tool.url || '');
+  const [editDesc, setEditDesc] = useState(tool.description || '');
+  const [editNotes, setEditNotes] = useState(tool.notes || '');
 
   const { xpInLevel, xpForLevel } = getLevelFromXP(tool.xp);
   const pct = xpForLevel > 0 ? Math.round((xpInLevel / xpForLevel) * 100) : 0;
+
+  // Reset editing states when tool changes
+  useEffect(() => {
+    setEditing(false);
+    setEditingName(false);
+    setEditType(tool.type);
+    setEditUrl(tool.url || '');
+    setEditDesc(tool.description || '');
+    setEditNotes(tool.notes || '');
+  }, [tool.id]);
 
   // Linked lifepaths
   const { data: linkedLPs = [] } = useQuery({
@@ -284,6 +299,17 @@ function ToolDrawerContent({ tool, onClose, onUpdated }: { tool: ToolOption; onC
       await db.exec(`UPDATE tools SET name = '${name.replace(/'/g,"''")}' WHERE id = '${tool.id}';`);
     },
     onSuccess: () => { onUpdated(); setEditingName(false); },
+  });
+
+  const saveEdit = useMutation({
+    mutationFn: async () => {
+      const db = await getDB();
+      await db.query(
+        `UPDATE tools SET name=$1, type=$2, url=$3, description=$4, notes=$5 WHERE id=$6`,
+        [nameValue.trim() || tool.name, editType, editUrl || null, editDesc || null, editNotes || null, tool.id]
+      );
+    },
+    onSuccess: () => { onUpdated(); setEditing(false); setEditingName(false); },
   });
 
   const toggleActive = useMutation({
@@ -327,7 +353,7 @@ function ToolDrawerContent({ tool, onClose, onUpdated }: { tool: ToolOption; onC
             style={{ fontFamily: vt, fontSize: 22, background: 'transparent', border: 'none', borderBottom: `1px solid ${acc}`, color: acc, width: '100%', outline: 'none', marginBottom: 6 }}
           />
         ) : (
-          <div onClick={() => { setNameValue(tool.name); setEditingName(true); }} title="Click to rename"
+          <div title="Click to rename"
             style={{ fontFamily: vt, fontSize: 22, color: acc, cursor: 'text', marginBottom: 4 }}>
             {tool.name}
           </div>
@@ -353,23 +379,59 @@ function ToolDrawerContent({ tool, onClose, onUpdated }: { tool: ToolOption; onC
       {/* Body */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '12px 20px', scrollbarWidth: 'thin', scrollbarColor: `${adim} ${bgS}` }}>
 
-        {/* Description */}
-        {tool.description && (
-          <>
-            <div style={{ fontSize: 9, color: adim, letterSpacing: 2, margin: '8px 0 6px' }}>DESCRIPTION</div>
-            <div style={{ fontSize: 10, color: dim, lineHeight: 1.6 }}>{tool.description}</div>
-          </>
-        )}
+        {/* Edit Form */}
+        {editing ? (
+          <div>
+            <div style={{ fontSize: 9, color: adim, letterSpacing: 2, marginBottom: 6 }}>NAME</div>
+            <input className="crt-input" value={nameValue} onChange={e => setNameValue(e.target.value)} placeholder="Tool name" style={{ width: '100%', marginBottom: 12 }} />
 
-        {/* Linked lifepaths */}
-        <div style={{ fontSize: 9, color: adim, letterSpacing: 2, margin: '16px 0 6px' }}>LINKED LIFEPATHS</div>
-        {linkedLPs.length === 0 ? (
-          <div style={{ fontSize: 10, color: dim, opacity: 0.6 }}>Not linked to any lifepath</div>
-        ) : linkedLPs.map(lp => (
-          <div key={lp.id} style={{ fontSize: 10, color: dim, padding: '3px 0' }}>
-            <span style={{ color: adim }}>{lp.category} › </span>{lp.name}
+            <div style={{ fontSize: 9, color: adim, letterSpacing: 2, marginBottom: 6 }}>TYPE</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 12 }}>
+              {['equipment','facility','framework','hardware','instrument','language','platform','software','vehicle'].map(t => (
+                <button key={t} onClick={() => setEditType(t)} style={{
+                  padding: '3px 8px', fontSize: 9, fontFamily: mono, cursor: 'pointer',
+                  border: `1px solid ${editType === t ? acc : adim}`,
+                  background: editType === t ? 'rgba(255,176,0,0.1)' : 'transparent',
+                  color: editType === t ? acc : dim,
+                }}>{t}</button>
+              ))}
+            </div>
+
+            <div style={{ fontSize: 9, color: adim, letterSpacing: 2, marginBottom: 6 }}>URL (optional)</div>
+            <input className="crt-input" value={editUrl} onChange={e => setEditUrl(e.target.value)} placeholder="https://..." style={{ width: '100%', marginBottom: 12 }} />
+
+            <div style={{ fontSize: 9, color: adim, letterSpacing: 2, marginBottom: 6 }}>DESCRIPTION (optional)</div>
+            <textarea className="crt-input" value={editDesc} onChange={e => setEditDesc(e.target.value)} placeholder="Description..." rows={2} style={{ width: '100%', marginBottom: 12, resize: 'vertical' }} />
+
+            <div style={{ fontSize: 9, color: adim, letterSpacing: 2, marginBottom: 6 }}>NOTES (optional)</div>
+            <textarea className="crt-input" value={editNotes} onChange={e => setEditNotes(e.target.value)} placeholder="Notes..." rows={2} style={{ width: '100%', marginBottom: 12, resize: 'vertical' }} />
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => saveEdit.mutate()} disabled={saveEdit.isPending} style={{ flex: 1, padding: '6px', fontSize: 9, border: `1px solid ${acc}`, background: 'transparent', color: acc, fontFamily: mono, cursor: 'pointer' }}>
+                {saveEdit.isPending ? 'SAVING...' : '✓ SAVE'}
+              </button>
+              <button onClick={() => setEditing(false)} style={{ flex: 1, padding: '6px', fontSize: 9, border: `1px solid ${adim}`, background: 'transparent', color: dim, fontFamily: mono, cursor: 'pointer' }}>CANCEL</button>
+            </div>
           </div>
-        ))}
+        ) : (
+          <>
+            {/* Description */}
+            {tool.description && (
+              <>
+                <div style={{ fontSize: 9, color: adim, letterSpacing: 2, margin: '8px 0 6px' }}>DESCRIPTION</div>
+                <div style={{ fontSize: 10, color: dim, lineHeight: 1.6 }}>{tool.description}</div>
+              </>
+            )}
+
+            {/* Linked lifepaths */}
+            <div style={{ fontSize: 9, color: adim, letterSpacing: 2, margin: '16px 0 6px' }}>LINKED LIFEPATHS</div>
+            {linkedLPs.length === 0 ? (
+              <div style={{ fontSize: 10, color: dim, opacity: 0.6 }}>Not linked to any lifepath</div>
+            ) : linkedLPs.map(lp => (
+              <div key={lp.id} style={{ fontSize: 10, color: dim, padding: '3px 0' }}>
+                <span style={{ color: adim }}>{lp.category} › </span>{lp.name}
+              </div>
+            ))}
 
         {/* Recent sessions */}
         <div style={{ fontSize: 9, color: adim, letterSpacing: 2, margin: '16px 0 6px' }}>RECENT SESSIONS</div>
@@ -399,16 +461,18 @@ function ToolDrawerContent({ tool, onClose, onUpdated }: { tool: ToolOption; onC
           placeholder="Add notes about this tool..."
           rows={3}
           style={{ width: '100%', background: bgS, border: `1px solid rgba(153,104,0,0.4)`, color: dim, fontFamily: mono, fontSize: 11, lineHeight: 1.6, padding: '8px 10px', outline: 'none', resize: 'vertical', boxSizing: 'border-box' }}
-        />
+          />
+          </>
+        )}
 
         {/* Actions */}
         <div style={{ height: 1, background: 'rgba(153,104,0,0.3)', margin: '16px 0' }} />
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => { setNameValue(tool.name); setEditingName(true); }}
+          <button onClick={() => { setNameValue(tool.name); setEditType(tool.type); setEditUrl(tool.url || ''); setEditDesc(tool.description || ''); setEditNotes(tool.notes || ''); setEditing(true); }}
             style={{ flex: 1, height: 32, border: `1px solid ${adim}`, background: 'transparent', color: adim, fontFamily: mono, fontSize: 10, cursor: 'pointer' }}
             onMouseEnter={e => { e.currentTarget.style.borderColor = acc; e.currentTarget.style.color = acc; }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = adim; e.currentTarget.style.color = adim; }}
-          >[ RENAME ]</button>
+          >[ EDIT ]</button>
           <button onClick={() => toggleActive.mutate(!tool.active)}
             style={{ flex: 1, height: 32, border: `1px solid ${tool.active ? 'rgba(255,60,60,0.4)' : green}`, background: 'transparent', color: tool.active ? 'hsl(0,80%,55%)' : green, fontFamily: mono, fontSize: 10, cursor: 'pointer' }}
           >{tool.active ? '[ DEACTIVATE ]' : '[ ACTIVATE ]'}</button>

@@ -131,6 +131,7 @@ export default function AddMediaModal({ onClose, defaultType = 'book' }: Props) 
       }
 
       queryClient.invalidateQueries({ queryKey: ['media'] });
+      queryClient.invalidateQueries({ queryKey: ['terminal-media-list'] });
       queryClient.invalidateQueries({ queryKey: ['stats'] });
       queryClient.invalidateQueries({ queryKey: ['operator'] });
 

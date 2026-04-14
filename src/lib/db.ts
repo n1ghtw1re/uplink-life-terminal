@@ -46,6 +46,7 @@ async function initSchema(db: PGlite) {
       intel_log       TEXT,
       widget_layout   TEXT,
       active_widgets  TEXT,
+      week_start      TEXT NOT NULL DEFAULT 'MONDAY',
       wizard_complete BOOLEAN NOT NULL DEFAULT FALSE,
       created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
@@ -364,6 +365,162 @@ async function initSchema(db: PGlite) {
     );
     CREATE INDEX IF NOT EXISTS idx_bg_records_type ON background_records(type);
 
+    CREATE TABLE IF NOT EXISTS planner_entries (
+      id                       TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      title                    TEXT NOT NULL,
+      date                     DATE NOT NULL,
+      time                     TEXT,
+      completed                BOOLEAN NOT NULL DEFAULT FALSE,
+      recurrence_type          TEXT NOT NULL DEFAULT 'NONE',
+      recurrence_interval      INTEGER NOT NULL DEFAULT 1,
+      recurrence_days_of_week  JSONB,
+      recurrence_end_type      TEXT,
+      recurrence_end_date      DATE,
+      recurrence_count         INTEGER,
+      created_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS planner_exceptions (
+      id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      entry_id        TEXT NOT NULL REFERENCES planner_entries(id) ON DELETE CASCADE,
+      occurrence_date DATE NOT NULL,
+      title           TEXT,
+      date            DATE,
+      time            TEXT,
+      completed       BOOLEAN,
+      is_deleted      BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_planner_exceptions_entry_occurrence
+      ON planner_exceptions(entry_id, occurrence_date);
+    CREATE INDEX IF NOT EXISTS idx_planner_entries_date ON planner_entries(date);
+    CREATE INDEX IF NOT EXISTS idx_planner_exceptions_date ON planner_exceptions(date);
+
+    CREATE TABLE IF NOT EXISTS vault_items (
+      id             TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      title          TEXT NOT NULL,
+      category       TEXT NOT NULL,
+      completed_date DATE NOT NULL,
+      notes          TEXT,
+      metadata       JSONB,
+      created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_vault_items_category ON vault_items(category);
+    CREATE INDEX IF NOT EXISTS idx_vault_items_completed_date ON vault_items(completed_date);
+
+    CREATE TABLE IF NOT EXISTS sleep_sessions (
+      id               TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      start_time       TIMESTAMPTZ NOT NULL,
+      end_time         TIMESTAMPTZ NOT NULL,
+      duration_minutes INTEGER NOT NULL,
+      quality          INTEGER,
+      notes            TEXT,
+      created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_sleep_sessions_end_time ON sleep_sessions(end_time DESC);
+
+    CREATE TABLE IF NOT EXISTS recovery_settings (
+      id                 INTEGER PRIMARY KEY DEFAULT 1,
+      daily_goal_minutes INTEGER NOT NULL DEFAULT 480
+    );
+    INSERT INTO recovery_settings (id) VALUES (1) ON CONFLICT DO NOTHING;
+
+    CREATE TABLE IF NOT EXISTS custom_ingredients (
+      id         TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      name       TEXT NOT NULL,
+      category   TEXT NOT NULL,
+      calories   REAL NOT NULL,
+      protein_g  REAL NOT NULL,
+      carbs_g    REAL NOT NULL,
+      fat_g      REAL NOT NULL,
+      notes      TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_custom_ingredients_name ON custom_ingredients(name);
+    CREATE INDEX IF NOT EXISTS idx_custom_ingredients_category ON custom_ingredients(category);
+
+    CREATE TABLE IF NOT EXISTS recipes (
+      id                    TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      name                  TEXT NOT NULL,
+      category              TEXT NOT NULL,
+      is_prepared_meal      BOOLEAN NOT NULL DEFAULT FALSE,
+      servings              INTEGER NOT NULL DEFAULT 1,
+      total_calories        REAL NOT NULL DEFAULT 0,
+      total_protein_g       REAL NOT NULL DEFAULT 0,
+      total_carbs_g         REAL NOT NULL DEFAULT 0,
+      total_fat_g           REAL NOT NULL DEFAULT 0,
+      per_serving_calories  REAL NOT NULL DEFAULT 0,
+      per_serving_protein_g REAL NOT NULL DEFAULT 0,
+      per_serving_carbs_g   REAL NOT NULL DEFAULT 0,
+      per_serving_fat_g     REAL NOT NULL DEFAULT 0,
+      created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_recipes_name ON recipes(name);
+    CREATE INDEX IF NOT EXISTS idx_recipes_category ON recipes(category);
+
+    CREATE TABLE IF NOT EXISTS recipe_ingredients (
+      id                TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      recipe_id         TEXT NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
+      ingredient_id     TEXT,
+      ingredient_name   TEXT NOT NULL,
+      ingredient_source TEXT,
+      input_text        TEXT,
+      grams             REAL NOT NULL,
+      calories_total    REAL NOT NULL DEFAULT 0,
+      protein_g_total   REAL NOT NULL DEFAULT 0,
+      carbs_g_total     REAL NOT NULL DEFAULT 0,
+      fat_g_total       REAL NOT NULL DEFAULT 0,
+      sort_order        INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_recipe_id ON recipe_ingredients(recipe_id);
+
+    CREATE TABLE IF NOT EXISTS recipe_steps (
+      id               TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      recipe_id        TEXT NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
+      step_number      INTEGER NOT NULL DEFAULT 1,
+      instruction_text TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_recipe_steps_recipe_id ON recipe_steps(recipe_id);
+
+    CREATE TABLE IF NOT EXISTS intake_settings (
+      id                 INTEGER PRIMARY KEY DEFAULT 1,
+      daily_calorie_goal INTEGER NOT NULL DEFAULT 2000,
+      protein_percent    INTEGER NOT NULL DEFAULT 40,
+      carbs_percent      INTEGER NOT NULL DEFAULT 30,
+      fat_percent        INTEGER NOT NULL DEFAULT 30,
+      created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    INSERT INTO intake_settings (id) VALUES (1) ON CONFLICT DO NOTHING;
+
+    CREATE TABLE IF NOT EXISTS intake_logs (
+      id            TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      logged_at     TIMESTAMPTZ NOT NULL,
+      anchor_date   DATE NOT NULL,
+      meal_label    TEXT,
+      notes         TEXT,
+      source_kind   TEXT NOT NULL,
+      source_id     TEXT,
+      source_name   TEXT NOT NULL,
+      source_origin TEXT,
+      grams         REAL,
+      servings      REAL,
+      input_text    TEXT,
+      calories      REAL NOT NULL DEFAULT 0,
+      protein_g     REAL NOT NULL DEFAULT 0,
+      carbs_g       REAL NOT NULL DEFAULT 0,
+      fat_g         REAL NOT NULL DEFAULT 0,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_intake_logs_anchor_date ON intake_logs(anchor_date DESC);
+    CREATE INDEX IF NOT EXISTS idx_intake_logs_logged_at ON intake_logs(logged_at DESC);
+
     CREATE INDEX IF NOT EXISTS idx_sessions_skill  ON sessions(skill_id);
     CREATE INDEX IF NOT EXISTS idx_sessions_date   ON sessions(logged_at);
     CREATE INDEX IF NOT EXISTS idx_xp_log_tier     ON xp_log(tier);
@@ -389,6 +546,12 @@ async function initSchema(db: PGlite) {
   );
   await db.exec(
     `ALTER TABLE profile ADD COLUMN IF NOT EXISTS intel_log TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE profile ADD COLUMN IF NOT EXISTS week_start TEXT DEFAULT 'MONDAY'`
+  );
+  await db.exec(
+    `ALTER TABLE profile ADD COLUMN IF NOT EXISTS habit_cutoff_time TEXT DEFAULT '06:00'`
   );
   await db.exec(
     `ALTER TABLE lifepaths ADD COLUMN IF NOT EXISTS description TEXT`
@@ -461,6 +624,7 @@ async function initSchema(db: PGlite) {
       specific_days   JSONB,
       target_type     TEXT NOT NULL DEFAULT 'BINARY',
       target_value    INTEGER,
+      target_period_days INTEGER DEFAULT 7,
       reminder_time   TEXT,
       streak_goal     INTEGER,
       streak_reward   INTEGER NOT NULL DEFAULT 100,
@@ -470,18 +634,6 @@ async function initSchema(db: PGlite) {
       status          TEXT NOT NULL DEFAULT 'ACTIVE',
       paused_until    TIMESTAMPTZ,
       created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-
-    CREATE TABLE IF NOT EXISTS habit_logs (
-      id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-      habit_id        TEXT NOT NULL REFERENCES habits(id) ON DELETE CASCADE,
-      logged_for_date TEXT NOT NULL,
-      logged_date     DATE NOT NULL DEFAULT CURRENT_DATE,
-      completed       BOOLEAN NOT NULL DEFAULT FALSE,
-      value           INTEGER,
-      xp_awarded      INTEGER NOT NULL DEFAULT 0,
-      logged_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      UNIQUE(habit_id, logged_for_date)
     );
   `);
 
@@ -506,6 +658,9 @@ async function initSchema(db: PGlite) {
   );
   await db.exec(
     `ALTER TABLE habits ADD COLUMN IF NOT EXISTS target_value INTEGER`
+  );
+  await db.exec(
+    `ALTER TABLE habits ADD COLUMN IF NOT EXISTS target_period_days INTEGER DEFAULT 7`
   );
   await db.exec(
     `ALTER TABLE habits ADD COLUMN IF NOT EXISTS reminder_time TEXT`
@@ -577,4 +732,290 @@ async function initSchema(db: PGlite) {
   } catch (e) {
     console.warn('// HABIT_MIGRATION_WARN:', e);
   }
+
+  await db.exec(
+    `ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS title TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS date DATE`
+  );
+  await db.exec(
+    `ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS time TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS completed BOOLEAN DEFAULT FALSE`
+  );
+  await db.exec(
+    `ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS recurrence_type TEXT DEFAULT 'NONE'`
+  );
+  await db.exec(
+    `ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS recurrence_interval INTEGER DEFAULT 1`
+  );
+  await db.exec(
+    `ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS recurrence_days_of_week JSONB`
+  );
+  await db.exec(
+    `ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS recurrence_end_type TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS recurrence_end_date DATE`
+  );
+  await db.exec(
+    `ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS recurrence_count INTEGER`
+  );
+  await db.exec(
+    `ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`
+  );
+  await db.exec(
+    `ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`
+  );
+  await db.exec(
+    `ALTER TABLE planner_exceptions ADD COLUMN IF NOT EXISTS entry_id TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE planner_exceptions ADD COLUMN IF NOT EXISTS occurrence_date DATE`
+  );
+  await db.exec(
+    `ALTER TABLE planner_exceptions ADD COLUMN IF NOT EXISTS title TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE planner_exceptions ADD COLUMN IF NOT EXISTS date DATE`
+  );
+  await db.exec(
+    `ALTER TABLE planner_exceptions ADD COLUMN IF NOT EXISTS time TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE planner_exceptions ADD COLUMN IF NOT EXISTS completed BOOLEAN`
+  );
+  await db.exec(
+    `ALTER TABLE planner_exceptions ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE`
+  );
+  await db.exec(
+    `ALTER TABLE planner_exceptions ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`
+  );
+  await db.exec(
+    `ALTER TABLE vault_items ADD COLUMN IF NOT EXISTS title TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE vault_items ADD COLUMN IF NOT EXISTS category TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE vault_items ADD COLUMN IF NOT EXISTS completed_date DATE`
+  );
+  await db.exec(
+    `ALTER TABLE vault_items ADD COLUMN IF NOT EXISTS notes TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE vault_items ADD COLUMN IF NOT EXISTS metadata JSONB`
+  );
+  await db.exec(
+    `ALTER TABLE vault_items ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`
+  );
+  await db.exec(
+    `ALTER TABLE vault_items ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`
+  );
+  await db.exec(
+    `ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS start_time TIMESTAMPTZ`
+  );
+  await db.exec(
+    `ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS end_time TIMESTAMPTZ`
+  );
+  await db.exec(
+    `ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS duration_minutes INTEGER`
+  );
+  await db.exec(
+    `ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS quality INTEGER`
+  );
+  await db.exec(
+    `ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS notes TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`
+  );
+  await db.exec(
+    `ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`
+  );
+  await db.exec(
+    `ALTER TABLE recovery_settings ADD COLUMN IF NOT EXISTS daily_goal_minutes INTEGER DEFAULT 480`
+  );
+  await db.exec(
+    `ALTER TABLE custom_ingredients ADD COLUMN IF NOT EXISTS name TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE custom_ingredients ADD COLUMN IF NOT EXISTS category TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE custom_ingredients ADD COLUMN IF NOT EXISTS calories REAL`
+  );
+  await db.exec(
+    `ALTER TABLE custom_ingredients ADD COLUMN IF NOT EXISTS protein_g REAL`
+  );
+  await db.exec(
+    `ALTER TABLE custom_ingredients ADD COLUMN IF NOT EXISTS carbs_g REAL`
+  );
+  await db.exec(
+    `ALTER TABLE custom_ingredients ADD COLUMN IF NOT EXISTS fat_g REAL`
+  );
+  await db.exec(
+    `ALTER TABLE custom_ingredients ADD COLUMN IF NOT EXISTS notes TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE custom_ingredients ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`
+  );
+  await db.exec(
+    `ALTER TABLE custom_ingredients ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`
+  );
+  await db.exec(
+    `ALTER TABLE recipes ADD COLUMN IF NOT EXISTS name TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE recipes ADD COLUMN IF NOT EXISTS category TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE recipes ADD COLUMN IF NOT EXISTS is_prepared_meal BOOLEAN DEFAULT FALSE`
+  );
+  await db.exec(
+    `ALTER TABLE recipes ADD COLUMN IF NOT EXISTS servings INTEGER DEFAULT 1`
+  );
+  await db.exec(
+    `ALTER TABLE recipes ADD COLUMN IF NOT EXISTS total_calories REAL DEFAULT 0`
+  );
+  await db.exec(
+    `ALTER TABLE recipes ADD COLUMN IF NOT EXISTS total_protein_g REAL DEFAULT 0`
+  );
+  await db.exec(
+    `ALTER TABLE recipes ADD COLUMN IF NOT EXISTS total_carbs_g REAL DEFAULT 0`
+  );
+  await db.exec(
+    `ALTER TABLE recipes ADD COLUMN IF NOT EXISTS total_fat_g REAL DEFAULT 0`
+  );
+  await db.exec(
+    `ALTER TABLE recipes ADD COLUMN IF NOT EXISTS per_serving_calories REAL DEFAULT 0`
+  );
+  await db.exec(
+    `ALTER TABLE recipes ADD COLUMN IF NOT EXISTS per_serving_protein_g REAL DEFAULT 0`
+  );
+  await db.exec(
+    `ALTER TABLE recipes ADD COLUMN IF NOT EXISTS per_serving_carbs_g REAL DEFAULT 0`
+  );
+  await db.exec(
+    `ALTER TABLE recipes ADD COLUMN IF NOT EXISTS per_serving_fat_g REAL DEFAULT 0`
+  );
+  await db.exec(
+    `ALTER TABLE recipes ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`
+  );
+  await db.exec(
+    `ALTER TABLE recipes ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`
+  );
+  await db.exec(
+    `ALTER TABLE recipe_ingredients ADD COLUMN IF NOT EXISTS recipe_id TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE recipe_ingredients ADD COLUMN IF NOT EXISTS ingredient_id TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE recipe_ingredients ADD COLUMN IF NOT EXISTS ingredient_name TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE recipe_ingredients ADD COLUMN IF NOT EXISTS ingredient_source TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE recipe_ingredients ADD COLUMN IF NOT EXISTS input_text TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE recipe_ingredients ADD COLUMN IF NOT EXISTS grams REAL`
+  );
+  await db.exec(
+    `ALTER TABLE recipe_ingredients ADD COLUMN IF NOT EXISTS calories_total REAL DEFAULT 0`
+  );
+  await db.exec(
+    `ALTER TABLE recipe_ingredients ADD COLUMN IF NOT EXISTS protein_g_total REAL DEFAULT 0`
+  );
+  await db.exec(
+    `ALTER TABLE recipe_ingredients ADD COLUMN IF NOT EXISTS carbs_g_total REAL DEFAULT 0`
+  );
+  await db.exec(
+    `ALTER TABLE recipe_ingredients ADD COLUMN IF NOT EXISTS fat_g_total REAL DEFAULT 0`
+  );
+  await db.exec(
+    `ALTER TABLE recipe_ingredients ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0`
+  );
+  await db.exec(
+    `ALTER TABLE recipe_steps ADD COLUMN IF NOT EXISTS recipe_id TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE recipe_steps ADD COLUMN IF NOT EXISTS step_number INTEGER DEFAULT 1`
+  );
+  await db.exec(
+    `ALTER TABLE recipe_steps ADD COLUMN IF NOT EXISTS instruction_text TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE intake_settings ADD COLUMN IF NOT EXISTS daily_calorie_goal INTEGER DEFAULT 2000`
+  );
+  await db.exec(
+    `ALTER TABLE intake_settings ADD COLUMN IF NOT EXISTS protein_percent INTEGER DEFAULT 40`
+  );
+  await db.exec(
+    `ALTER TABLE intake_settings ADD COLUMN IF NOT EXISTS carbs_percent INTEGER DEFAULT 30`
+  );
+  await db.exec(
+    `ALTER TABLE intake_settings ADD COLUMN IF NOT EXISTS fat_percent INTEGER DEFAULT 30`
+  );
+  await db.exec(
+    `ALTER TABLE intake_settings ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`
+  );
+  await db.exec(
+    `ALTER TABLE intake_settings ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`
+  );
+  await db.exec(
+    `ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS logged_at TIMESTAMPTZ`
+  );
+  await db.exec(
+    `ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS anchor_date DATE`
+  );
+  await db.exec(
+    `ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS meal_label TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS notes TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS source_kind TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS source_id TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS source_name TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS source_origin TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS grams REAL`
+  );
+  await db.exec(
+    `ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS servings REAL`
+  );
+  await db.exec(
+    `ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS input_text TEXT`
+  );
+  await db.exec(
+    `ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS calories REAL DEFAULT 0`
+  );
+  await db.exec(
+    `ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS protein_g REAL DEFAULT 0`
+  );
+  await db.exec(
+    `ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS carbs_g REAL DEFAULT 0`
+  );
+  await db.exec(
+    `ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS fat_g REAL DEFAULT 0`
+  );
+  await db.exec(
+    `ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`
+  );
+  await db.exec(
+    `ALTER TABLE intake_logs ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`
+  );
 }
