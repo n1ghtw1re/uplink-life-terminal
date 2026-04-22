@@ -3,9 +3,10 @@
 // Full-page courses browser — list, sort, drawer with modules
 // ============================================================
 import { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { queryClient } from '@/main';
 import CourseDetailDrawer from '@/components/drawer/CourseDetailDrawer';
 import AddCourseModal from '@/components/modals/AddCourseModal';
 
@@ -188,6 +189,47 @@ export default function CoursesPage({ onClose }: Props) {
     },
   });
 
+  // Recalculate progress for all courses (one-time fix for older courses)
+  const recalculateProgress = useMutation({
+    mutationFn: async () => {
+      const allCourses = await supabase.from('courses').select('id');
+      const courseIds = (allCourses.data ?? []).map(c => c.id);
+
+      for (const courseId of courseIds) {
+        const sectionsRes = await supabase.from('course_sections').select('id').eq('course_id', courseId);
+        const sectionRows = sectionsRes.data ?? [];
+
+        let totalUnits = 0;
+        let completedUnits = 0;
+
+        for (const section of sectionRows) {
+          const lessonsRes = await supabase.from('course_lessons').select('id, completed_at').eq('section_id', section.id);
+          const lessonRows = lessonsRes.data ?? [];
+
+          if (lessonRows.length > 0) {
+            // Section has lessons - each lesson is a unit
+            totalUnits += lessonRows.length;
+            completedUnits += lessonRows.filter(l => l.completed_at).length;
+          } else {
+            // Section has no lessons - section itself is 1 unit
+            totalUnits += 1;
+            const sectionRes = await supabase.from('course_sections').select('completed_at').eq('id', section.id).single();
+            if (sectionRes.data?.completed_at) completedUnits += 1;
+          }
+        }
+
+        const progress = totalUnits > 0 ? Math.round((completedUnits / totalUnits) * 100) : 0;
+        const status = totalUnits > 0 && completedUnits === totalUnits ? 'COMPLETE' : 'ACTIVE';
+        const completedAt = status === 'COMPLETE' ? new Date().toISOString() : null;
+
+        await supabase.from('courses').update({ progress, status, completed_at: completedAt }).eq('id', courseId);
+      }
+    },
+    onSuccess: async () => {
+      queryClient.invalidateQueries({ queryKey: ['courses-all'] });
+    },
+  });
+
   const countFor = (key: CourseStatus | 'ALL') =>
     key === 'ALL'
       ? (courses ?? []).length
@@ -262,6 +304,17 @@ export default function CoursesPage({ onClose }: Props) {
           />
           {search && <button onClick={() => setSearch('')} style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: adim, cursor: 'pointer', fontSize: 12 }}>×</button>}
         </div>
+
+        <button
+          onClick={() => recalculateProgress.mutate()}
+          disabled={recalculateProgress.isPending}
+          style={{
+            padding: '5px 14px', fontSize: 10,
+            border: `1px solid ${recalculateProgress.isPending ? adim : '#ff8844'}`,
+            background: 'transparent', color: recalculateProgress.isPending ? adim : '#ff8844',
+            fontFamily: mono, cursor: 'pointer', letterSpacing: 1,
+          }}
+        >{recalculateProgress.isPending ? 'FIXING...' : '[ FIX PROGRESS ]'}</button>
 
         <button
           onClick={() => setShowAdd(true)}

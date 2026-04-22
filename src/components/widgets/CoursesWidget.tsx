@@ -20,8 +20,8 @@ const CoursesWidget = ({ onClose, onFullscreen, isFullscreen, onCourseClick, onO
   const [showAdd, setShowAdd] = useState(false);
   const [search, setSearch] = useState('');
 
-  const { data: courses } = useQuery({
-    queryKey: ['courses'],
+const { data: courses } = useQuery({
+    queryKey: ['courses-all'],
     queryFn: async () => {
       const db = await getDB();
       const res = await db.query<{

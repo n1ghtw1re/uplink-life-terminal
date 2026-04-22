@@ -368,6 +368,15 @@ export default function CourseDetailDrawer({ courseId, onClose }: Props) {
       })
       .eq('id', courseId);
 
+    // Direct cache update so UI updates immediately (more reliable than invalidation)
+    queryClient.setQueryData(['course', courseId], (old: Course | undefined) => {
+      if (!old) return old;
+      return { ...old, progress, status: isComplete ? 'COMPLETE' : 'ACTIVE', completed_at: isComplete ? new Date().toISOString() : null };
+    });
+    queryClient.invalidateQueries({ queryKey: ['course', courseId] });
+    queryClient.invalidateQueries({ queryKey: ['course-sections', courseId] });
+    queryClient.invalidateQueries({ queryKey: ['courses-all'] });
+
     // Award course completion bonus — num_sections × 100, skip if ongoing
     if (isComplete && course && !course.is_ongoing) {
       const totalSecs   = updatedSections.length || 1;
@@ -565,16 +574,23 @@ export default function CourseDetailDrawer({ courseId, onClose }: Props) {
         }
       }
     },
-      onSuccess: async () => {
+onSuccess: async () => {
         await refreshAppData(queryClient);
+        // Re-fetch course to get fresh progress from DB
+        const { data: freshCourse } = await supabase.from('courses').select('*').eq('id', courseId).single();
+        if (freshCourse) {
+          queryClient.setQueryData(['course', courseId], freshCourse);
+        }
+        queryClient.invalidateQueries({ queryKey: ['course', courseId] });
+        queryClient.invalidateQueries({ queryKey: ['course-sections', courseId] });
+        queryClient.invalidateQueries({ queryKey: ['courses-all'] });
       },
   });
 
-  // ── Tick section directly (only when it has no lessons) ──
+  // ── Tick section complete (for sections without lessons) ───
 
   const tickSection = useMutation({
     mutationFn: async (section: Section) => {
-      if (!course) return;
       const nowDone = !section.completed_at;
       const completedAt = nowDone ? new Date().toISOString() : null;
 
@@ -584,66 +600,42 @@ export default function CourseDetailDrawer({ courseId, onClose }: Props) {
         .eq('id', section.id);
 
       if (nowDone) {
-        const statKeys = (course.linked_stats ?? []) as StatKey[];
-        const sectionBonus2  = Math.floor(100 * (course.is_legacy ? 0.5 : 1.0));
-        const { awardBonusXP: awardBonusXP2 } = await import('@/services/xpService');
+        const sectionBonus = Math.floor(100 * (course.is_legacy ? 0.5 : 1.0));
+        const { awardBonusXP } = await import('@/services/xpService');
         const linkedSkillIds = Array.isArray(course.linked_skill_ids) ? course.linked_skill_ids : [];
         const linkedSkillId = linkedSkillIds[0] || null;
         const coursePrimaryStat = statKeys[0];
 
         if (linkedSkillId && coursePrimaryStat) {
-          const skillBonus = Math.floor(sectionBonus2 * 0.5);
-          const statBonus = Math.floor(sectionBonus2 * 0.25);
-          const masterBonus = Math.floor(sectionBonus2 * 0.25);
-          await awardBonusXP2({ source: 'course_section', sourceId: section.id, skillId: linkedSkillId, amount: skillBonus, notes: `${course.name} — ${section.title} [SKILL]`, tier: 'skill' });
-          await awardBonusXP2({ source: 'course_section', sourceId: section.id, statKey: coursePrimaryStat, amount: statBonus, notes: `${course.name} — ${section.title} [STAT]`, tier: 'stat' });
-          await awardBonusXP2({ source: 'course_section', sourceId: section.id, amount: masterBonus, notes: `${course.name} — ${section.title} [MASTER]`, tier: 'master' });
-          setLastXP({ amount: sectionBonus2, label: section.title });
+          const skillBonus = Math.floor(sectionBonus * 0.5);
+          const statBonus = Math.floor(sectionBonus * 0.25);
+          const masterBonus = Math.floor(sectionBonus * 0.25);
+          await awardBonusXP({ source: 'course_section', sourceId: section.id, skillId: linkedSkillId, amount: skillBonus, notes: `${course.name} — ${section.title} [SKILL]`, tier: 'skill' });
+          await awardBonusXP({ source: 'course_section', sourceId: section.id, statKey: coursePrimaryStat, amount: statBonus, notes: `${course.name} — ${section.title} [STAT]`, tier: 'stat' });
+          await awardBonusXP({ source: 'course_section', sourceId: section.id, amount: masterBonus, notes: `${course.name} — ${section.title} [MASTER]`, tier: 'master' });
         } else if (coursePrimaryStat) {
-          const statBonus = Math.floor(sectionBonus2 * 0.5);
-          const masterBonus = Math.floor(sectionBonus2 * 0.5);
-          await awardBonusXP2({ source: 'course_section', sourceId: section.id, statKey: coursePrimaryStat, amount: statBonus, notes: `${course.name} — ${section.title}`, tier: 'stat' });
-          await awardBonusXP2({ source: 'course_section', sourceId: section.id, amount: masterBonus, notes: `${course.name} — ${section.title}`, tier: 'master' });
-          setLastXP({ amount: sectionBonus2, label: section.title });
+          const statBonus = Math.floor(sectionBonus * 0.5);
+          const masterBonus = Math.floor(sectionBonus * 0.5);
+          await awardBonusXP({ source: 'course_section', sourceId: section.id, statKey: coursePrimaryStat, amount: statBonus, notes: `${course.name} — ${section.title}`, tier: 'stat' });
+          await awardBonusXP({ source: 'course_section', sourceId: section.id, amount: masterBonus, notes: `${course.name} — ${section.title}`, tier: 'master' });
         }
-        setTimeout(() => setLastXP(null), 3000);
       } else {
-        // Unticking — reverse XP
+        const { reverseBonusXP } = await import('@/services/xpService');
         await reverseBonusXP(section.id);
       }
 
-      const updatedSections = (sections ?? []).map(s =>
-        s.id === section.id ? { ...s, completed_at: completedAt } : s
-      );
-      await updateProgress(updatedSections);
-        await refreshAppData(queryClient);
-      },
-      onSuccess: async () => {
-        await refreshAppData(queryClient);
-      },
-  });
-
-  // ── Add lesson ────────────────────────────────────────────
-
-  const addLesson = useMutation({
-    mutationFn: async ({ sectionId, title, type }: { sectionId: string; title: string; type: 'lesson' | 'quiz' | 'assignment' }) => {
-      const currentLessons = sections?.find(s => s.id === sectionId)?.lessons ?? [];
-      const { error } = await supabase
-        .from('course_lessons')
-        .insert({
-          section_id: sectionId,
-          course_id:  courseId,
-          title,
-          type,
-          sort_order: currentLessons.length,
-        });
-      if (error) throw error;
+      await updateProgress(sections ?? []);
     },
-    onSuccess: () => {
+    onSuccess: async () => {
+      await refreshAppData(queryClient);
+      // Re-fetch course to get fresh progress from DB
+      const { data: freshCourse } = await supabase.from('courses').select('*').eq('id', courseId).single();
+      if (freshCourse) {
+        queryClient.setQueryData(['course', courseId], freshCourse);
+      }
+      queryClient.invalidateQueries({ queryKey: ['course', courseId] });
       queryClient.invalidateQueries({ queryKey: ['course-sections', courseId] });
-      setAddingLessonToSection(null);
-      setNewLessonTitle('');
-      setNewLessonType('lesson');
+      queryClient.invalidateQueries({ queryKey: ['courses-all'] });
     },
   });
 

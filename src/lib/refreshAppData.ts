@@ -41,6 +41,8 @@ const APP_QUERY_KEYS = [
   ['augment-sessions'],
   ['project-sessions'],
   ['notes'],
+  ['course'],
+  ['course-sections'],
   ['terminal-skills-list'],
   ['terminal-tools-list'],
   ['terminal-augments-list'],
