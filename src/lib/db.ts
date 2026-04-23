@@ -354,191 +354,17 @@ async function initSchema(db: PGlite) {
     CREATE INDEX IF NOT EXISTS idx_notes_status ON notes(status);
     CREATE INDEX IF NOT EXISTS idx_notes_created_at ON notes(created_at);
 
-    CREATE TABLE IF NOT EXISTS background_records (
+CREATE TABLE IF NOT EXISTS background_records (
       id           TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
       type         TEXT NOT NULL,
       title        TEXT NOT NULL,
       organization TEXT NOT NULL,
       date_str     TEXT NOT NULL,
       description  TEXT,
+      sort_order   INTEGER NOT NULL DEFAULT 0,
       created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS idx_bg_records_type ON background_records(type);
-
-    CREATE TABLE IF NOT EXISTS planner_entries (
-      id                       TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-      title                    TEXT NOT NULL,
-      date                     DATE NOT NULL,
-      time                     TEXT,
-      completed                BOOLEAN NOT NULL DEFAULT FALSE,
-      recurrence_type          TEXT NOT NULL DEFAULT 'NONE',
-      recurrence_interval      INTEGER NOT NULL DEFAULT 1,
-      recurrence_days_of_week  JSONB,
-      recurrence_end_type      TEXT,
-      recurrence_end_date      DATE,
-      recurrence_count         INTEGER,
-      created_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-
-    CREATE TABLE IF NOT EXISTS planner_exceptions (
-      id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-      entry_id        TEXT NOT NULL REFERENCES planner_entries(id) ON DELETE CASCADE,
-      occurrence_date DATE NOT NULL,
-      title           TEXT,
-      date            DATE,
-      time            TEXT,
-      completed       BOOLEAN,
-      is_deleted      BOOLEAN NOT NULL DEFAULT FALSE,
-      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_planner_exceptions_entry_occurrence
-      ON planner_exceptions(entry_id, occurrence_date);
-    CREATE INDEX IF NOT EXISTS idx_planner_entries_date ON planner_entries(date);
-    CREATE INDEX IF NOT EXISTS idx_planner_exceptions_date ON planner_exceptions(date);
-
-    CREATE TABLE IF NOT EXISTS vault_items (
-      id             TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-      title          TEXT NOT NULL,
-      category       TEXT NOT NULL,
-      completed_date DATE NOT NULL,
-      notes          TEXT,
-      metadata       JSONB,
-      created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS idx_vault_items_category ON vault_items(category);
-    CREATE INDEX IF NOT EXISTS idx_vault_items_completed_date ON vault_items(completed_date);
-
-    CREATE TABLE IF NOT EXISTS sleep_sessions (
-      id               TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-      start_time       TIMESTAMPTZ NOT NULL,
-      end_time         TIMESTAMPTZ NOT NULL,
-      duration_minutes INTEGER NOT NULL,
-      quality          INTEGER,
-      notes            TEXT,
-      created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS idx_sleep_sessions_end_time ON sleep_sessions(end_time DESC);
-
-    CREATE TABLE IF NOT EXISTS recovery_settings (
-      id                 INTEGER PRIMARY KEY DEFAULT 1,
-      daily_goal_minutes INTEGER NOT NULL DEFAULT 480
-    );
-    INSERT INTO recovery_settings (id) VALUES (1) ON CONFLICT DO NOTHING;
-
-    CREATE TABLE IF NOT EXISTS custom_ingredients (
-      id         TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-      name       TEXT NOT NULL,
-      category   TEXT NOT NULL,
-      calories   REAL NOT NULL,
-      protein_g  REAL NOT NULL,
-      carbs_g    REAL NOT NULL,
-      fat_g      REAL NOT NULL,
-      notes      TEXT,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS idx_custom_ingredients_name ON custom_ingredients(name);
-    CREATE INDEX IF NOT EXISTS idx_custom_ingredients_category ON custom_ingredients(category);
-
-    CREATE TABLE IF NOT EXISTS recipes (
-      id                    TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-      name                  TEXT NOT NULL,
-      category              TEXT NOT NULL,
-      is_prepared_meal      BOOLEAN NOT NULL DEFAULT FALSE,
-      servings              INTEGER NOT NULL DEFAULT 1,
-      total_calories        REAL NOT NULL DEFAULT 0,
-      total_protein_g       REAL NOT NULL DEFAULT 0,
-      total_carbs_g         REAL NOT NULL DEFAULT 0,
-      total_fat_g           REAL NOT NULL DEFAULT 0,
-      per_serving_calories  REAL NOT NULL DEFAULT 0,
-      per_serving_protein_g REAL NOT NULL DEFAULT 0,
-      per_serving_carbs_g   REAL NOT NULL DEFAULT 0,
-      per_serving_fat_g     REAL NOT NULL DEFAULT 0,
-      created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS idx_recipes_name ON recipes(name);
-    CREATE INDEX IF NOT EXISTS idx_recipes_category ON recipes(category);
-
-    CREATE TABLE IF NOT EXISTS recipe_ingredients (
-      id                TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-      recipe_id         TEXT NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
-      ingredient_id     TEXT,
-      ingredient_name   TEXT NOT NULL,
-      ingredient_source TEXT,
-      input_text        TEXT,
-      grams             REAL NOT NULL,
-      calories_total    REAL NOT NULL DEFAULT 0,
-      protein_g_total   REAL NOT NULL DEFAULT 0,
-      carbs_g_total     REAL NOT NULL DEFAULT 0,
-      fat_g_total       REAL NOT NULL DEFAULT 0,
-      sort_order        INTEGER NOT NULL DEFAULT 0
-    );
-    CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_recipe_id ON recipe_ingredients(recipe_id);
-
-    CREATE TABLE IF NOT EXISTS recipe_steps (
-      id               TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-      recipe_id        TEXT NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
-      step_number      INTEGER NOT NULL DEFAULT 1,
-      instruction_text TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_recipe_steps_recipe_id ON recipe_steps(recipe_id);
-
-    CREATE TABLE IF NOT EXISTS intake_settings (
-      id                 INTEGER PRIMARY KEY DEFAULT 1,
-      daily_calorie_goal INTEGER NOT NULL DEFAULT 2000,
-      protein_percent    INTEGER NOT NULL DEFAULT 40,
-      carbs_percent      INTEGER NOT NULL DEFAULT 30,
-      fat_percent        INTEGER NOT NULL DEFAULT 30,
-      created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-    INSERT INTO intake_settings (id) VALUES (1) ON CONFLICT DO NOTHING;
-
-    CREATE TABLE IF NOT EXISTS intake_logs (
-      id            TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-      logged_at     TIMESTAMPTZ NOT NULL,
-      anchor_date   DATE NOT NULL,
-      meal_label    TEXT,
-      notes         TEXT,
-      source_kind   TEXT NOT NULL,
-      source_id     TEXT,
-      source_name   TEXT NOT NULL,
-      source_origin TEXT,
-      grams         REAL,
-      servings      REAL,
-      input_text    TEXT,
-      calories      REAL NOT NULL DEFAULT 0,
-      protein_g     REAL NOT NULL DEFAULT 0,
-      carbs_g       REAL NOT NULL DEFAULT 0,
-      fat_g         REAL NOT NULL DEFAULT 0,
-      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS idx_intake_logs_anchor_date ON intake_logs(anchor_date DESC);
-    CREATE INDEX IF NOT EXISTS idx_intake_logs_logged_at ON intake_logs(logged_at DESC);
-
-    CREATE TABLE IF NOT EXISTS habit_logs (
-      id                TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-      habit_id          TEXT NOT NULL,
-      logged_for_date   TEXT NOT NULL,
-      logged_date       DATE,
-      completed         BOOLEAN NOT NULL DEFAULT FALSE,
-      value             INTEGER,
-      xp_awarded        INTEGER NOT NULL DEFAULT 0,
-      logged_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_sessions_skill  ON sessions(skill_id);
-    CREATE INDEX IF NOT EXISTS idx_sessions_date   ON sessions(logged_at);
-    CREATE INDEX IF NOT EXISTS idx_xp_log_tier     ON xp_log(tier);
-    CREATE INDEX IF NOT EXISTS idx_xp_log_entity   ON xp_log(entity_id);
-    CREATE INDEX IF NOT EXISTS idx_habit_logs_date ON habit_logs(logged_for_date);
-    CREATE INDEX IF NOT EXISTS idx_checkins_date   ON checkins(checked_date);
-
   `);
 
   // ── Migrations — batched for startup performance ─────────────────────────
@@ -773,5 +599,11 @@ async function initSchema(db: PGlite) {
     CREATE INDEX IF NOT EXISTS idx_habits_status ON habits(status);
     CREATE INDEX IF NOT EXISTS idx_sessions_logged_at ON sessions(logged_at);
     CREATE INDEX IF NOT EXISTS idx_media_status ON media(status);
+  `);
+
+  // ── Batch 10: background_records sort_order ──────────────────────────────
+  await db.exec(`
+    ALTER TABLE background_records ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0;
+    CREATE INDEX IF NOT EXISTS idx_bg_records_sort ON background_records(type, sort_order);
   `);
 }

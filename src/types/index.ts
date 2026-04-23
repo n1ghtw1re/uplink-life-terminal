@@ -827,6 +827,7 @@ export interface BackgroundRecord {
   organization: string;
   dateStr: string;
   description: string;
+  sortOrder: number;
   createdAt: string;
 }
 

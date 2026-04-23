@@ -9,6 +9,7 @@ import { getLevelFromXP, getXPDisplayValues } from '@/services/xpService';
 import { supabase } from '@/integrations/supabase/client';
 import { STAT_META, StatKey } from '@/types';
 import ImageUploadModal from './ImageUploadModal';
+import { resolveClassFromStats } from '@/services/classSystem';
 
 type StatTabKey = StatKey | 'ALL';
 
@@ -21,6 +22,40 @@ const CharSheetPage1 = ({ onSkillClick }: CharSheetPage1Props) => {
   const { data: op, isLoading: opLoading } = useOperator();
   const { data: stats, isLoading: statsLoading } = useStats();
   const { data: skills, isLoading: skillsLoading } = useSkills();
+  
+  const userClass = useMemo(() => {
+    if (!stats || stats.length < 2) return null;
+    return resolveClassFromStats(stats);
+  }, [stats]);
+  
+  const CLASS_BADGE_MAP: Record<string, string> = {
+    'OPERATOR': 'operator.jpeg',
+    'PRACTITIONER': 'practitioner.jpeg',
+    'PERFORMER': 'performer.jpg',
+    'LABORER': 'laborer.jpg',
+    'ARTIST': 'artist.jpg',
+    'MONK': 'monk.jpg',
+    'ANALYST': 'analyst.jpg',
+    'COMMUNICATOR': 'communicator.jpg',
+    'TECHNICIAN': 'technician.jpg',
+    'DESIGNER': 'designer.jpg',
+    'OBSERVER': 'observer.jpg',
+    'SCHOLAR': 'scholar.jpg',
+    'STUDENT': 'student.jpeg',
+    'ARCHITECT': 'architect.jpeg',
+    'PHILOSOPHER': 'philosopher.jpeg',
+    'PROFESSIONAL': 'professional.jpeg',
+    'DIRECTOR': 'director.jpeg',
+    'GUIDE': 'guide.jpeg',
+    'BUILDER': 'builder.jpg',
+    'SURVIVOR': 'survivor.jpg',
+    'VISIONARY': 'visionary.jpg',
+  };
+  
+  const userClassBadge = useMemo(() => {
+    if (!userClass) return null;
+    return CLASS_BADGE_MAP[userClass.id] || null;
+  }, [userClass]);
   
   const [editing, setEditing] = useState<'designation' | 'callsign' | false>(false);
   const [editValue, setEditValue] = useState('');
@@ -158,7 +193,7 @@ const CharSheetPage1 = ({ onSkillClick }: CharSheetPage1Props) => {
       {/* LEFT - TOP SECTION: VISUAL + USER */}
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
         
-        {/* VISUAL + USER side by side */}
+{/* VISUAL + USER + USER_CLASS three columns */}
         <div style={{ display: 'flex', gap: 12, marginBottom: 8 }}>
           {/* // VISUAL - Image */}
           <div style={{ width: 180, flexShrink: 0 }}>
@@ -193,7 +228,7 @@ const CharSheetPage1 = ({ onSkillClick }: CharSheetPage1Props) => {
                 fontSize: 8, 
                 padding: '2px 8px', 
                 cursor: 'pointer',
-                width: '100%'
+                width: '100'
             }}>
               [EDIT IMAGE]
             </button>
@@ -272,6 +307,23 @@ const CharSheetPage1 = ({ onSkillClick }: CharSheetPage1Props) => {
               )}
             </div>
           </div>
+
+          {/* // USER_CLASS */}
+          {userClass && userClassBadge && (
+            <div style={{ width: 180, flexShrink: 0 }}>
+              <div style={{ color: dim, fontSize: 9, marginBottom: 6, letterSpacing: 1 }}>// USER_CLASS</div>
+              <div style={{ width: 180, height: 180, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', background: bgT, border: `2px solid ${acc}` }}>
+                <img 
+                  src={`/images/class_badges/${userClassBadge}`}
+                  alt={userClass.name}
+                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                />
+              </div>
+              <div style={{ fontSize: 11, color: acc, fontFamily: mono, letterSpacing: 1, textAlign: 'center', marginTop: 6 }}>
+                {userClass.name}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Stats - scrollable */}

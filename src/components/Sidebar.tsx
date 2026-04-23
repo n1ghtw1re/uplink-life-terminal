@@ -3,9 +3,10 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useStats } from '@/hooks/useStats';
-import { StatKey } from '@/types';
+import { StatKey, STAT_META } from '@/types';
 import { THEME_OPTIONS, type ThemeCode } from '@/lib/themes';
 import { exportAllData, importData } from '@/services/exportService';
+import { resolveClassFromStats } from '@/services/classSystem';
 
 interface SidebarProps {
   expanded: boolean;
@@ -74,6 +75,41 @@ const Sidebar = ({
 }: SidebarProps) => {
   const { user } = useAuth();
   const { data: stats } = useStats(user?.id);
+
+  const userClass = useMemo(() => {
+    if (!stats || stats.length < 2) return null;
+    const statDisplays = stats.map(s => ({ key: s.key, xp: s.xp ?? 0, level: s.level ?? 0 }));
+    return resolveClassFromStats(statDisplays);
+  }, [stats]);
+
+  const CLASS_BADGE_MAP: Record<string, string> = {
+    'OPERATOR': 'operator.jpeg',
+    'PRACTITIONER': 'practitioner.jpeg',
+    'PERFORMER': 'performer.jpg',
+    'LABORER': 'laborer.jpg',
+    'ARTIST': 'artist.jpg',
+    'MONK': 'monk.jpg',
+    'ANALYST': 'analyst.jpg',
+    'COMMUNICATOR': 'communicator.jpg',
+    'TECHNICIAN': 'technician.jpg',
+    'DESIGNER': 'designer.jpg',
+    'OBSERVER': 'observer.jpg',
+    'SCHOLAR': 'scholar.jpg',
+    'STUDENT': 'student.jpeg',
+    'ARCHITECT': 'architect.jpeg',
+    'PHILOSOPHER': 'philosopher.jpeg',
+    'PROFESSIONAL': 'professional.jpeg',
+    'DIRECTOR': 'director.jpeg',
+    'GUIDE': 'guide.jpeg',
+    'BUILDER': 'builder.jpg',
+    'SURVIVOR': 'survivor.jpg',
+    'VISIONARY': 'visionary.jpg',
+  };
+
+  const userClassBadge = useMemo(() => {
+    if (!userClass) return null;
+    return CLASS_BADGE_MAP[userClass.id] || null;
+  }, [userClass]);
 
   const { data: counts } = useQuery({
     queryKey: ['arsenal-counts'],
@@ -427,6 +463,25 @@ const Sidebar = ({
                 </div>
               </div>
             </>
+          )}
+
+          <div style={{ height: 1, background: 'hsl(var(--accent-dim))', margin: '4px 0' }} />
+
+          {/* // USER_CLASS */}
+          {userClass && (
+            <div style={{ padding: '8px 12px 12px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, border: '1px solid hsl(var(--accent-dim))', margin: '8px 12px' }}>
+              <div style={{ fontSize: 9, color: 'hsl(var(--accent-dim))', letterSpacing: 1 }}>// USER_CLASS</div>
+              <div style={{ width: 64, height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', background: 'hsl(var(--bg-primary))' }}>
+                <img 
+                  src={`/images/class_badges/${userClassBadge}`}
+                  alt={userClass.name}
+                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                />
+              </div>
+              <div style={{ fontSize: 11, color: 'hsl(var(--accent))', fontFamily: "'VT323', monospace", letterSpacing: 1 }}>
+                {userClass.name}
+              </div>
+            </div>
           )}
         </div>
       )}

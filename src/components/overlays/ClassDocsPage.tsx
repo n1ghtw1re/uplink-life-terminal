@@ -10,6 +10,7 @@ interface ClassDoc {
   stats: [StatKey, StatKey];
   description: string;
   careers: string[];
+  badge: string;
 }
 
 const STAT_TABS: { key: StatKey; label: string }[] = [
@@ -28,126 +29,147 @@ const CLASS_DOCS: ClassDoc[] = [
     stats: ['body', 'wire'],
     description: "Mastery of the interface between human effort and machine precision. You don't just use tools; you become an extension of them.",
     careers: ['Drone Pilot', 'Heavy Machinery Operator', 'Laparoscopic Surgeon'],
+    badge: 'operator.jpeg',
   },
   {
     name: 'PRACTITIONER',
     stats: ['body', 'mind'],
     description: 'Theoretical knowledge translated into physical skill. This class is about the "how" and "why" of movement.',
     careers: ['Physical Therapist', 'Yoga Instructor', 'Biometric Researcher'],
+    badge: 'practitioner.jpeg',
   },
   {
     name: 'PERFORMER',
     stats: ['body', 'cool'],
     description: 'The body as a tool for social influence and public engagement. High presence paired with high physical capability.',
     careers: ['Professional Athlete', 'Stunt Performer', 'Stage Actor'],
+    badge: 'performer.jpg',
   },
   {
     name: 'LABORER',
     stats: ['body', 'grit'],
     description: 'The epitome of physical resilience. This class excels at high-volume, repetitive physical tasks that require mental toughness.',
     careers: ['Firefighter', 'Construction Foreman', 'Long-distance Mover'],
+    badge: 'laborer.jpg',
   },
   {
     name: 'ARTIST',
     stats: ['body', 'flow'],
     description: 'Using the physical form or manual dexterity to create aesthetic or emotional resonance.',
     careers: ['Sculptor', 'Contemporary Dancer', 'Professional Chef'],
+    badge: 'artist.jpg',
   },
   {
     name: 'MONK',
     stats: ['body', 'ghost'],
     description: 'Total mastery over the nervous system. The goal is internal regulation and the union of breath and movement.',
     careers: ['Martial Arts Sensei', 'Breathwork Coach', 'Free Diver'],
+    badge: 'monk.jpg',
   },
   {
     name: 'ANALYST',
     stats: ['wire', 'mind'],
     description: 'Navigating complex data structures to find logic. You see the "ghost in the machine" and understand how the parts form the whole.',
     careers: ['Data Scientist', 'Cybersecurity Researcher', 'Financial Quant'],
+    badge: 'analyst.jpg',
   },
   {
     name: 'COMMUNICATOR',
     stats: ['wire', 'cool'],
     description: 'Using digital platforms to lead, influence, or manage groups. You are the bridge between the tech and the people.',
     careers: ['Social Media Strategist', 'Digital PR Manager', 'Technical Evangelist'],
+    badge: 'communicator.jpg',
   },
   {
     name: 'TECHNICIAN',
     stats: ['wire', 'grit'],
     description: 'The disciplined maintenance of systems. You ensure things stay running through consistency and troubleshooting.',
     careers: ['Systems Administrator', 'IT Support Lead', 'Quality Assurance Tester'],
+    badge: 'technician.jpg',
   },
   {
     name: 'DESIGNER',
     stats: ['wire', 'flow'],
     description: 'The marriage of digital tools and creative vision. You build the aesthetics of the digital world.',
     careers: ['UX/UI Designer', 'Motion Graphics Artist', 'Front-end Developer'],
+    badge: 'designer.jpg',
   },
   {
     name: 'OBSERVER',
     stats: ['wire', 'ghost'],
     description: 'Quietly navigating the digital landscape. You find patterns or truth within systems through detached awareness.',
     careers: ['Digital Ethicist', 'OSINT (Open Source Intelligence) Researcher', 'Archivist'],
+    badge: 'observer.jpg',
   },
   {
     name: 'SCHOLAR',
     stats: ['mind', 'cool'],
     description: 'The bridge between complex ideas and public understanding. You take what you know and make it accessible.',
     careers: ['University Professor', 'Science Communicator', 'Policy Advisor'],
+    badge: 'scholar.jpg',
   },
   {
     name: 'STUDENT',
     stats: ['mind', 'grit'],
     description: 'The relentless pursuit of mastery. This class is defined by the discipline required to tackle steep learning curves.',
     careers: ['PhD Candidate', 'Medical Resident', 'Language Translator'],
+    badge: 'student.jpeg',
   },
   {
     name: 'ARCHITECT',
     stats: ['mind', 'flow'],
     description: 'Translating deep research or intellectual concepts into something new and tangible.',
     careers: ['Investigative Journalist', 'Game Designer', 'Non-Fiction Author'],
+    badge: 'architect.jpeg',
   },
   {
     name: 'PHILOSOPHER',
     stats: ['mind', 'ghost'],
     description: 'Seeking the big picture. You use your intellect to explore consciousness, ethics, and the nature of reality.',
     careers: ['Ethicist', 'Theoretical Physicist', 'Meditation Researcher'],
+    badge: 'philosopher.jpeg',
   },
   {
     name: 'PROFESSIONAL',
     stats: ['cool', 'grit'],
     description: 'The standard for reliability in the workplace. You maintain a high-status presence through consistent, disciplined output.',
     careers: ['Corporate Lawyer', 'Project Manager', 'Account Executive'],
+    badge: 'professional.jpeg',
   },
   {
     name: 'DIRECTOR',
     stats: ['cool', 'flow'],
     description: 'Creative output designed for public consumption. You create with the audience in mind.',
     careers: ['Creative Director', 'Fashion Designer', 'Content Creator'],
+    badge: 'director.jpeg',
   },
   {
     name: 'GUIDE',
     stats: ['cool', 'ghost'],
     description: 'Leadership through empathy and stillness. You influence others by providing clarity and a calm presence.',
     careers: ['Therapist', 'Executive Coach', 'Chaplain'],
+    badge: 'guide.jpeg',
   },
   {
     name: 'BUILDER',
     stats: ['grit', 'flow'],
     description: 'The grind meets the muse. You produce creative work through sheer volume and a do-not-quit attitude.',
     careers: ['Indie Developer', 'Novelist', 'Carpenter'],
+    badge: 'builder.jpg',
   },
   {
     name: 'SURVIVOR',
     stats: ['grit', 'ghost'],
     description: 'Maintaining inner peace and mental toughness during periods of extreme isolation or hardship.',
     careers: ['Humanitarian Aid Worker', 'Park Ranger', 'Crisis Counselor'],
+    badge: 'survivor.jpg',
   },
   {
     name: 'VISIONARY',
     stats: ['flow', 'ghost'],
     description: 'Pure inspiration rooted in the subconscious. You bring ideas from the void into reality through high-level creative intuition.',
     careers: ['Concept Artist', 'Futurist', 'Composer'],
+    badge: 'visionary.jpg',
   },
 ];
 
@@ -275,6 +297,31 @@ export default function ClassDocsPage({ onClose }: Props) {
             <div style={{ fontSize: 10, color: dim, lineHeight: 1.7 }}>
               {cls.description}
             </div>
+
+            {cls.badge && (
+              <div style={{ 
+                width: 100, 
+                height: 100, 
+                flexShrink: 0,
+                border: `1px solid ${adim}`, 
+                background: bgP,
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                overflow: 'hidden',
+                marginTop: 4,
+              }}>
+                <img 
+                  src={`/images/class_badges/${cls.badge}`} 
+                  alt={`${cls.name} badge`}
+                  style={{ 
+                    width: '100%', 
+                    height: '100%', 
+                    objectFit: 'contain',
+                  }}
+                />
+              </div>
+            )}
 
             <div style={{ marginTop: 'auto' }}>
               <div style={{ fontSize: 9, color: adim, letterSpacing: 2, marginBottom: 8 }}>

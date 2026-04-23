@@ -2,7 +2,7 @@
 // src/components/overlays/CharSheetPage2.tsx
 // RECORDS (Career & Education)
 // ============================================================
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { getDB } from '@/lib/db';
 import { useRecords } from '@/hooks/useRecords';
@@ -16,18 +16,83 @@ const adim = 'hsl(var(--accent-dim))';
 const bgS  = 'hsl(var(--bg-secondary))';
 const bgT  = 'hsl(var(--bg-tertiary))';
 
-type SortType = 'date' | 'alpha';
+type SortType = 'date' | 'alpha' | 'drag';
 
 export default function CharSheetPage2() {
   const queryClient = useQueryClient();
   const { data: records = [], isLoading } = useRecords();
 
   const [search, setSearch] = useState('');
-  const [sort, setSort]     = useState<SortType>('date');
+  const [sort, setSort]     = useState<SortType>('drag');
   
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showAddCareer, setShowAddCareer] = useState(false);
   const [showAddEdu, setShowAddEdu] = useState(false);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const [localSort, setLocalSort] = useState<'date' | 'alpha' | 'drag'>('drag');
+
+  const updateSortOrder = useMutation({
+    mutationFn: async (updates: { id: string; sortOrder: number }[]) => {
+      const db = await getDB();
+      for (const { id, sortOrder } of updates) {
+        await db.query(`UPDATE background_records SET sort_order = $1 WHERE id = $2;`, [sortOrder, id]);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['background_records'] });
+    }
+  });
+
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    setDraggingId(id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent, id: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverId(id);
+  };
+
+  const handleDragLeave = () => {
+    setDragOverId(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, targetId: string, type: 'CAREER' | 'EDUCATION') => {
+    e.preventDefault();
+    if (!draggingId || draggingId === targetId) {
+      setDraggingId(null);
+      setDragOverId(null);
+      return;
+    }
+
+    const list = type === 'CAREER' ? careerList : eduList;
+    const draggingIndex = list.findIndex(r => r.id === draggingId);
+    const targetIndex = list.findIndex(r => r.id === targetId);
+
+    if (draggingIndex === -1 || targetIndex === -1) {
+      setDraggingId(null);
+      setDragOverId(null);
+      return;
+    }
+
+    const newList = [...list];
+    const [removed] = newList.splice(draggingIndex, 1);
+    newList.splice(targetIndex, 0, removed);
+
+    const updates = newList.map((r, index) => ({ id: r.id, sortOrder: index }));
+    updateSortOrder.mutate(updates);
+
+    setDraggingId(null);
+    setDragOverId(null);
+    setLocalSort('drag');
+  };
+
+  const handleDragEnd = () => {
+    setDraggingId(null);
+    setDragOverId(null);
+  };
 
   // Sorting and filtering
   const filterAndSort = (items: BackgroundRecord[]) => {
@@ -38,6 +103,8 @@ export default function CharSheetPage2() {
     );
     if (sort === 'alpha') {
       res = [...res].sort((a, b) => a.title.localeCompare(b.title));
+    } else if (sort === 'date') {
+      res = [...res].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     }
     return res;
   };
@@ -140,17 +207,42 @@ export default function CharSheetPage2() {
     );
   };
 
-  const renderCard = (item: BackgroundRecord) => (
-    <div key={item.id} style={{ 
-      padding: '12px 16px', background: bgS, border: `1px solid rgba(153,104,0,0.3)`, 
-      marginBottom: 10, display: 'flex', flexDirection: 'column', gap: 6,
-      position: 'relative', overflow: 'hidden'
-    }}>
+  const renderCard = (item: BackgroundRecord, type: 'CAREER' | 'EDUCATION') => {
+    const isDragging = draggingId === item.id;
+    const isDragOver = dragOverId === item.id;
+    
+    return (
+    <div key={item.id} 
+      draggable={sort === 'drag'}
+      onDragStart={(e) => handleDragStart(e, item.id)}
+      onDragOver={(e) => handleDragOver(e, item.id)}
+      onDragLeave={handleDragLeave}
+      onDrop={(e) => handleDrop(e, item.id, type)}
+      onDragEnd={handleDragEnd}
+      style={{ 
+        padding: '12px 16px', 
+        background: isDragging ? 'rgba(255,176,0,0.1)' : isDragOver ? 'rgba(255,176,0,0.2)' : bgS, 
+        border: isDragOver ? `2px solid ${acc}` : `1px solid rgba(153,104,0,0.3)`, 
+        marginBottom: 10, 
+        display: 'flex', 
+        flexDirection: 'column', 
+        gap: 6,
+        position: 'relative', 
+        overflow: 'hidden',
+        cursor: sort === 'drag' ? 'grab' : 'default',
+        opacity: isDragging ? 0.5 : 1,
+      }}
+    >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div>
-          <div style={{ fontFamily: vt, fontSize: 18, color: acc, letterSpacing: 1 }}>{item.title}</div>
-          <div style={{ fontFamily: mono, fontSize: 10, color: adim, marginTop: -2 }}>
-            <span style={{ color: dim }}>{item.organization}</span> <span style={{ opacity: 0.5 }}>//</span> {item.dateStr}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+          {sort === 'drag' && (
+            <div style={{ color: adim, fontSize: 14, marginTop: 2, cursor: 'grab' }}>⋮⋮</div>
+          )}
+          <div>
+            <div style={{ fontFamily: vt, fontSize: 18, color: acc, letterSpacing: 1 }}>{item.title}</div>
+            <div style={{ fontFamily: mono, fontSize: 10, color: adim, marginTop: -2 }}>
+              <span style={{ color: dim }}>{item.organization}</span> <span style={{ opacity: 0.5 }}>//</span> {item.dateStr}
+            </div>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 6, opacity: 0.8 }} className="record-actions">
@@ -164,7 +256,8 @@ export default function CharSheetPage2() {
         </div>
       )}
     </div>
-  );
+    );
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', fontFamily: mono }}>
@@ -185,12 +278,18 @@ export default function CharSheetPage2() {
         
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           <span style={{ fontSize: 9, color: adim, letterSpacing: 2, marginRight: 4 }}>SORT:</span>
+          <button onClick={() => setSort('drag')} style={{
+            padding: '3px 10px', fontSize: 9, fontFamily: mono, cursor: 'pointer', letterSpacing: 1,
+            border: `1px solid ${sort === 'drag' ? acc : adim}`,
+            background: sort === 'drag' ? 'rgba(255,176,0,0.1)' : 'transparent',
+            color: sort === 'drag' ? acc : dim,
+          }}>DRAG</button>
           <button onClick={() => setSort('date')} style={{
             padding: '3px 10px', fontSize: 9, fontFamily: mono, cursor: 'pointer', letterSpacing: 1,
             border: `1px solid ${sort === 'date' ? acc : adim}`,
             background: sort === 'date' ? 'rgba(255,176,0,0.1)' : 'transparent',
             color: sort === 'date' ? acc : dim,
-          }}>DATE (Added)</button>
+          }}>DATE</button>
           <button onClick={() => setSort('alpha')} style={{
             padding: '3px 10px', fontSize: 9, fontFamily: mono, cursor: 'pointer', letterSpacing: 1,
             border: `1px solid ${sort === 'alpha' ? acc : adim}`,
@@ -219,7 +318,7 @@ export default function CharSheetPage2() {
             ) : careerList.map(item => (
                editingId === item.id 
                  ? <RecordForm key={item.id} type="CAREER" initialData={item} onCancel={() => setEditingId(null)} />
-                 : renderCard(item)
+                 : renderCard(item, 'CAREER')
             ))}
           </div>
         </div>
@@ -243,7 +342,7 @@ export default function CharSheetPage2() {
             ) : eduList.map(item => (
                editingId === item.id 
                  ? <RecordForm key={item.id} type="EDUCATION" initialData={item} onCancel={() => setEditingId(null)} />
-                 : renderCard(item)
+                 : renderCard(item, 'EDUCATION')
             ))}
           </div>
         </div>

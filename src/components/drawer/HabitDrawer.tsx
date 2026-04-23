@@ -104,9 +104,16 @@ export default function HabitDrawer({ habitId, onClose }: Props) {
         `SELECT habit_id, completed, COALESCE(value, 0) as value FROM habit_logs WHERE logged_for_date=$1`,
         [today]
       );
+      // Sum multiple logs and check if ANY log completed
       const map: Record<string, { completed: boolean; value: number }> = {};
       for (const row of res.rows) {
-        map[row.habit_id] = { completed: row.completed, value: row.value };
+        if (!map[row.habit_id]) {
+          map[row.habit_id] = { completed: false, value: 0 };
+        }
+        map[row.habit_id].value += row.value;
+        if (row.completed) {
+          map[row.habit_id].completed = true;
+        }
       }
       return map;
     },
