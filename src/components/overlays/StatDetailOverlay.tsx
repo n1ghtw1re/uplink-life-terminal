@@ -337,20 +337,6 @@ export default function StatDetailOverlay({ statKey, onClose, onNavigate, onOpen
     documentary: 'DOC', tv: 'TV', album: 'ALBUM',
   };
 
-  const streakColor = stat
-    ? stat.streak >= 30 ? '#ffd060'
-    : stat.streak >= 14 ? '#ffb000'
-    : stat.streak >= 7  ? '#cc8800'
-    : 'hsl(var(--text-dim))'
-    : 'hsl(var(--text-dim))';
-
-  const streakTierLabel = stat
-    ? stat.streak >= 30 ? 'LEGENDARY 3.0×'
-    : stat.streak >= 14 ? 'ON FIRE 2.0×'
-    : stat.streak >= 7  ? 'HOT STREAK 1.5×'
-    : 'STANDARD 1.0×'
-    : 'STANDARD 1.0×';
-
   const currentTitle = stat ? (titles[stat.level - 1] ?? `LVL ${stat.level}`) : '—';
   const nextTitle    = stat ? (titles[stat.level] ?? 'MAX') : '—';
 
@@ -396,15 +382,6 @@ export default function StatDetailOverlay({ statKey, onClose, onNavigate, onOpen
           </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          {stat && (
-            <span style={{
-              fontFamily: "'IBM Plex Mono', monospace",
-              fontSize: 10,
-              color: 'hsl(var(--accent-dim))',
-            }}>
-              STK: <span style={{ color: streakColor }}>{stat.streak}d [{streakTierLabel}]</span>
-            </span>
-          )}
           <button
             onClick={onClose}
             style={{

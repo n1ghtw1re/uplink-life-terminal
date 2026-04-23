@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useOperator } from '@/hooks/useOperator';
 import { supabase } from '@/integrations/supabase/client';
@@ -57,17 +57,35 @@ const CharSheetPage4 = () => {
     field: string;
     multiline?: boolean;
     isDate?: boolean;
-  }) => (
+  }) => {
+    const inputRef = useRef<HTMLInputElement>(null);
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    useEffect(() => {
+      if (editingField === field) {
+        setTimeout(() => {
+          if (multiline && textareaRef.current) {
+            textareaRef.current.focus();
+            textareaRef.current.setSelectionRange(textareaRef.current.value.length, textareaRef.current.value.length);
+          } else if (!multiline && inputRef.current) {
+            inputRef.current.focus();
+            inputRef.current.setSelectionRange(inputRef.current.value.length, inputRef.current.value.length);
+          }
+        }, 0);
+      }
+    }, [editingField, field, multiline]);
+
+    return (
     <div style={{ marginBottom: 12 }}>
       <div style={{ fontSize: 9, color: accDim, marginBottom: 4, letterSpacing: 1 }}>{label}</div>
       {editingField === field ? (
         <div style={{ display: 'flex', gap: 6 }}>
           {multiline ? (
             <textarea
+              ref={textareaRef}
               value={editValue}
               onChange={e => setEditValue(e.target.value)}
               onKeyDown={e => { if (e.key === 'Escape') setEditingField(null); }}
-              autoFocus
               style={{
                 flex: 1,
                 padding: '4px 8px',
@@ -79,18 +97,22 @@ const CharSheetPage4 = () => {
                 outline: 'none',
                 minHeight: 60,
                 resize: 'vertical',
+                direction: 'ltr',
+                textAlign: 'left',
               }}
             />
           ) : (
             <input
+              ref={inputRef}
               type={isDate ? 'date' : 'text'}
               value={editValue}
               onChange={e => setEditValue(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && !multiline) saveEdit(field); if (e.key === 'Escape') setEditingField(null); }}
-              autoFocus
               style={{
                 flex: 1,
                 padding: '4px 8px',
+                direction: 'ltr',
+                textAlign: 'left',
                 fontSize: 10,
                 background: bgT,
                 border: `1px solid ${acc}`,
@@ -143,6 +165,7 @@ const CharSheetPage4 = () => {
       )}
     </div>
   );
+  };
 
   return (
     <div style={{ display: 'flex', height: '100%', gap: 16, padding: '0 4px' }}>
