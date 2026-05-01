@@ -55,6 +55,7 @@ const APP_QUERY_KEYS = [
   ['terminal-recipes-list'],
   ['terminal-resources-list'],
   ['terminal-ingredients-list'],
+  ['activity-by-stat'],
 ];
 
 export async function refreshAppData(queryClient: QueryClient) {

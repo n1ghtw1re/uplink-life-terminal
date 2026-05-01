@@ -606,4 +606,95 @@ CREATE TABLE IF NOT EXISTS background_records (
     ALTER TABLE background_records ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0;
     CREATE INDEX IF NOT EXISTS idx_bg_records_sort ON background_records(type, sort_order);
   `);
+
+  // ── Batch 11: fix old terminal session xp_log entries ───────────────────
+  // Old terminal logs had mismatched session IDs between sessions and xp_log
+  // This migration rebuilds xp_log entries from session data
+  try {
+    // Clear old session xp_log entries
+    await db.exec(`DELETE FROM xp_log WHERE source = 'session';`);
+    
+    // Insert skill XP entries
+    await db.exec(`
+      INSERT INTO xp_log (id, source, source_id, tier, entity_id, amount, notes, logged_at)
+      SELECT 
+        gen_random_uuid()::text,
+        'session',
+        s.id,
+        'skill',
+        s.skill_id,
+        s.skill_xp,
+        s.skill_name,
+        s.logged_at
+      FROM sessions s WHERE s.skill_xp > 0;
+    `);
+    
+    // Insert master XP entries
+    await db.exec(`
+      INSERT INTO xp_log (id, source, source_id, tier, entity_id, amount, notes, logged_at)
+      SELECT 
+        gen_random_uuid()::text,
+        'session',
+        s.id,
+        'master',
+        'master',
+        s.master_xp,
+        s.skill_name,
+        s.logged_at
+      FROM sessions s WHERE s.master_xp > 0;
+    `);
+    
+    // Insert tool XP entries
+    await db.exec(`
+      INSERT INTO xp_log (id, source, source_id, tier, entity_id, amount, notes, logged_at)
+      SELECT 
+        gen_random_uuid()::text,
+        'session',
+        s.id,
+        'tool',
+        tool_id,
+        s.total_tool_xp / CASE WHEN jsonb_array_length(s.tool_ids) = 0 THEN 1 ELSE jsonb_array_length(s.tool_ids) END,
+        s.skill_name,
+        s.logged_at
+      FROM sessions s, jsonb_array_elements_text(s.tool_ids) AS tool_id
+      WHERE s.total_tool_xp > 0;
+    `);
+    
+    // Insert augment XP entries
+    await db.exec(`
+      INSERT INTO xp_log (id, source, source_id, tier, entity_id, amount, notes, logged_at)
+      SELECT 
+        gen_random_uuid()::text,
+        'session',
+        s.id,
+        'augment',
+        aug_id,
+        s.total_augment_xp / CASE WHEN jsonb_array_length(s.augment_ids) = 0 THEN 1 ELSE jsonb_array_length(s.augment_ids) END,
+        s.skill_name,
+        s.logged_at
+      FROM sessions s, jsonb_array_elements_text(s.augment_ids) AS aug_id
+      WHERE s.total_augment_xp > 0;
+    `);
+    
+    // Insert stat XP entries from JSONB stat_xp column
+    await db.exec(`
+      INSERT INTO xp_log (id, source, source_id, tier, entity_id, amount, notes, logged_at)
+      SELECT 
+        gen_random_uuid()::text,
+        'session',
+        s.id,
+        'stat',
+        stat_entry->>'stat',
+        (stat_entry->>'amount')::int,
+        s.skill_name,
+        s.logged_at
+      FROM sessions s,
+        jsonb_array_elements(s.stat_xp) AS stat_entry
+      WHERE s.stat_xp IS NOT NULL 
+        AND jsonb_typeof(s.stat_xp) = 'array'
+        AND (stat_entry->>'amount')::int > 0;
+    `);
+  } catch (e) {
+    console.error('Migration batch 11 failed:', e);
+  }
 }

@@ -66,6 +66,13 @@ export function usePlannerToday() {
   return usePlannerDay(today);
 }
 
+export function usePlannerUpcoming() {
+  const today = toDateString(new Date());
+  const thirtyDaysLater = new Date();
+  thirtyDaysLater.setDate(thirtyDaysLater.getDate() + 30);
+  return usePlannerRange(today, toDateString(thirtyDaysLater));
+}
+
 export function usePlannerActions() {
   const queryClient = useQueryClient();
 

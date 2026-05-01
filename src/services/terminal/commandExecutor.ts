@@ -618,8 +618,9 @@ async function executeLog(args: string[], flags: Record<string, string | string[
     sessionNote = sessionNote.replace(/'/g, "''");
   }
 
+  const sessionId = crypto.randomUUID();
   const xpResult = await awardSessionXP({
-    sessionId: crypto.randomUUID(),
+    sessionId,
     skillId: skill.id,
     skillName: skill.name,
     durationMinutes: duration.minutes,
@@ -644,7 +645,7 @@ async function executeLog(args: string[], flags: Record<string, string | string[
       augment_ids, total_augment_xp,
       course_id, media_id, project_id
     ) VALUES (
-      '${crypto.randomUUID()}',
+      '${sessionId}',
       '${skill.id}',
       '${skill.name.replace(/'/g, "''")}',
       ${duration.minutes},
