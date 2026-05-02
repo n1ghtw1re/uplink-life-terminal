@@ -95,6 +95,44 @@ async function executeList(args: string[], context?: any): Promise<CommandResult
     };
   }
 
+  if (item === 'exercises' || item === 'exercise') {
+    const res = await db.query<{ id: string; name: string; level: number; xp: number }>(
+      `SELECT id, name, level, xp FROM exercises WHERE active = true ORDER BY name`
+    );
+
+    if (res.rows.length === 0) {
+      return { success: true, output: 'No exercises found. Add exercises from the Exercise page.' };
+    }
+
+    const output = res.rows.map(e =>
+      `${truncate(e.name).padEnd(15)} LVL ${String(e.level || 0).padEnd(3)} XP ${String(e.xp || 0).padStart(8)}`
+    ).join('\n');
+
+    return {
+      success: true,
+      output: `EXERCISE (${res.rows.length})\n---------------------------------------------\n${output}`,
+    };
+  }
+
+  if (item === 'workouts' || item === 'workout') {
+    const res = await db.query<{ id: string; name: string; completed_count: number }>(
+      `SELECT id, name, completed_count FROM workouts WHERE active = true ORDER BY name`
+    );
+
+    if (res.rows.length === 0) {
+      return { success: true, output: 'No workouts found. Add workouts from the Workouts page.' };
+    }
+
+    const output = res.rows.map(w =>
+      `${truncate(w.name).padEnd(15)} DONE ${String(w.completed_count || 0).padStart(4)}`
+    ).join('\n');
+
+    return {
+      success: true,
+      output: `WORKOUTS (${res.rows.length})\n---------------------------------------------\n${output}`,
+    };
+  }
+
   if (item === 'tools' || item === 'tool') {
     const res = await db.query<{ id: string; name: string; level: number; xp: number; active: boolean }>(
       `SELECT id, name, level, xp, active FROM tools WHERE active = true ORDER BY name`
@@ -319,7 +357,7 @@ async function executeList(args: string[], context?: any): Promise<CommandResult
   return {
     success: false,
     output: '',
-    error: `Unknown list type: ${item}. Available: skills, tools, augments, projects, media, habits, courses, vault, recipes, resources, ingredients, notes`,
+    error: `Unknown list type: ${item}. Available: skills, exercises, workouts, tools, augments, projects, media, habits, courses, vault, recipes, resources, ingredients, notes`,
   };
 }
 
@@ -352,6 +390,22 @@ async function executeDrawer(args: string[], drawerHandler?: (type: string, name
   if (skillRes.rows.length > 0) {
     if (drawerHandler) drawerHandler('skill', skillRes.rows[0].id);
     return { success: true, output: `Opening drawer for skill: ${skillRes.rows[0].name}` };
+  }
+
+  const exerciseRes = await db.query<{ id: string; name: string }>(
+    `SELECT id, name FROM exercises WHERE LOWER(name) = LOWER('${nameArg.replace(/'/g, "''")}') AND active = true`
+  );
+  if (exerciseRes.rows.length > 0) {
+    if (drawerHandler) drawerHandler('exercise', exerciseRes.rows[0].id);
+    return { success: true, output: `Opening drawer for exercise: ${exerciseRes.rows[0].name}` };
+  }
+
+  const workoutRes = await db.query<{ id: string; name: string }>(
+    `SELECT id, name FROM workouts WHERE LOWER(name) = LOWER('${nameArg.replace(/'/g, "''")}') AND active = true`
+  );
+  if (workoutRes.rows.length > 0) {
+    if (drawerHandler) drawerHandler('workout', workoutRes.rows[0].id);
+    return { success: true, output: `Opening drawer for workout: ${workoutRes.rows[0].name}` };
   }
 
   // Tools
@@ -791,6 +845,9 @@ const WIDGET_ALIASES: Record<string, string> = {
   'recovery': 'recovery', 'sleep': 'recovery',
   'ingredients': 'ingredients', 'ing': 'ingredients',
   'intake': 'intake', 'macro': 'intake',
+  'exercise': 'exercise', 'exercises': 'exercise',
+  'workout': 'workouts', 'workouts': 'workouts',
+  'output': 'output',
   'recipes': 'recipes', 'recipe': 'recipes',
   'heatmap': 'heatmap', 'heat': 'heatmap',
   'stats': 'stats', 'stat': 'stats',
@@ -809,7 +866,7 @@ const WIDGET_ALIASES: Record<string, string> = {
   'terminal': 'terminal', 'term': 'terminal',
 };
 
-const ALL_WIDGET_IDS = ['xp', 'checkin', 'habits', 'planner', 'recovery', 'ingredients', 'intake', 'recipes', 'heatmap', 'stats', 'courses', 'media', 'skills', 'tools', 'resources', 'augments', 'projects', 'vault', 'notes', 'clock', 'calculator', 'unitConverter', 'terminal'];
+const ALL_WIDGET_IDS = ['xp', 'checkin', 'habits', 'planner', 'recovery', 'ingredients', 'intake', 'exercise', 'workouts', 'output', 'recipes', 'heatmap', 'stats', 'courses', 'media', 'skills', 'tools', 'resources', 'augments', 'projects', 'vault', 'notes', 'clock', 'calculator', 'unitConverter', 'terminal'];
 
 function resolveWidgetId(name: string): string | null {
   const normalized = name.toLowerCase().replace(/_/g, '');

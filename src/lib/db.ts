@@ -175,6 +175,65 @@ async function initSchema(db: PGlite) {
       created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
+    CREATE TABLE IF NOT EXISTS exercises (
+      id            TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      name          TEXT NOT NULL,
+      category_id   TEXT NOT NULL,
+      quantity_type TEXT NOT NULL,
+      description   TEXT,
+      primary_stat  TEXT NOT NULL,
+      secondary_stat TEXT NOT NULL,
+      primary_pct   INTEGER NOT NULL DEFAULT 50,
+      secondary_pct INTEGER NOT NULL DEFAULT 50,
+      metric_type   TEXT NOT NULL,
+      xp            INTEGER NOT NULL DEFAULT 0,
+      level         INTEGER NOT NULL DEFAULT 0,
+      active        BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS workouts (
+      id            TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      name          TEXT NOT NULL,
+      category_id   TEXT NOT NULL,
+      description   TEXT,
+      primary_stat  TEXT NOT NULL,
+      secondary_stat TEXT NOT NULL,
+      primary_pct   INTEGER NOT NULL DEFAULT 50,
+      secondary_pct INTEGER NOT NULL DEFAULT 50,
+      completed_count INTEGER NOT NULL DEFAULT 0,
+      active        BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS workout_exercises (
+      id            TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      workout_id    TEXT NOT NULL REFERENCES workouts(id) ON DELETE CASCADE,
+      exercise_id   TEXT NOT NULL REFERENCES exercises(id) ON DELETE CASCADE,
+      sort_order    INTEGER NOT NULL DEFAULT 0,
+      quantity_label TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS output_logs (
+      id            TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      target_type   TEXT NOT NULL,
+      target_id     TEXT NOT NULL,
+      duration_minutes INTEGER NOT NULL,
+      intensity     INTEGER NOT NULL DEFAULT 5,
+      stat_split    JSONB NOT NULL DEFAULT '[]',
+      notes         TEXT,
+      is_legacy     BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS output_log_exercises (
+      id            TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      output_log_id TEXT NOT NULL REFERENCES output_logs(id) ON DELETE CASCADE,
+      exercise_id   TEXT NOT NULL REFERENCES exercises(id) ON DELETE CASCADE,
+      xp_awarded    INTEGER NOT NULL DEFAULT 0,
+      details_json  JSONB NOT NULL DEFAULT '{}'
+    );
+
     CREATE TABLE IF NOT EXISTS xp_log (
       id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
       source      TEXT NOT NULL,
@@ -599,6 +658,39 @@ CREATE TABLE IF NOT EXISTS background_records (
     CREATE INDEX IF NOT EXISTS idx_habits_status ON habits(status);
     CREATE INDEX IF NOT EXISTS idx_sessions_logged_at ON sessions(logged_at);
     CREATE INDEX IF NOT EXISTS idx_media_status ON media(status);
+    CREATE INDEX IF NOT EXISTS idx_exercises_name ON exercises(name);
+    CREATE INDEX IF NOT EXISTS idx_workouts_name ON workouts(name);
+    CREATE INDEX IF NOT EXISTS idx_workout_exercises_workout_id ON workout_exercises(workout_id);
+    CREATE INDEX IF NOT EXISTS idx_output_logs_created_at ON output_logs(created_at);
+  `);
+
+  await db.exec(`
+    ALTER TABLE output_log_exercises ADD COLUMN IF NOT EXISTS details_json JSONB NOT NULL DEFAULT '{}';
+  `);
+
+  await db.exec(`
+    ALTER TABLE exercises ADD COLUMN IF NOT EXISTS quantity_type TEXT;
+    ALTER TABLE exercises ADD COLUMN IF NOT EXISTS description TEXT;
+    ALTER TABLE exercises ADD COLUMN IF NOT EXISTS primary_stat TEXT;
+    ALTER TABLE exercises ADD COLUMN IF NOT EXISTS secondary_stat TEXT;
+    ALTER TABLE exercises ADD COLUMN IF NOT EXISTS primary_pct INTEGER DEFAULT 50;
+    ALTER TABLE exercises ADD COLUMN IF NOT EXISTS secondary_pct INTEGER DEFAULT 50;
+    ALTER TABLE exercises ADD COLUMN IF NOT EXISTS metric_type TEXT;
+    ALTER TABLE exercises ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT TRUE;
+    ALTER TABLE exercises ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+  `);
+
+  await db.exec(`
+    ALTER TABLE workouts ADD COLUMN IF NOT EXISTS description TEXT;
+    ALTER TABLE workouts ADD COLUMN IF NOT EXISTS primary_stat TEXT;
+    ALTER TABLE workouts ADD COLUMN IF NOT EXISTS secondary_stat TEXT;
+    ALTER TABLE workouts ADD COLUMN IF NOT EXISTS primary_pct INTEGER DEFAULT 50;
+    ALTER TABLE workouts ADD COLUMN IF NOT EXISTS secondary_pct INTEGER DEFAULT 50;
+    ALTER TABLE workouts ADD COLUMN IF NOT EXISTS completed_count INTEGER DEFAULT 0;
+    ALTER TABLE workouts ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT TRUE;
+    ALTER TABLE workouts ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+    ALTER TABLE workout_exercises ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0;
+    ALTER TABLE workout_exercises ADD COLUMN IF NOT EXISTS quantity_label TEXT;
   `);
 
   // ── Batch 10: background_records sort_order ──────────────────────────────

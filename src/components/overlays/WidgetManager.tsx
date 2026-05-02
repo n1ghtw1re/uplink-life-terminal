@@ -37,6 +37,9 @@ export const WIDGET_REGISTRY: WidgetDef[] = [
   { id: 'recovery', name: 'RECOVERY', icon: 'Zz', category: 'BIOSYSTEM', description: 'Sleep sessions, wake-date tracking, daily goal, and recovery streaks' },
   { id: 'ingredients', name: 'INGREDIENTS', icon: '::', category: 'BIOSYSTEM', description: 'USDA and custom ingredients with category filters and macro details' },
   { id: 'intake', name: 'INTAKE', icon: '++', category: 'BIOSYSTEM', description: 'Daily food logging with calorie goals, macro totals, and streak tracking' },
+  { id: 'exercise', name: 'EXERCISE', icon: 'EX', category: 'BIOSYSTEM', description: 'Exercise catalog with stat splits, records section, and quick drawer access' },
+  { id: 'workouts', name: 'WORKOUTS', icon: 'WO', category: 'BIOSYSTEM', description: 'Preset exercise collections for one-shot logging and repeatable routines' },
+  { id: 'output', name: 'OUTPUT', icon: 'OP', category: 'BIOSYSTEM', description: 'All logged exercise and workout output sessions with quick review access' },
   { id: 'recipes', name: 'RECIPES', icon: 'Rx', category: 'BIOSYSTEM', description: 'Saved recipes with servings, ingredient snapshots, and macro totals' },
   // Future widgets (greyed out, not yet available)
   { id: 'clock',        name: 'CLOCK',          icon: '◷', category: 'UTILITY', description: 'Live clock with timer and pomodoro' },

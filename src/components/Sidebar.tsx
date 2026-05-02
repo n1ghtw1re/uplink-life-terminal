@@ -37,6 +37,8 @@ interface SidebarProps {
   onOpenRecovery?: () => void;
   onOpenIngredients?: () => void;
   onOpenIntake?: () => void;
+  onOpenExercise?: () => void;
+  onOpenWorkouts?: () => void;
   onOpenOutput?: () => void;
   onOpenRecipes?: () => void;
   onOpenGoals?: () => void;
@@ -71,6 +73,7 @@ const Sidebar = ({
   onOpenStat, onOpenSkills, onOpenLibrary, onOpenCourses,
   onOpenTools, onOpenResources, onOpenAugments, onOpenCerts, onOpenProjects, onOpenVault, onOpenClassDocs, onOpenXpDocs, onOpenLifepath, onOpenWidgetManager, onOpenSocials, onOpenDailyLog, onOpenHabits, onOpenNotes, onOpenPlanner, onOpenRecovery,
   onOpenIngredients, onOpenIntake, onOpenOutput, onOpenRecipes, onOpenGoals, onOpenTerminal,
+  onOpenExercise, onOpenWorkouts,
   onOpenClockWidget, onOpenCalculatorWidget, onOpenUnitConverterWidget,
 }: SidebarProps) => {
   const { user } = useAuth();
@@ -229,6 +232,8 @@ const Sidebar = ({
 
   // ── // BIOSYSTEM ─────────────────────────────────────────────────
   const biosystemItems = [
+    { icon: '>', name: 'EXERCISE', action: () => onOpenExercise?.() },
+    { icon: '>', name: 'WORKOUTS', action: () => onOpenWorkouts?.() },
     { icon: '>', name: 'INGREDIENTS', action: () => onOpenIngredients?.() },
     { icon: '>', name: 'INTAKE', action: () => onOpenIntake?.() },
     { icon: '>', name: 'OUTPUT', action: () => onOpenOutput?.() },

@@ -28,6 +28,9 @@ import VaultWidget from '@/components/widgets/VaultWidget';
 import RecoveryWidget from '@/components/widgets/RecoveryWidget';
 import IngredientsWidget from '@/components/widgets/IngredientsWidget';
 import IntakeWidget from '@/components/widgets/IntakeWidget';
+import ExerciseWidget from '@/components/widgets/ExerciseWidget';
+import WorkoutsWidget from '@/components/widgets/WorkoutsWidget';
+import OutputWidget from '@/components/widgets/OutputWidget';
 import RecipesWidget from '@/components/widgets/RecipesWidget';
 import TerminalWidget from '@/components/widgets/TerminalWidget';
 import QuickLogOverlay from '@/components/overlays/QuickLogOverlay';
@@ -44,6 +47,9 @@ import VaultPage from '@/components/overlays/VaultPage';
 import RecoveryPage from '@/components/overlays/RecoveryPage';
 import IngredientsPage from '@/components/overlays/IngredientsPage';
 import IntakePage from '@/components/overlays/IntakePage';
+import ExercisePage from '@/components/overlays/ExercisePage';
+import WorkoutsPage from '@/components/overlays/WorkoutsPage';
+import OutputPage from '@/components/overlays/OutputPage';
 import RecipesPage from '@/components/overlays/RecipesPage';
 import SocialsOverlay from '@/components/overlays/SocialsOverlay';
 import LifepathPage from '@/components/overlays/LifepathPage';
@@ -66,7 +72,7 @@ import { applyThemeClass, normalizeTheme, type ThemeCode } from '@/lib/themes';
 
 type LayoutItem = { i: string; x: number; y: number; w: number; h: number; minW?: number; minH?: number };
 
-const ALL_WIDGET_IDS = ['xp', 'checkin', 'habits', 'planner', 'recovery', 'ingredients', 'intake', 'recipes', 'heatmap', 'stats', 'courses', 'media', 'skills', 'tools', 'resources', 'augments', 'projects', 'vault', 'notes', 'clock', 'calculator', 'unitConverter', 'terminal'];
+const ALL_WIDGET_IDS = ['xp', 'checkin', 'habits', 'planner', 'recovery', 'ingredients', 'intake', 'exercise', 'workouts', 'output', 'recipes', 'heatmap', 'stats', 'courses', 'media', 'skills', 'tools', 'resources', 'augments', 'projects', 'vault', 'notes', 'clock', 'calculator', 'unitConverter', 'terminal'];
 const DEFAULT_ACTIVE_WIDGET_IDS = ['xp', 'checkin', 'habits', 'planner', 'stats', 'courses', 'media', 'skills', 'terminal'];
 
 const defaultLayout: LayoutItem[] = [
@@ -79,9 +85,12 @@ const defaultLayout: LayoutItem[] = [
   { i: 'recovery', x: 3, y: 4, w: 3, h: 4, minW: 3, minH: 3 },
   { i: 'ingredients', x: 6, y: 4, w: 3, h: 4, minW: 3, minH: 3 },
   { i: 'intake', x: 9, y: 4, w: 3, h: 4, minW: 3, minH: 3 },
-  { i: 'recipes', x: 0, y: 8, w: 3, h: 4, minW: 3, minH: 3 },
-  { i: 'courses', x: 3, y: 8, w: 3, h: 4, minW: 2, minH: 2 },
-  { i: 'media', x: 6, y: 8, w: 3, h: 4, minW: 2, minH: 2 },
+  { i: 'exercise', x: 0, y: 8, w: 3, h: 4, minW: 3, minH: 3 },
+  { i: 'workouts', x: 3, y: 8, w: 3, h: 4, minW: 3, minH: 3 },
+  { i: 'output', x: 6, y: 8, w: 3, h: 4, minW: 3, minH: 3 },
+  { i: 'recipes', x: 9, y: 8, w: 3, h: 4, minW: 3, minH: 3 },
+  { i: 'courses', x: 0, y: 12, w: 3, h: 4, minW: 2, minH: 2 },
+  { i: 'media', x: 6, y: 12, w: 3, h: 4, minW: 2, minH: 2 },
   { i: 'skills', x: 9, y: 8, w: 3, h: 4, minW: 2, minH: 2 },
   { i: 'tools',    x: 0, y: 12, w: 3, h: 4, minW: 2, minH: 2 },
   { i: 'resources', x: 3, y: 12, w: 3, h: 4, minW: 2, minH: 2 },
@@ -98,7 +107,7 @@ const defaultLayout: LayoutItem[] = [
 const widgetNames: Record<string, string> = {
   xp: 'XP & LEVELLING', checkin: 'DAILY CHECK-IN', habits: 'HABITS', heatmap: 'STREAK HEATMAP',
   stats: 'STAT OVERVIEW', courses: 'COURSES', media: 'MEDIA LIBRARY',
-  skills: 'SKILLS', tools: 'TOOLS', resources: 'RESOURCES', augments: 'AUGMENTS', projects: 'PROJECTS', vault: 'VAULT', notes: 'NOTES', planner: 'PLANNER', recovery: 'RECOVERY', ingredients: 'INGREDIENTS', intake: 'INTAKE', recipes: 'RECIPES',
+  skills: 'SKILLS', tools: 'TOOLS', resources: 'RESOURCES', augments: 'AUGMENTS', projects: 'PROJECTS', vault: 'VAULT', notes: 'NOTES', planner: 'PLANNER', recovery: 'RECOVERY', ingredients: 'INGREDIENTS', intake: 'INTAKE', exercise: 'EXERCISE', workouts: 'WORKOUTS', output: 'OUTPUT', recipes: 'RECIPES',
   clock: 'CLOCK', calculator: 'CALCULATOR', unitConverter: 'UNIT CONVERTER', terminal: 'TERMINAL',
 };
 
@@ -153,6 +162,8 @@ const Index = () => {
   const [showWidgetManager, setShowWidgetManager] = useState(false);
   const [showCerts, setShowCerts] = useState(false);
   const [showIntake, setShowIntake] = useState(false);
+  const [showExercise, setShowExercise] = useState(false);
+  const [showWorkouts, setShowWorkouts] = useState(false);
   const [showOutput, setShowOutput] = useState(false);
   const [showRecipes, setShowRecipes] = useState(false);
   const [showGoals, setShowGoals] = useState(false);
@@ -174,6 +185,8 @@ const Index = () => {
       case 'project': setShowProjects(true); break;
       case 'ingredient': setShowIngredients(true); break;
       case 'recipe': setShowRecipes(true); break;
+      case 'exercise': setShowExercise(true); break;
+      case 'workout': setShowWorkouts(true); break;
       case 'resource': setShowResources(true); break;
       case 'social': setShowSocials(true); break;
       case 'vault': setShowVault(true); break;
@@ -231,6 +244,9 @@ const Index = () => {
       if (showRecovery) { setShowRecovery(false); return; }
       if (showIngredients) { setShowIngredients(false); return; }
       if (showIntake) { setShowIntake(false); return; }
+      if (showExercise) { setShowExercise(false); return; }
+      if (showWorkouts) { setShowWorkouts(false); return; }
+      if (showOutput) { setShowOutput(false); return; }
       if (showRecipes) { setShowRecipes(false); return; }
       if (showPlanner) { setShowPlanner(false); return; }
       if (showDailyLog) { setShowDailyLog(false); return; }
@@ -245,7 +261,7 @@ const Index = () => {
     if (e.key === '/') { e.preventDefault(); setShowSearch(true); }
     if (e.key === '[') setSidebarExpanded(false);
     if (e.key === ']') setSidebarExpanded(true);
-  }, [fullscreenWidget, drawerOpen, openStatKey, showXpDocs, showClassDocs, showCharacterSheet, showLifepath, showVault, showRecovery, showIngredients, showIntake, showRecipes, showPlanner, showDailyLog, showNotesPage, showHabits]);
+  }, [fullscreenWidget, drawerOpen, openStatKey, showXpDocs, showClassDocs, showCharacterSheet, showLifepath, showVault, showRecovery, showIngredients, showIntake, showExercise, showWorkouts, showOutput, showRecipes, showPlanner, showDailyLog, showNotesPage, showHabits]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKey);
@@ -360,6 +376,9 @@ const Index = () => {
       case 'recovery':     return <RecoveryWidget {...props} onOpenRecovery={() => setShowRecovery(true)} />;
       case 'ingredients':  return <IngredientsWidget {...props} onOpenIngredients={() => setShowIngredients(true)} onIngredientClick={(id) => openDrawer('ingredient', id)} />;
       case 'intake':       return <IntakeWidget {...props} onOpenIntake={() => setShowIntake(true)} onLogClick={(id) => openDrawer('intake', id)} />;
+      case 'exercise':     return <ExerciseWidget {...props} onOpenExercise={() => setShowExercise(true)} onExerciseClick={(id) => openDrawer('exercise', id)} />;
+      case 'workouts':     return <WorkoutsWidget {...props} onOpenWorkouts={() => setShowWorkouts(true)} onWorkoutClick={(id) => openDrawer('workout', id)} />;
+      case 'output':       return <OutputWidget {...props} onOpenOutput={() => setShowOutput(true)} onOutputClick={(id) => openDrawer('output', id)} />;
       case 'recipes':      return <RecipesWidget {...props} onOpenRecipes={() => setShowRecipes(true)} onRecipeClick={(id) => openDrawer('recipe', id)} />;
       case 'vault':        return <VaultWidget {...props} onOpenVault={() => setShowVault(true)} onVaultClick={(id) => openDrawer('vault', id)} />;
       case 'heatmap':      return <HeatmapWidget {...props} />;
@@ -424,6 +443,8 @@ const Index = () => {
           onOpenIngredients={() => setShowIngredients(true)}
           onOpenCerts={() => setShowCerts(true)}
           onOpenIntake={() => setShowIntake(true)}
+          onOpenExercise={() => setShowExercise(true)}
+          onOpenWorkouts={() => setShowWorkouts(true)}
           onOpenOutput={() => setShowOutput(true)}
           onOpenRecipes={() => setShowRecipes(true)}
           onOpenGoals={() => setShowGoals(true)}
@@ -478,6 +499,9 @@ const Index = () => {
       {showRecovery      && <RecoveryPage  onClose={() => setShowRecovery(false)} />}
       {showIngredients   && <IngredientsPage onClose={() => setShowIngredients(false)} />}
       {showIntake        && <IntakePage onClose={() => setShowIntake(false)} />}
+      {showExercise      && <ExercisePage onClose={() => setShowExercise(false)} />}
+      {showWorkouts      && <WorkoutsPage onClose={() => setShowWorkouts(false)} />}
+      {showOutput        && <OutputPage onClose={() => setShowOutput(false)} />}
       {showRecipes       && <RecipesPage onClose={() => setShowRecipes(false)} />}
       {showNotesPage     && <NotesPage     onClose={() => setShowNotesPage(false)} />}
       {showLibrary       && <LibraryPage   onClose={() => setShowLibrary(false)} />}

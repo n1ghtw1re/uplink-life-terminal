@@ -34,6 +34,18 @@ const formatTime = (seconds: number) => {
   return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 };
 
+const formatStopwatch = (ms: number) => {
+  const totalSecs = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSecs / 3600);
+  const mins = Math.floor((totalSecs % 3600) / 60);
+  const secs = totalSecs % 60;
+  const millis = ms % 1000;
+  if (hours > 0) {
+    return `${String(hours)}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}.${String(millis).padStart(3, '0')}`;
+  }
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}.${String(millis).padStart(3, '0')}`;
+};
+
 const ClockWidget = ({ onClose, onFullscreen, isFullscreen, isFocused }: WidgetProps) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [tab, setTab] = useState<ClockTab>('timer');
@@ -44,8 +56,11 @@ const ClockWidget = ({ onClose, onFullscreen, isFullscreen, isFocused }: WidgetP
   const [timerNotify, setTimerNotify] = useState(true);
   const [timerGlitch, setTimerGlitch] = useState(true);
 
-  const [stopwatchSeconds, setStopwatchSeconds] = useState(0);
+  const [stopwatchMs, setStopwatchMs] = useState(0);
   const [stopwatchRunning, setStopwatchRunning] = useState(false);
+  const stopwatchStartRef = useRef<number | null>(null);
+  const stopwatchAccumulated = useRef(0);
+  const [flags, setFlags] = useState<{ id: string; time: number }[]>([]);
 
   const [pomodoroSecondsLeft, setPomodoroSecondsLeft] = useState(25 * 60);
   const [pomodoroRunning, setPomodoroRunning] = useState(false);
@@ -177,10 +192,14 @@ const ClockWidget = ({ onClose, onFullscreen, isFullscreen, isFocused }: WidgetP
 
   useEffect(() => {
     if (!stopwatchRunning) return;
+    stopwatchStartRef.current = Date.now() - stopwatchAccumulated.current;
     const id = window.setInterval(() => {
-      setStopwatchSeconds((prev) => prev + 1);
-    }, 1000);
-    return () => window.clearInterval(id);
+      setStopwatchMs(Date.now() - (stopwatchStartRef.current ?? Date.now()));
+    }, 47);
+    return () => {
+      window.clearInterval(id);
+      stopwatchAccumulated.current = Date.now() - (stopwatchStartRef.current ?? Date.now());
+    };
   }, [stopwatchRunning]);
 
   useEffect(() => {
@@ -308,19 +327,68 @@ const ClockWidget = ({ onClose, onFullscreen, isFullscreen, isFocused }: WidgetP
 
       {tab === 'stopwatch' && (
         <div>
-          <div className="font-display text-glow-bright" style={{ fontSize: 42, lineHeight: 1, marginBottom: 10 }}>
-            {formatTime(stopwatchSeconds)}
+          <div className="font-display text-glow-bright" style={{ fontSize: 36, lineHeight: 1, marginBottom: 10, fontVariantNumeric: 'tabular-nums' }}>
+            {formatStopwatch(stopwatchMs)}
           </div>
-          <div style={{ display: 'flex', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <button className="topbar-btn" onClick={() => setStopwatchRunning((r) => !r)}>
               {stopwatchRunning ? 'STOP' : 'START'}
             </button>
-            <button className="topbar-btn" onClick={() => { setStopwatchRunning(false); setStopwatchSeconds(0); }}>
+            <button className="topbar-btn" onClick={() => {
+              setStopwatchRunning(false);
+              setStopwatchMs(0);
+              stopwatchAccumulated.current = 0;
+              stopwatchStartRef.current = null;
+              setFlags([]);
+            }}>
               RESET
             </button>
+            <button className="topbar-btn" onClick={() => {
+              setFlags((prev) => [...prev, { id: crypto.randomUUID(), time: stopwatchMs }]);
+            }} disabled={stopwatchMs === 0}>
+              FLAG
+            </button>
           </div>
+          {flags.length > 0 && (
+            <div style={{
+              marginTop: 10,
+              maxHeight: 120,
+              overflowY: 'auto',
+              border: '1px solid hsl(var(--accent-dim))',
+              background: 'hsl(var(--bg-tertiary))',
+              fontSize: 10,
+              fontFamily: "'IBM Plex Mono', monospace",
+            }}>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '32px 1fr',
+                padding: '4px 8px',
+                borderBottom: '1px solid hsl(var(--accent-dim))',
+                color: 'hsl(var(--text-dim))',
+                fontWeight: 600,
+                position: 'sticky',
+                top: 0,
+                background: 'hsl(var(--bg-tertiary))',
+              }}>
+                <span>#</span>
+                <span>TIME</span>
+              </div>
+              {flags.map((f, i) => (
+                <div key={f.id} style={{
+                  display: 'grid',
+                  gridTemplateColumns: '32px 1fr',
+                  padding: '3px 8px',
+                  borderBottom: i < flags.length - 1 ? '1px solid hsl(var(--border))' : 'none',
+                  color: 'hsl(var(--text-primary))',
+                }}>
+                  <span style={{ color: 'hsl(var(--text-dim))' }}>{i + 1}</span>
+                  <span style={{ fontVariantNumeric: 'tabular-nums' }}>{formatStopwatch(f.time)}</span>
+                </div>
+              ))}
+            </div>
+          )}
           <div style={{ fontSize: 10, marginTop: 8, color: 'hsl(var(--text-dim))' }}>
-            Track workouts, tasks, or sessions with simple start/stop timing.
+            Track intervals, laps, or sets. Use FLAG to mark times while running.
           </div>
         </div>
       )}

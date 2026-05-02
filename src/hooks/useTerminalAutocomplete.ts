@@ -22,6 +22,32 @@ function getCommandSuggestions(query: string): AutocompleteSuggestion[] {
 }
 
 export function useTerminalAutocomplete(input: string) {
+  const firstToken = input.trim().split(/\s+/)[0]?.toLowerCase() ?? '';
+  const isDrawerContext = firstToken === 'drawer';
+  const isLogContext = firstToken === 'log';
+
+  const { data: exercises = [] } = useQuery({
+    queryKey: ['terminal-exercises-list'],
+    queryFn: async () => {
+      const db = await getDB();
+      const res = await db.query<{ id: string; name: string }>('SELECT id, name FROM exercises ORDER BY name');
+      return res.rows;
+    },
+    staleTime: Infinity,
+    enabled: isDrawerContext,
+  });
+
+  const { data: workouts = [] } = useQuery({
+    queryKey: ['terminal-workouts-list'],
+    queryFn: async () => {
+      const db = await getDB();
+      const res = await db.query<{ id: string; name: string }>('SELECT id, name FROM workouts ORDER BY name');
+      return res.rows;
+    },
+    staleTime: Infinity,
+    enabled: isDrawerContext,
+  });
+
   const { data: skills = [] } = useQuery({
     queryKey: ['terminal-skills-list'],
     queryFn: async () => {
@@ -30,6 +56,7 @@ export function useTerminalAutocomplete(input: string) {
       return res.rows;
     },
     staleTime: Infinity,
+    enabled: isDrawerContext || isLogContext,
   });
 
   const { data: tools = [] } = useQuery({
@@ -40,6 +67,7 @@ export function useTerminalAutocomplete(input: string) {
       return res.rows;
     },
     staleTime: Infinity,
+    enabled: isDrawerContext || isLogContext,
   });
 
   const { data: augments = [] } = useQuery({
@@ -50,6 +78,7 @@ export function useTerminalAutocomplete(input: string) {
       return res.rows;
     },
     staleTime: Infinity,
+    enabled: isDrawerContext || isLogContext,
   });
 
   const { data: projects = [] } = useQuery({
@@ -60,6 +89,7 @@ export function useTerminalAutocomplete(input: string) {
       return res.rows;
     },
     staleTime: Infinity,
+    enabled: isDrawerContext,
   });
 
   const { data: notes = [] } = useQuery({
@@ -70,6 +100,7 @@ export function useTerminalAutocomplete(input: string) {
       return res.rows;
     },
     staleTime: Infinity,
+    enabled: isDrawerContext,
   });
 
   const { data: media = [] } = useQuery({
@@ -80,6 +111,7 @@ export function useTerminalAutocomplete(input: string) {
       return res.rows;
     },
     staleTime: Infinity,
+    enabled: isDrawerContext,
   });
 
   const { data: habits = [] } = useQuery({
@@ -90,6 +122,7 @@ export function useTerminalAutocomplete(input: string) {
       return res.rows;
     },
     staleTime: Infinity,
+    enabled: isDrawerContext,
   });
 
   const { data: courses = [] } = useQuery({
@@ -100,6 +133,7 @@ export function useTerminalAutocomplete(input: string) {
       return res.rows;
     },
     staleTime: Infinity,
+    enabled: isDrawerContext,
   });
 
   const { data: vaultItems = [] } = useQuery({
@@ -110,6 +144,7 @@ export function useTerminalAutocomplete(input: string) {
       return res.rows;
     },
     staleTime: Infinity,
+    enabled: isDrawerContext,
   });
 
   const { data: recipes = [] } = useQuery({
@@ -120,6 +155,7 @@ export function useTerminalAutocomplete(input: string) {
       return res.rows;
     },
     staleTime: Infinity,
+    enabled: isDrawerContext,
   });
 
   const { data: resources = [] } = useQuery({
@@ -130,6 +166,7 @@ export function useTerminalAutocomplete(input: string) {
       return res.rows;
     },
     staleTime: Infinity,
+    enabled: isDrawerContext,
   });
 
   const { data: ingredients = [] } = useQuery({
@@ -140,6 +177,7 @@ export function useTerminalAutocomplete(input: string) {
       return res.rows;
     },
     staleTime: Infinity,
+    enabled: isDrawerContext,
   });
 
   const suggestions = useMemo((): AutocompleteSuggestion[] => {
@@ -150,7 +188,7 @@ export function useTerminalAutocomplete(input: string) {
 
     // OPEN command context
     if (context === 'open' || context === 'close') {
-      const widgets = ['xp', 'checkin', 'habits', 'planner', 'recovery', 'ingredients', 'intake', 'recipes', 'heatmap', 'stats', 'courses', 'media', 'skills', 'tools', 'resources', 'augments', 'projects', 'vault', 'notes', 'clock', 'calculator', 'converter', 'terminal'];
+      const widgets = ['xp', 'checkin', 'habits', 'planner', 'recovery', 'ingredients', 'intake', 'exercise', 'workouts', 'output', 'recipes', 'heatmap', 'stats', 'courses', 'media', 'skills', 'tools', 'resources', 'augments', 'projects', 'vault', 'notes', 'clock', 'calculator', 'converter', 'terminal'];
       if (!lastWord) {
         return widgets.map(w => ({ value: w, type: 'widget' as const, score: 100 }));
       }
@@ -162,7 +200,7 @@ export function useTerminalAutocomplete(input: string) {
 
     // LIST command context
     if (context === 'list') {
-      const listTypes = ['skills', 'tools', 'augments', 'projects', 'media', 'habits', 'courses', 'vault', 'recipes', 'resources', 'ingredients', 'notes'];
+      const listTypes = ['skills', 'exercises', 'workouts', 'tools', 'augments', 'projects', 'media', 'habits', 'courses', 'vault', 'recipes', 'resources', 'ingredients', 'notes'];
       if (!lastWord) {
         return listTypes.map(t => ({ value: t, type: 'command' as const, score: 100 }));
       }
@@ -175,6 +213,8 @@ export function useTerminalAutocomplete(input: string) {
     // DRAWER command context
     if (context === 'drawer') {
       const allItems = [
+        ...exercises.map(e => ({ value: e.name, type: 'skill' as const, score: 100 })),
+        ...workouts.map(w => ({ value: w.name, type: 'project' as const, score: 100 })),
         ...skills.map(s => ({ value: s.name, type: 'skill' as const, score: 100 })),
         ...tools.map(t => ({ value: t.name, type: 'tool' as const, score: 100 })),
         ...augments.map(a => ({ value: a.name, type: 'augment' as const, score: 100 })),
@@ -245,7 +285,7 @@ export function useTerminalAutocomplete(input: string) {
     
     // Default context - show commands that start with input
     return getCommandSuggestions(lastWord).slice(0, 8);
-  }, [input, skills, tools, augments, projects, notes, media, habits, courses, vaultItems, recipes, resources, ingredients]);
+  }, [input, exercises, workouts, skills, tools, augments, projects, notes, media, habits, courses, vaultItems, recipes, resources, ingredients]);
 
   const currentSuggestion = suggestions[0]?.value || '';
   

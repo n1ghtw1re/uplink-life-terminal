@@ -443,7 +443,7 @@ export default function HabitsPage({ onClose }: HabitsPageProps) {
 
       {drawerHabit && (
         <HabitDrawer
-          habit={drawerHabit}
+          habitId={drawerHabit.id}
           onClose={() => setDrawerHabit(null)}
         />
       )}

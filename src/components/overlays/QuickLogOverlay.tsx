@@ -9,6 +9,7 @@ import { triggerLevelUp } from '@/components/effects/LevelUpAnimation';
 import { refreshAppData } from '@/lib/refreshAppData';
 import { STAT_META, StatKey } from '@/types';
 import { toast } from '@/hooks/use-toast';
+import OutputLogPanel from '@/components/overlays/OutputLogPanel';
 
 // ── Constants ─────────────────────────────────────────────────
 const mono  = "'IBM Plex Mono', monospace";
@@ -306,6 +307,7 @@ interface Props { open: boolean; onClose: () => void; }
 
 export default function QuickLogOverlay({ open, onClose }: Props) {
   const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState<'quick' | 'output'>('quick');
 
   // Core
   const [statFilter, setStatFilter]   = useState<StatKey | null>(null);
@@ -840,12 +842,22 @@ export default function QuickLogOverlay({ open, onClose }: Props) {
 
         {/* Header */}
         <div style={{ padding: '14px 20px', borderBottom: `1px solid ${adim}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-          <span style={{ fontFamily: vt, fontSize: 20, color: acc }}>// QUICK LOG</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontFamily: vt, fontSize: 20, color: acc }}>// QUICK LOG</span>
+            <button className="topbar-btn" onClick={() => setActiveTab('quick')} style={{ borderColor: activeTab === 'quick' ? acc : adim, color: activeTab === 'quick' ? acc : dim }}>QUICK LOG</button>
+            <button className="topbar-btn" onClick={() => setActiveTab('output')} style={{ borderColor: activeTab === 'output' ? acc : adim, color: activeTab === 'output' ? acc : dim }}>OUTPUT</button>
+          </div>
           <button onClick={onClose} style={{ background: 'transparent', border: `1px solid ${adim}`, color: dim, fontFamily: mono, fontSize: 10, cursor: 'pointer', padding: '3px 10px' }}>× CLOSE  ESC</button>
         </div>
 
+        {activeTab === 'output' && (
+          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', scrollbarWidth: 'thin', scrollbarColor: `${adim} ${bgS}` }}>
+            <OutputLogPanel onClose={onClose} />
+          </div>
+        )}
+
         {/* Body — two columns */}
-        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', scrollbarWidth: 'thin', scrollbarColor: `${adim} ${bgS}` }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', scrollbarWidth: 'thin', scrollbarColor: `${adim} ${bgS}`, display: activeTab === 'quick' ? 'block' : 'none' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 0 }}>
 
             {/* Left column — form */}
@@ -1275,7 +1287,7 @@ export default function QuickLogOverlay({ open, onClose }: Props) {
         </div>{/* end scrollable body */}
 
         {/* Footer */}
-        <div style={{ padding: '12px 20px', borderTop: `1px solid ${adim}`, flexShrink: 0, display: 'flex', justifyContent: 'flex-end' }}>
+        <div style={{ padding: '12px 20px', borderTop: `1px solid ${adim}`, flexShrink: 0, display: activeTab === 'quick' ? 'flex' : 'none', justifyContent: 'flex-end' }}>
           <button disabled={!canSubmit || submitting} onClick={handleSubmit} style={{
             padding: '8px 32px', fontFamily: mono, fontSize: 11, letterSpacing: 2,
             cursor: canSubmit ? 'pointer' : 'not-allowed',
