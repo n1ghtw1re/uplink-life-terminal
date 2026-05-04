@@ -13,10 +13,11 @@ interface Props {
   onFullscreen?: () => void;
   isFullscreen?: boolean;
   onOpenOutput?: () => void;
+  onViewAll?: () => void;
   onOutputClick?: (id: string) => void;
 }
 
-export default function OutputWidget({ onClose, onFullscreen, isFullscreen, onOpenOutput, onOutputClick }: Props) {
+export default function OutputWidget({ onClose, onFullscreen, isFullscreen, onOpenOutput, onViewAll, onOutputClick }: Props) {
   const { data: logs = [], isLoading } = useQuery({
     queryKey: ['output-widget-logs'],
     queryFn: async () => {
@@ -53,7 +54,7 @@ export default function OutputWidget({ onClose, onFullscreen, isFullscreen, onOp
       })}
       <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${adim}`, display: 'flex', justifyContent: 'space-between' }}>
         <button onClick={onOpenOutput} style={{ background: 'transparent', border: 'none', fontFamily: mono, fontSize: 9, color: adim, cursor: 'pointer' }}>+ ADD OUTPUT</button>
-        <button onClick={onOpenOutput} style={{ background: 'transparent', border: 'none', fontFamily: mono, fontSize: 9, color: adim, cursor: 'pointer' }}>VIEW ALL {'>'}</button>
+        <button onClick={() => onViewAll?.()} style={{ background: 'transparent', border: 'none', fontFamily: mono, fontSize: 9, color: adim, cursor: 'pointer' }}>VIEW ALL {'>'}</button>
       </div>
     </WidgetWrapper>
   );

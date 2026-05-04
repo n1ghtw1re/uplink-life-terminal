@@ -41,7 +41,7 @@ export default function VaultItemModal({ open, onClose, item, initialCategory = 
     );
   }, [open, item, initialCategory]);
 
-  const metadataFields = useMemo(() => VAULT_METADATA_FIELDS[category], [category]);
+  const metadataFields = useMemo(() => VAULT_METADATA_FIELDS[category] || [], [category]);
   const canSave = title.trim().length > 0 && completedDate.length > 0;
 
   const setMetadataField = (key: string, value: string) => {

@@ -9,13 +9,13 @@ import { refreshAppData } from '@/lib/refreshAppData';
 import { getLevelFromXP, XP_PER_MINUTE, LEGACY_RATE, SKILL_SHARE, STAT_SHARE, MASTER_SHARE } from '@/services/xpService';
 
 const mono = "'IBM Plex Mono', monospace";
-const vt   = "'VT323', monospace";
-const acc  = 'hsl(var(--accent))';
-const dim  = 'hsl(var(--text-dim))';
+const vt = "'VT323', monospace";
+const acc = 'hsl(var(--accent))';
+const dim = 'hsl(var(--text-dim))';
 const adim = 'hsl(var(--accent-dim))';
-const bgS  = 'hsl(var(--bg-secondary))';
-const bgT  = 'hsl(var(--bg-tertiary))';
-const red  = '#ff4400';
+const bgS = 'hsl(var(--bg-secondary))';
+const bgT = 'hsl(var(--bg-tertiary))';
+const red = '#ff4400';
 const green = '#44ff88';
 
 const levelCase = (col: string) => `
@@ -71,6 +71,11 @@ interface SessionData {
   course_id: string | null;
   media_id: string | null;
   project_id: string | null;
+  toolNames: string[];
+  augmentNames: string[];
+  courseName: string | null;
+  mediaName: string | null;
+  projectName: string | null;
   bonusXP: BonusXPEntry[];
 }
 
@@ -166,7 +171,7 @@ async function reverseSessionXP(db: Awaited<ReturnType<typeof getDB>>, sessionId
       `SELECT id FROM course_sections WHERE course_id = $1;`, [courseId]
     );
     const sectionIds = sectionsRes.rows.map(s => `'${s.id}'`).join(',');
-    
+
     if (sectionIds) {
       const sectionLogs = await db.query<XPLogRow>(
         `SELECT id, tier, entity_id, amount FROM xp_log WHERE source_id IN (${sectionIds}) AND source IN ('course_section','course_complete');`
@@ -207,9 +212,9 @@ async function awardNewSessionXP(
   newNotes: string | null,
   newLegacy: boolean
 ) {
-  const factor   = newLegacy ? LEGACY_RATE : 1.0;
-  const base     = newDuration * XP_PER_MINUTE * factor;
-  const skillXP  = Math.floor(base * SKILL_SHARE);
+  const factor = newLegacy ? LEGACY_RATE : 1.0;
+  const base = newDuration * XP_PER_MINUTE * factor;
+  const skillXP = Math.floor(base * SKILL_SHARE);
   const statBase = Math.floor(base * STAT_SHARE);
   const masterXP = Math.floor(base * MASTER_SHARE);
   const statXPMap = session.stat_split.map(s => ({
@@ -217,11 +222,11 @@ async function awardNewSessionXP(
     amount: Math.floor(statBase * s.percent / 100),
   }));
   const toolCount = session.tool_ids.length;
-  const augCount  = session.augment_ids.length;
-  const perTool   = toolCount > 0 ? Math.floor(base / toolCount) : 0;
-  const perAug    = augCount  > 0 ? Math.floor(base / augCount)  : 0;
-  const now       = new Date().toISOString();
-  const uid       = () => crypto.randomUUID();
+  const augCount = session.augment_ids.length;
+  const perTool = toolCount > 0 ? Math.floor(base / toolCount) : 0;
+  const perAug = augCount > 0 ? Math.floor(base / augCount) : 0;
+  const now = new Date().toISOString();
+  const uid = () => crypto.randomUUID();
 
   // Skill
   await db.exec(`UPDATE skills SET xp = xp + ${skillXP}, level = ${levelCase(`xp + ${skillXP}`)} WHERE id = '${session.skill_id}';`);
@@ -256,7 +261,7 @@ async function awardNewSessionXP(
 
   // Update session record
   const totalToolXP = perTool * toolCount;
-  const totalAugXP  = perAug  * augCount;
+  const totalAugXP = perAug * augCount;
   await db.query(
     `UPDATE sessions SET duration_minutes=$1, skill_xp=$2, master_xp=$3,
      total_tool_xp=$4, total_augment_xp=$5, notes=$6, is_legacy=$7
@@ -291,16 +296,16 @@ interface Props {
 
 export default function SessionDetailDrawer({ sessionId, onDeleted, onClose }: Props) {
   const queryClient = useQueryClient();
-  const [editing, setEditing]         = useState(false);
+  const [editing, setEditing] = useState(false);
   const [editDuration, setEditDuration] = useState('');
-  const [editNotes, setEditNotes]     = useState('');
-  const [editLegacy, setEditLegacy]   = useState(false);
-  const [showDelete, setShowDelete]   = useState(false);
+  const [editNotes, setEditNotes] = useState('');
+  const [editLegacy, setEditLegacy] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
 
   const { data: session, isLoading } = useQuery({
     queryKey: ['session-detail', sessionId],
     queryFn: async () => {
-      const db  = await getDB();
+      const db = await getDB();
       const res = await db.query<{
         id: string; skill_id: string; skill_name: string;
         duration_minutes: number; stat_split: string;
@@ -322,9 +327,9 @@ export default function SessionDetailDrawer({ sessionId, onDeleted, onClose }: P
 
       const sessionData = {
         ...r,
-        stat_split:   typeof r.stat_split   === 'string' ? JSON.parse(r.stat_split)   : (r.stat_split   ?? []),
-        tool_ids:     typeof r.tool_ids     === 'string' ? JSON.parse(r.tool_ids)     : (r.tool_ids     ?? []),
-        augment_ids:  typeof r.augment_ids  === 'string' ? JSON.parse(r.augment_ids)  : (r.augment_ids  ?? []),
+        stat_split: typeof r.stat_split === 'string' ? JSON.parse(r.stat_split) : (r.stat_split ?? []),
+        tool_ids: typeof r.tool_ids === 'string' ? JSON.parse(r.tool_ids) : (r.tool_ids ?? []),
+        augment_ids: typeof r.augment_ids === 'string' ? JSON.parse(r.augment_ids) : (r.augment_ids ?? []),
       } as SessionData;
 
       const bonusXP: BonusXPEntry[] = [];
@@ -362,7 +367,34 @@ export default function SessionDetailDrawer({ sessionId, onDeleted, onClose }: P
         bonusXP.push(...courseBonusRes.rows);
       }
 
-      return { ...sessionData, bonusXP };
+      let toolNames: string[] = [];
+      let augmentNames: string[] = [];
+      let courseName: string | null = null;
+      let mediaName: string | null = null;
+      let projectName: string | null = null;
+
+      if (sessionData.tool_ids.length > 0) {
+        const tr = await db.query<{ name: string }>(`SELECT name FROM tools WHERE id = ANY($1::text[])`, [sessionData.tool_ids]);
+        toolNames = tr.rows.map(r => r.name);
+      }
+      if (sessionData.augment_ids.length > 0) {
+        const ar = await db.query<{ name: string }>(`SELECT name FROM augments WHERE id = ANY($1::text[])`, [sessionData.augment_ids]);
+        augmentNames = ar.rows.map(r => r.name);
+      }
+      if (sessionData.course_id) {
+        const cr = await db.query<{ name: string }>(`SELECT name FROM courses WHERE id = $1`, [sessionData.course_id]);
+        courseName = cr.rows[0]?.name || null;
+      }
+      if (sessionData.media_id) {
+        const mr = await db.query<{ title: string }>(`SELECT title FROM media WHERE id = $1`, [sessionData.media_id]);
+        mediaName = mr.rows[0]?.title || null;
+      }
+      if (sessionData.project_id) {
+        const pr = await db.query<{ name: string }>(`SELECT name FROM projects WHERE id = $1`, [sessionData.project_id]);
+        projectName = pr.rows[0]?.name || null;
+      }
+
+      return { ...sessionData, bonusXP, toolNames, augmentNames, courseName, mediaName, projectName };
     },
   });
 
@@ -415,13 +447,13 @@ export default function SessionDetailDrawer({ sessionId, onDeleted, onClose }: P
 
   const date = new Date(session.logged_at).toLocaleDateString('en-CA');
   const time = new Date(session.logged_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-  const hrs  = Math.floor(session.duration_minutes / 60);
+  const hrs = Math.floor(session.duration_minutes / 60);
   const mins = session.duration_minutes % 60;
   const durLabel = hrs > 0 ? (mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`) : `${mins}m`;
 
   const totalMainXP = session.skill_xp + session.master_xp;
-  const perToolXP   = session.tool_ids.length > 0 ? Math.floor(session.total_tool_xp / session.tool_ids.length) : 0;
-  const perAugXP    = session.augment_ids.length > 0 ? Math.floor(session.total_augment_xp / session.augment_ids.length) : 0;
+  const perToolXP = session.tool_ids.length > 0 ? Math.floor(session.total_tool_xp / session.tool_ids.length) : 0;
+  const perAugXP = session.augment_ids.length > 0 ? Math.floor(session.total_augment_xp / session.augment_ids.length) : 0;
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: bgS, overflow: 'hidden' }}>
@@ -500,6 +532,45 @@ export default function SessionDetailDrawer({ sessionId, onDeleted, onClose }: P
               </button>
             </div>
           </div>
+        )}
+
+        {/* TAGGED ITEMS */}
+        {(session.toolNames.length > 0 || session.augmentNames.length > 0 || session.courseName || session.mediaName || session.projectName) && (
+          <>
+            <div style={{ fontSize: 9, color: adim, letterSpacing: 2, marginBottom: 8, marginTop: showDelete ? 0 : 4 }}>// TAGGED</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 16 }}>
+              {session.toolNames.map(name => (
+                <div key={name} style={{ display: 'flex', justifyContent: 'space-between', fontFamily: mono, fontSize: 10 }}>
+                  <span style={{ color: dim }}>TOOL</span>
+                  <span style={{ color: acc }}>{name.toUpperCase()}</span>
+                </div>
+              ))}
+              {session.augmentNames.map(name => (
+                <div key={name} style={{ display: 'flex', justifyContent: 'space-between', fontFamily: mono, fontSize: 10 }}>
+                  <span style={{ color: dim }}>AUGMENT</span>
+                  <span style={{ color: acc }}>{name.toUpperCase()}</span>
+                </div>
+              ))}
+              {session.courseName && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: mono, fontSize: 10 }}>
+                  <span style={{ color: dim }}>COURSE</span>
+                  <span style={{ color: acc }}>{session.courseName.toUpperCase()}</span>
+                </div>
+              )}
+              {session.mediaName && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: mono, fontSize: 10 }}>
+                  <span style={{ color: dim }}>MEDIA</span>
+                  <span style={{ color: acc }}>{session.mediaName.toUpperCase()}</span>
+                </div>
+              )}
+              {session.projectName && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: mono, fontSize: 10 }}>
+                  <span style={{ color: dim }}>PROJECT</span>
+                  <span style={{ color: acc }}>{session.projectName.toUpperCase()}</span>
+                </div>
+              )}
+            </div>
+          </>
         )}
 
         {/* XP breakdown */}

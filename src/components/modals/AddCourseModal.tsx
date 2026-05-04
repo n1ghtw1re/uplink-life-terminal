@@ -295,6 +295,7 @@ export default function AddCourseModal({ onClose }: Props) {
       }
 
       queryClient.invalidateQueries({ queryKey: ['courses'] });
+      queryClient.invalidateQueries({ queryKey: ['courses-all'] });
       queryClient.invalidateQueries({ queryKey: ['terminal-courses-list'] });
       queryClient.invalidateQueries({ queryKey: ['stats'] });
       queryClient.invalidateQueries({ queryKey: ['operator'] });

@@ -520,6 +520,9 @@ CREATE TABLE IF NOT EXISTS background_records (
 
   // ── Batch 5: habit_logs — add columns, fill data, set constraint ─────────
   await db.exec(`
+    CREATE TABLE IF NOT EXISTS habit_logs (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text
+    );
     ALTER TABLE habit_logs ADD COLUMN IF NOT EXISTS habit_id TEXT;
     ALTER TABLE habit_logs ADD COLUMN IF NOT EXISTS logged_for_date TEXT;
     ALTER TABLE habit_logs ADD COLUMN IF NOT EXISTS completed BOOLEAN DEFAULT FALSE;
@@ -548,6 +551,12 @@ CREATE TABLE IF NOT EXISTS background_records (
 
   // ── Batch 6: planner entries + exceptions ────────────────────────────────
   await db.exec(`
+    CREATE TABLE IF NOT EXISTS planner_entries (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text
+    );
+    CREATE TABLE IF NOT EXISTS planner_exceptions (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text
+    );
     ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS title TEXT;
     ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS date DATE;
     ALTER TABLE planner_entries ADD COLUMN IF NOT EXISTS time TEXT;
@@ -572,6 +581,15 @@ CREATE TABLE IF NOT EXISTS background_records (
 
   // ── Batch 7: vault, sleep, recovery ──────────────────────────────────────
   await db.exec(`
+    CREATE TABLE IF NOT EXISTS vault_items (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text
+    );
+    CREATE TABLE IF NOT EXISTS sleep_sessions (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text
+    );
+    CREATE TABLE IF NOT EXISTS recovery_settings (
+      id INTEGER PRIMARY KEY DEFAULT 1
+    );
     ALTER TABLE vault_items ADD COLUMN IF NOT EXISTS title TEXT;
     ALTER TABLE vault_items ADD COLUMN IF NOT EXISTS category TEXT;
     ALTER TABLE vault_items ADD COLUMN IF NOT EXISTS completed_date DATE;
@@ -591,6 +609,24 @@ CREATE TABLE IF NOT EXISTS background_records (
 
   // ── Batch 8: ingredients, recipes, intake ────────────────────────────────
   await db.exec(`
+    CREATE TABLE IF NOT EXISTS custom_ingredients (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text
+    );
+    CREATE TABLE IF NOT EXISTS recipes (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text
+    );
+    CREATE TABLE IF NOT EXISTS recipe_ingredients (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text
+    );
+    CREATE TABLE IF NOT EXISTS recipe_steps (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text
+    );
+    CREATE TABLE IF NOT EXISTS intake_settings (
+      id INTEGER PRIMARY KEY DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS intake_logs (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text
+    );
     ALTER TABLE custom_ingredients ADD COLUMN IF NOT EXISTS name TEXT;
     ALTER TABLE custom_ingredients ADD COLUMN IF NOT EXISTS category TEXT;
     ALTER TABLE custom_ingredients ADD COLUMN IF NOT EXISTS calories REAL;
@@ -666,6 +702,17 @@ CREATE TABLE IF NOT EXISTS background_records (
 
   await db.exec(`
     ALTER TABLE output_log_exercises ADD COLUMN IF NOT EXISTS details_json JSONB NOT NULL DEFAULT '{}';
+  `);
+
+  // ── Batch 9.5: Output Logs Tagged columns ────────────────────────────────
+  await db.exec(`
+    ALTER TABLE output_logs ADD COLUMN IF NOT EXISTS tool_ids JSONB NOT NULL DEFAULT '[]';
+    ALTER TABLE output_logs ADD COLUMN IF NOT EXISTS total_tool_xp INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE output_logs ADD COLUMN IF NOT EXISTS augment_ids JSONB NOT NULL DEFAULT '[]';
+    ALTER TABLE output_logs ADD COLUMN IF NOT EXISTS total_augment_xp INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE output_logs ADD COLUMN IF NOT EXISTS course_id TEXT;
+    ALTER TABLE output_logs ADD COLUMN IF NOT EXISTS media_id TEXT;
+    ALTER TABLE output_logs ADD COLUMN IF NOT EXISTS project_id TEXT;
   `);
 
   await db.exec(`

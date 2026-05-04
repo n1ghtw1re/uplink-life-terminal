@@ -303,11 +303,11 @@ function XPPreview({ duration, statSplit, toolIds, augIds, isLegacy, toolNames, 
 }
 
 // ── Main component ────────────────────────────────────────────
-interface Props { open: boolean; onClose: () => void; }
+interface Props { open: boolean; onClose: () => void; initialTab?: 'quick' | 'output'; }
 
-export default function QuickLogOverlay({ open, onClose }: Props) {
+export default function QuickLogOverlay({ open, onClose, initialTab = 'quick' }: Props) {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<'quick' | 'output'>('quick');
+  const [activeTab, setActiveTab] = useState<'quick' | 'output'>(initialTab);
 
   // Core
   const [statFilter, setStatFilter]   = useState<StatKey | null>(null);
@@ -838,7 +838,7 @@ export default function QuickLogOverlay({ open, onClose }: Props) {
     <div style={{ position: 'fixed', inset: 0, zIndex: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.75)' }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
 
-      <div style={{ width: '100%', maxWidth: 760, maxHeight: '90vh', background: bgP, border: `1px solid ${adim}`, display: 'flex', flexDirection: 'column', fontFamily: mono, boxShadow: `0 0 40px rgba(255,176,0,0.1)` }}>
+      <div style={{ width: '100%', maxWidth: 1060, maxHeight: '90vh', background: bgP, border: `1px solid ${adim}`, display: 'flex', flexDirection: 'column', fontFamily: mono, boxShadow: `0 0 40px rgba(255,176,0,0.1)` }}>
 
         {/* Header */}
         <div style={{ padding: '14px 20px', borderBottom: `1px solid ${adim}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
@@ -858,7 +858,7 @@ export default function QuickLogOverlay({ open, onClose }: Props) {
 
         {/* Body — two columns */}
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', scrollbarWidth: 'thin', scrollbarColor: `${adim} ${bgS}`, display: activeTab === 'quick' ? 'block' : 'none' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 0 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 0 }}>
 
             {/* Left column — form */}
             <div style={{ padding: '16px 20px', borderRight: `1px solid ${adim}` }}>

@@ -25,11 +25,30 @@ function formatHabitAlert(habit: Habit): string {
 
 export function buildTopBarAlerts(
   plannerOccurrences: PlannerOccurrence[],
-  todaysHabits: Habit[],
+  todayHabits: Habit[],
   todayMap: HabitTodayMap,
 ): string[] {
+  const now = new Date();
+  const msIn24Hours = 24 * 60 * 60 * 1000; // 86400000
+  const in24Hours = new Date(now.getTime() + msIn24Hours);
+
   const actionablePlanner = [...plannerOccurrences]
-    .filter((occurrence) => !occurrence.completed)
+    .filter((occurrence) => {
+      if (occurrence.completed) return false;
+      // If no time specified (all-day event), always show
+      if (!occurrence.time) return true;
+      try {
+        // Parse event time (format: "HH:MM")
+        const [hours, minutes] = occurrence.time.split(':').map(Number);
+        if (isNaN(hours) || isNaN(minutes)) return true; // Invalid time, show anyway
+        const eventDate = new Date(now);
+        eventDate.setHours(hours, minutes, 0, 0);
+        // Show if event is within the next 24 hours
+        return eventDate >= now && eventDate <= in24Hours;
+      } catch {
+        return true; // On error, show the event
+      }
+    })
     .sort(comparePlannerOccurrences);
 
   const timedPlannerAlerts = actionablePlanner
@@ -40,7 +59,7 @@ export function buildTopBarAlerts(
     .filter((occurrence) => !occurrence.time)
     .map(formatPlannerAlert);
 
-  const dueHabitAlerts = [...todaysHabits]
+  const dueHabitAlerts = [...todayHabits]
     .filter((habit) => !(todayMap[habit.id]?.completed ?? false))
     .sort((a, b) => a.name.localeCompare(b.name))
     .map(formatHabitAlert);
@@ -49,7 +68,7 @@ export function buildTopBarAlerts(
     return [TOP_BAR_STABLE_MESSAGE];
   }
 
-  const hasHabitContext = todaysHabits.length > 0;
+  const hasHabitContext = todayHabits.length > 0;
 
   return [
     ...timedPlannerAlerts,

@@ -60,6 +60,7 @@ import ProjectsPage from '@/components/overlays/ProjectsPage';
 import CharacterSheet from '@/components/overlays/CharacterSheet';
 import ClassDocsPage from '@/components/overlays/ClassDocsPage';
 import XpDocsPage from '@/components/overlays/XpDocsPage';
+import TerminalDocsPage from '@/components/overlays/TerminalDocsPage';
 import WidgetManager from '@/components/overlays/WidgetManager';
 import FirstBootWizard from '@/components/wizard/FirstBootWizard';
 import DetailDrawer from '@/components/drawer/DetailDrawer';
@@ -134,6 +135,7 @@ const Index = () => {
   const [showProjects, setShowProjects]   = useState(false);
   const [showHabits, setShowHabits]       = useState(false);
   const [showCheckin, setShowCheckin] = useState(false);
+  const [showTerminalDocs, setShowTerminalDocs] = useState(false);
   const [showFlash, setShowFlash] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerItem, setDrawerItem] = useState<DrawerItem | null>(null);
@@ -165,6 +167,7 @@ const Index = () => {
   const [showExercise, setShowExercise] = useState(false);
   const [showWorkouts, setShowWorkouts] = useState(false);
   const [showOutput, setShowOutput] = useState(false);
+  const [showLogForOutput, setShowLogForOutput] = useState(false);
   const [showRecipes, setShowRecipes] = useState(false);
   const [showGoals, setShowGoals] = useState(false);
   const [showTerminal, setShowTerminal] = useState(false);
@@ -378,7 +381,7 @@ const Index = () => {
       case 'intake':       return <IntakeWidget {...props} onOpenIntake={() => setShowIntake(true)} onLogClick={(id) => openDrawer('intake', id)} />;
       case 'exercise':     return <ExerciseWidget {...props} onOpenExercise={() => setShowExercise(true)} onExerciseClick={(id) => openDrawer('exercise', id)} />;
       case 'workouts':     return <WorkoutsWidget {...props} onOpenWorkouts={() => setShowWorkouts(true)} onWorkoutClick={(id) => openDrawer('workout', id)} />;
-      case 'output':       return <OutputWidget {...props} onOpenOutput={() => setShowOutput(true)} onOutputClick={(id) => openDrawer('output', id)} />;
+      case 'output':       return <OutputWidget {...props} onOpenOutput={() => setShowLogForOutput(true)} onViewAll={() => setShowOutput(true)} onOutputClick={(id) => openDrawer('output', id)} />;
       case 'recipes':      return <RecipesWidget {...props} onOpenRecipes={() => setShowRecipes(true)} onRecipeClick={(id) => openDrawer('recipe', id)} />;
       case 'vault':        return <VaultWidget {...props} onOpenVault={() => setShowVault(true)} onVaultClick={(id) => openDrawer('vault', id)} />;
       case 'heatmap':      return <HeatmapWidget {...props} />;
@@ -433,6 +436,7 @@ const Index = () => {
           onOpenVault={() => setShowVault(true)}
           onOpenClassDocs={() => setShowClassDocs(true)}
           onOpenXpDocs={() => setShowXpDocs(true)}
+          onOpenTerminalDocs={() => setShowTerminalDocs(true)}
           onOpenWidgetManager={() => setShowWidgetManager(true)}
           onOpenSocials={() => setShowSocials(true)}
           onOpenDailyLog={() => setShowDailyLog(true)}
@@ -452,6 +456,7 @@ const Index = () => {
           onOpenClockWidget={() => handleOpenWidgetById('clock')}
           onOpenCalculatorWidget={() => handleOpenWidgetById('calculator')}
           onOpenUnitConverterWidget={() => handleOpenWidgetById('unitConverter')}
+          widgetHandler={widgetHandler}
         />
 
         <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: 8, position: 'relative', marginRight: drawerOpen ? 420 : 0, transition: 'margin-right 200ms ease', scrollbarWidth: 'thin', scrollbarColor: 'hsl(var(--accent-dim)) hsl(var(--bg-secondary))' }}>
@@ -485,6 +490,7 @@ const Index = () => {
 
       {showLifepath      && <LifepathPage  onClose={() => setShowLifepath(false)} />}
       {showXpDocs && <XpDocsPage onClose={() => setShowXpDocs(false)} />}
+      {showTerminalDocs && <TerminalDocsPage onClose={() => setShowTerminalDocs(false)} />}
       {showClassDocs && <ClassDocsPage onClose={() => setShowClassDocs(false)} />}
       {showCharacterSheet && <CharacterSheet onClose={() => setShowCharacterSheet(false)} />}
       {showTools     && <ToolsPage     onClose={() => setShowTools(false)} />}
@@ -522,6 +528,12 @@ const Index = () => {
           {new Date().getFullYear()}.{String(new Date().getMonth()+1).padStart(2,'0')}.{String(new Date().getDate()).padStart(2,'0')}
         </span>}>
         <QuickLogOverlay open={showLog} onClose={() => setShowLog(false)} />
+      </Modal>
+      <Modal open={showLogForOutput} onClose={() => setShowLogForOutput(false)} title="QUICK LOG" width={720}
+        headerExtra={<span style={{ fontSize: 10, color: 'hsl(var(--text-dim))' }}>
+          {new Date().getFullYear()}.{String(new Date().getMonth()+1).padStart(2,'0')}.{String(new Date().getDate()).padStart(2,'0')}
+        </span>}>
+        <QuickLogOverlay open={showLogForOutput} onClose={() => setShowLogForOutput(false)} initialTab="output" />
       </Modal>
       <DetailDrawer open={drawerOpen} item={drawerItem} onClose={closeDrawer} onOpenLog={() => setShowLog(true)} />
       <Modal open={showSearch} onClose={() => setShowSearch(false)} title="SEARCH" width={600}><SearchOverlay onClose={() => setShowSearch(false)} onNavigate={handleSearchNavigate} /></Modal>

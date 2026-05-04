@@ -7,6 +7,7 @@ import { StatKey, STAT_META } from '@/types';
 import { THEME_OPTIONS, type ThemeCode } from '@/lib/themes';
 import { exportAllData, importData } from '@/services/exportService';
 import { resolveClassFromStats } from '@/services/classSystem';
+import SidebarTerminal from './SidebarTerminal';
 
 interface SidebarProps {
   expanded: boolean;
@@ -27,6 +28,7 @@ interface SidebarProps {
   onOpenVault?: () => void;
   onOpenClassDocs?: () => void;
   onOpenXpDocs?: () => void;
+  onOpenTerminalDocs?: () => void;
   onOpenLifepath?: () => void;
   onOpenWidgetManager?: () => void;
   onOpenSocials?: () => void;
@@ -46,6 +48,7 @@ interface SidebarProps {
   onOpenClockWidget?: () => void;
   onOpenCalculatorWidget?: () => void;
   onOpenUnitConverterWidget?: () => void;
+  widgetHandler?: (action: 'open' | 'close', widgetId: string) => void;
 }
 
 const sectionMap: Record<string, string> = {
@@ -71,10 +74,11 @@ const Sidebar = ({
   expanded, onToggle, onExpand, theme, onThemeChange,
   onOpenCharacterSheet,
   onOpenStat, onOpenSkills, onOpenLibrary, onOpenCourses,
-  onOpenTools, onOpenResources, onOpenAugments, onOpenCerts, onOpenProjects, onOpenVault, onOpenClassDocs, onOpenXpDocs, onOpenLifepath, onOpenWidgetManager, onOpenSocials, onOpenDailyLog, onOpenHabits, onOpenNotes, onOpenPlanner, onOpenRecovery,
+  onOpenTools, onOpenResources, onOpenAugments, onOpenCerts, onOpenProjects, onOpenVault, onOpenClassDocs, onOpenXpDocs, onOpenTerminalDocs, onOpenLifepath, onOpenWidgetManager, onOpenSocials, onOpenDailyLog, onOpenHabits, onOpenNotes, onOpenPlanner, onOpenRecovery,
   onOpenIngredients, onOpenIntake, onOpenOutput, onOpenRecipes, onOpenGoals, onOpenTerminal,
   onOpenExercise, onOpenWorkouts,
   onOpenClockWidget, onOpenCalculatorWidget, onOpenUnitConverterWidget,
+  widgetHandler,
 }: SidebarProps) => {
   const { user } = useAuth();
   const { data: stats } = useStats(user?.id);
@@ -143,8 +147,11 @@ const Sidebar = ({
 
   const [openSection, setOpenSection] = useState<string | null>(null);
   const toggleSection = (section: string) => setOpenSection(openSection === section ? null : section);
+  const [terminalOpen, setTerminalOpen] = useState(false);
+  const toggleTerminal = () => setTerminalOpen(v => !v);
 
   const handleCollapsedClick = (label: string, statKey?: StatKey, section?: string) => {
+    if (section === 'terminal') { onExpand?.(); toggleTerminal(); return; }
     if (section) { onExpand?.(); setOpenSection(section); return; }
     if (statKey) { onOpenStat?.(statKey); return; }
   };
@@ -210,6 +217,7 @@ const Sidebar = ({
     { icon: 'S', label: 'System', section: 'system' },
     { icon: 'U', label: 'Utility', section: 'utility' },
     { icon: 'I', label: 'Interface', section: 'ui' },
+    { icon: 'T', label: 'Terminal', section: 'terminal' },
   ];
 
   // ── // CORE ────────────────────────────────────────────────────────
@@ -254,6 +262,7 @@ const Sidebar = ({
   const docsItems = [
     { icon: '>', name: 'CLASSES', action: () => onOpenClassDocs?.() },
     { icon: '>', name: 'XP & LEVELLING', action: () => onOpenXpDocs?.() },
+    { icon: '>', name: 'TERMINAL', action: () => onOpenTerminalDocs?.() },
   ];
 
   // ── // SYSTEM ─────────────────────────────────────────────────────
@@ -468,6 +477,27 @@ const Sidebar = ({
                 </div>
               </div>
             </>
+          )}
+
+          <div style={{ height: 1, background: 'hsl(var(--accent-dim))', margin: '4px 0' }} />
+
+          {/* // TERMINAL */}
+          <div className={`sidebar-section ${terminalOpen ? 'active' : ''}`} onClick={toggleTerminal}>
+            <span>// TERMINAL</span>
+            <span style={{ transition: 'transform 150ms', transform: terminalOpen ? 'rotate(90deg)' : 'none' }}>{'>'}</span>
+          </div>
+
+          {terminalOpen && (
+            <div style={{ padding: '0 12px 12px' }}>
+              <SidebarTerminal
+                 expanded={true}
+                 widgetHandler={widgetHandler}
+                 drawerHandler={(type, name) => {
+                   // Handle drawer opening
+                 }}
+                 closeDrawerHandler={() => {}}
+               />
+            </div>
           )}
 
           <div style={{ height: 1, background: 'hsl(var(--accent-dim))', margin: '4px 0' }} />

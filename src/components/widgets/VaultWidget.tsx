@@ -10,6 +10,13 @@ const acc = 'hsl(var(--accent))';
 const adim = 'hsl(var(--accent-dim))';
 const dim = 'hsl(var(--text-dim))';
 
+type FilterKey = 'all' | VaultCategory;
+
+const FILTER_OPTIONS: { key: FilterKey; label: string }[] = [
+  { key: 'all', label: 'ALL' },
+  ...VAULT_CATEGORIES.map(c => ({ key: c as FilterKey, label: c })),
+];
+
 interface VaultWidgetProps {
   onClose?: () => void;
   onFullscreen?: () => void;
@@ -21,33 +28,46 @@ interface VaultWidgetProps {
 export default function VaultWidget({ onClose, onFullscreen, isFullscreen, onOpenVault, onVaultClick }: VaultWidgetProps) {
   const { items, isLoading } = useVaultItems();
   const [showAdd, setShowAdd] = useState(false);
-  const [activeCategory, setActiveCategory] = useState<VaultCategory | null>(null);
+  const [filter, setFilter] = useState<FilterKey>(() => (localStorage.getItem('widget-vault-filter') as FilterKey) || 'all');
+  const [search, setSearch] = useState('');
+
+  const setFilterPersist = (f: FilterKey) => { setFilter(f); localStorage.setItem('widget-vault-filter', f); };
 
   const displayItems = useMemo(() => {
-    const filtered = activeCategory ? items.filter((item) => item.category === activeCategory) : items;
-    return filtered.slice(0, 6);
-  }, [items, activeCategory]);
+    const searchFn = (title: string) => !search.trim() || title.toLowerCase().includes(search.toLowerCase());
+    const filtered = filter === 'all' ? items : items.filter((item) => item.category === filter);
+    return filtered.filter(item => searchFn(item.title)).slice(0, 10);
+  }, [items, filter, search]);
 
   return (
     <>
       <WidgetWrapper title="VAULT" onClose={onClose} onFullscreen={onFullscreen} isFullscreen={isFullscreen}>
+        {/* Search box */}
+        <div style={{ position: 'relative', marginBottom: 8 }}>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search vault..."
+            style={{ width: '100%', padding: '3px 8px 3px 20px', fontSize: 9, background: 'hsl(var(--bg-tertiary))', border: `1px solid ${search ? acc : adim}`, color: acc, fontFamily: mono, outline: 'none', boxSizing: 'border-box' }} />
+          <span style={{ position: 'absolute', left: 5, top: '50%', transform: 'translateY(-50%)', fontSize: 9, color: adim, pointerEvents: 'none' }}>⌕</span>
+          {search && <span onClick={() => setSearch('')} style={{ position: 'absolute', right: 5, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: adim, cursor: 'pointer' }}>×</span>}
+        </div>
+
+        {/* Filter tabs */}
         <div style={{ display: 'flex', gap: 4, marginBottom: 10, flexWrap: 'wrap' }}>
-          {VAULT_CATEGORIES.map((category) => (
+          {FILTER_OPTIONS.map(f => (
             <button
-              key={category}
-              onClick={() => setActiveCategory((prev) => prev === category ? null : category)}
+              key={f.key}
+              onClick={() => setFilterPersist(f.key)}
               style={{
                 padding: '2px 6px',
                 fontSize: 8,
                 fontFamily: mono,
                 cursor: 'pointer',
                 letterSpacing: 1,
-                border: `1px solid ${activeCategory === category ? acc : adim}`,
-                background: activeCategory === category ? 'rgba(255,176,0,0.1)' : 'transparent',
-                color: activeCategory === category ? acc : dim,
+                border: `1px solid ${filter === f.key ? acc : adim}`,
+                background: filter === f.key ? 'rgba(255,176,0,0.1)' : 'transparent',
+                color: filter === f.key ? acc : dim,
               }}
             >
-              {category}
+              {f.label}
             </button>
           ))}
         </div>
@@ -56,7 +76,7 @@ export default function VaultWidget({ onClose, onFullscreen, isFullscreen, onOpe
           <div style={{ fontFamily: mono, fontSize: 10, color: dim }}>LOADING...</div>
         ) : displayItems.length === 0 ? (
           <div style={{ fontFamily: mono, fontSize: 10, color: dim }}>
-            {activeCategory ? `No ${activeCategory.toLowerCase()} items yet.` : 'No completed works yet.'}
+            {filter !== 'all' ? `No ${filter.toLowerCase()} items yet.` : 'No completed works yet.'}
           </div>
         ) : (
           <div>

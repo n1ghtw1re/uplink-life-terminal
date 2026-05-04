@@ -73,12 +73,25 @@ export default function ToolDetailDrawer({ toolId, onClose }: Props) {
     queryFn: async () => {
       const db  = await getDB();
       const res = await db.query<{ id: string; skill_name: string; duration_minutes: number; logged_at: string; tool_xp: number }>(`
-        SELECT s.id, s.skill_name, s.duration_minutes, s.logged_at,
-               COALESCE(x.amount, 0) as tool_xp
-        FROM sessions s
-        LEFT JOIN xp_log x ON x.source_id = s.id AND x.tier = 'tool' AND x.entity_id = '${toolId}'
-        WHERE s.tool_ids::text LIKE '%${toolId}%'
-        ORDER BY s.logged_at DESC LIMIT 8;
+        SELECT id, skill_name, duration_minutes, logged_at, tool_xp FROM (
+          SELECT s.id, s.skill_name, s.duration_minutes, s.logged_at,
+                 COALESCE(x.amount, 0) as tool_xp
+          FROM sessions s
+          LEFT JOIN xp_log x ON x.source_id = s.id AND x.tier = 'tool' AND x.entity_id = '${toolId}'
+          WHERE s.tool_ids::text LIKE '%${toolId}%'
+          
+          UNION ALL
+          
+          SELECT o.id, 
+                 COALESCE(e.name, w.name, 'OUTPUT LOG') as skill_name,
+                 o.duration_minutes, o.created_at as logged_at,
+                 (o.total_tool_xp / COALESCE(NULLIF(jsonb_array_length(o.tool_ids), 0), 1)) as tool_xp
+          FROM output_logs o
+          LEFT JOIN exercises e ON o.target_type = 'exercise' AND e.id = o.target_id
+          LEFT JOIN workouts w ON o.target_type = 'workout' AND w.id = o.target_id
+          WHERE o.tool_ids::text LIKE '%${toolId}%'
+        ) as combined
+        ORDER BY logged_at DESC LIMIT 8;
       `);
       return res.rows;
     },

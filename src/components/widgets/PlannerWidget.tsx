@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import WidgetWrapper from '@/components/WidgetWrapper';
 import PlannerEventModal from '@/components/modals/PlannerEventModal';
 import { usePlannerActions, usePlannerUpcoming } from '@/hooks/usePlanner';
-import { comparePlannerOccurrences, toDateString } from '@/services/plannerService';
+import { comparePlannerOccurrences, toDateString, parsePlannerDate } from '@/services/plannerService';
 import type { PlannerOccurrence } from '@/types';
 
 const mono = "'IBM Plex Mono', monospace";
@@ -23,9 +23,24 @@ export default function PlannerWidget({ onClose, onFullscreen, isFullscreen, onO
   const { occurrences, isLoading } = usePlannerUpcoming();
   const { toggleOccurrence } = usePlannerActions();
   const [showAdd, setShowAdd] = useState(false);
+  const [now, setNow] = useState(new Date());
 
-  const nextEvent = occurrences[0];
-  const upcomingEvents = occurrences.slice(1, 6);
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 60000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const validOccurrences = useMemo(() => {
+    return occurrences.filter(occ => {
+      const [hours, minutes] = (occ.time ?? '23:59').split(':').map(Number);
+      const occurrenceDate = parsePlannerDate(occ.date);
+      occurrenceDate.setHours(Number.isFinite(hours) ? hours : 23, Number.isFinite(minutes) ? minutes : 59, 0, 0);
+      return occurrenceDate >= now;
+    });
+  }, [occurrences, now]);
+
+  const nextEvent = validOccurrences[0];
+  const upcomingEvents = validOccurrences.slice(1, 6);
 
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);

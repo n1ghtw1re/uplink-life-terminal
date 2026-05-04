@@ -29,8 +29,8 @@ export default function QuickLogPanel({ open, onClose }: QuickLogPanelProps) {
       background: 'rgba(0,0,0,0.75)',
     }}>
       <div style={{
-        width: '90%',
-        maxWidth: 800,
+        width: '100%',
+        maxWidth: 1060,
         maxHeight: '90vh',
         background: bgP,
         border: `1px solid ${adim}`,
