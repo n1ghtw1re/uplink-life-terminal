@@ -7,6 +7,7 @@ import { refreshAppData } from '@/lib/refreshAppData';
 import { queryClient } from '@/main';
 import { triggerXPFloat } from '@/components/effects/XPFloatLayer';
 import { triggerLevelUp as triggerLevelUpAnim } from '@/components/effects/LevelUpAnimation';
+import { todayStr, calcCheckInXP, MAX_SHIELDS } from '@/services/habitService';
 
 export async function executeCommand(input: string, context?: any): Promise<CommandResult> {
   if (!input.trim()) {
@@ -42,7 +43,7 @@ export async function executeCommand(input: string, context?: any): Promise<Comm
       case 'drawer':
         return executeDrawer(args, drawerHandler, context?.closeDrawerHandler);
       case 'habit':
-        return { success: true, output: 'Habit tracking not yet implemented via terminal' };
+        return executeHabit(args);
       default:
         return { success: false, output: '', error: `Unknown command: ${command}. Type 'help' for available commands.` };
     }
@@ -1084,19 +1085,135 @@ function buildStatSplitFromKeys(statKeys: string[], defaultSplit: number[]): { s
   ];
 }
 
-async function executeHabit(args: string[], flags: Record<string, string>, context?: any): Promise<CommandResult> {
-  if (args.length < 1) {
-    return {
-      success: false,
-      output: '',
-      error: 'Usage: habit [name]\nExample: habit meditation',
-    };
+async function executeHabit(args: string[]): Promise<CommandResult> {
+  if (args.length === 0) {
+    return { success: false, output: '', error: "Usage: HABIT [habit_name] [#quantity]\nExample: HABIT reading\nExample: HABIT pushups #50" };
   }
 
-  const habitName = args.join(' ');
+  try {
+    // Find quantity if present (starts with #)
+    let quantity = 1;
+    const nameParts: string[] = [];
+    
+    for (const arg of args) {
+      if (arg.startsWith('#')) {
+        const num = parseInt(arg.slice(1));
+        if (!isNaN(num)) quantity = num;
+      } else {
+        nameParts.push(arg);
+      }
+    }
 
-  return {
-    success: true,
-    output: `Habit check-in not yet implemented\nHabit: ${habitName}`,
-  };
+    const habitName = nameParts.join(' ');
+    if (!habitName) {
+      return { success: false, output: '', error: "Please provide a habit name." };
+    }
+
+    const db = await getDB();
+    
+    // 1. Resolve habit
+    const habitRes = await db.query<any>(
+      `SELECT * FROM habits WHERE LOWER(name) = $1 AND status = 'ACTIVE' LIMIT 1`,
+      [habitName.toLowerCase()]
+    );
+
+    if (habitRes.rows.length === 0) {
+      return { success: false, output: '', error: `Habit '${habitName}' not found or is not active.` };
+    }
+
+    const habit = habitRes.rows[0];
+    const today = todayStr();
+
+    // 2. Get today's existing logs to calculate cumulative value
+    const logsRes = await db.query<{ id: string; value: number; completed: boolean }>(
+      `SELECT id, value, completed FROM habit_logs WHERE habit_id = $1 AND logged_for_date = $2`,
+      [habit.id, today]
+    );
+
+    const currentValue = logsRes.rows.reduce((sum, log) => sum + (log.value || 0), 0);
+    const alreadyCompleted = logsRes.rows.some(log => log.completed);
+    const cumulativeValue = currentValue + quantity;
+
+    // 3. Determine if newly completed
+    let isCompleted = false;
+    if (habit.target_type === 'BINARY') {
+      isCompleted = true;
+    } else if (habit.target_type === 'QUANTITATIVE' && habit.target_value) {
+      isCompleted = cumulativeValue >= habit.target_value;
+    }
+
+    // 4. Insert the log
+    await db.query(
+      `INSERT INTO habit_logs (habit_id, logged_for_date, logged_date, completed, value, xp_awarded)
+       VALUES ($1, $2, NOW(), $3, $4, 0)`,
+      [habit.id, today, isCompleted, quantity]
+    );
+
+    let output = '';
+    if (habit.target_type === 'QUANTITATIVE') {
+      output = `${habit.name}: ${cumulativeValue}/${habit.target_value} recorded.`;
+    } else {
+      output = `${habit.name}: Logged.`;
+    }
+
+    // 5. If newly completed, update streak and award XP
+    if (isCompleted && !alreadyCompleted) {
+      const newStreak = (habit.current_streak || 0) + 1;
+      const { statXp, masterXp, bonuses } = calcCheckInXP(habit, newStreak);
+      const totalBonusXp = bonuses.reduce((s, b) => s + b.amount, 0);
+      const totalXp = statXp + masterXp + totalBonusXp;
+
+      // Shield earn logic
+      const newShields = newStreak % 7 === 0
+        ? Math.min((habit.shields || 0) + 1, MAX_SHIELDS)
+        : (habit.shields || 0);
+
+      // Update habit record
+      await db.query(
+        `UPDATE habits SET current_streak = $1, longest_streak = GREATEST(longest_streak, $1), shields = $2 WHERE id = $3`,
+        [newStreak, newShields, habit.id]
+      );
+
+      // Award XP
+      await db.exec(`
+        UPDATE stats SET xp = xp + ${statXp} WHERE stat_key = '${habit.stat_key}';
+        UPDATE master_progress SET total_xp = total_xp + ${masterXp} WHERE id = 1;
+      `);
+
+      // Award bonuses
+      for (const bonus of bonuses) {
+        const half = Math.floor(bonus.amount / 2);
+        await db.exec(`
+          UPDATE stats SET xp = xp + ${half} WHERE stat_key = '${habit.stat_key}';
+          UPDATE master_progress SET total_xp = total_xp + ${bonus.amount - half} WHERE id = 1;
+        `);
+      }
+
+      // Add to XP log
+      await db.query(
+        `INSERT INTO xp_log (source, source_id, tier, entity_id, amount, notes)
+         VALUES ('habit', $1, 'stat', $2, $3, 'Habit completion via Terminal')`,
+        [habit.id, habit.stat_key, totalXp]
+      );
+
+      // Trigger animations/floats if in context
+      triggerXPFloat(totalXp, habit.stat_key);
+
+      output += `\nHABIT COMPLETED! 🔥 Streak: ${newStreak} | +${totalXp} XP`;
+      if (bonuses.length > 0) {
+        output += `\nBonuses: ${bonuses.map(b => b.label).join(', ')}`;
+      }
+    }
+
+    // Refresh queries
+    queryClient.invalidateQueries({ queryKey: ['habits'] });
+    queryClient.invalidateQueries({ queryKey: ['habit-logs-today-map'] });
+    queryClient.invalidateQueries({ queryKey: ['stats'] });
+    queryClient.invalidateQueries({ queryKey: ['operator'] });
+
+    return { success: true, output };
+  } catch (err: any) {
+    console.error('[HABIT] Error:', err);
+    return { success: false, output: '', error: err.message || 'Failed to check-in habit' };
+  }
 }

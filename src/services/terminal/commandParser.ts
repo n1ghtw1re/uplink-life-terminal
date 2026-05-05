@@ -127,6 +127,6 @@ export function getCommandSuggestions(input: string): string[] {
     return ['help', 'status', 'clear', 'log', 'habit'];
   }
 
-  const commands = ['help', 'status', 'clear', 'log', 'habit'];
+  const commands = ['help', 'status', 'clear', 'log', 'habit', 'open', 'close', 'list', 'drawer'];
   return commands.filter(cmd => cmd.startsWith(lower));
 }

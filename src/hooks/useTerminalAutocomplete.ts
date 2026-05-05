@@ -11,9 +11,9 @@ function startsWithMatch(text: string, query: string): boolean {
 
 function getCommandSuggestions(query: string): AutocompleteSuggestion[] {
   if (!query) {
-    return AVAILABLE_COMMANDS
-      .filter(cmd => cmd.name !== 'log' && cmd.name !== 'habit')
-      .map(cmd => ({ value: cmd.name, type: 'command' as const, score: 100 }));
+  return AVAILABLE_COMMANDS
+       .filter(cmd => cmd.name !== 'log')
+       .map(cmd => ({ value: cmd.name, type: 'command' as const, score: 100 }));
   }
   
   return AVAILABLE_COMMANDS
@@ -25,6 +25,7 @@ export function useTerminalAutocomplete(input: string) {
   const firstToken = input.trim().split(/\s+/)[0]?.toLowerCase() ?? '';
   const isDrawerContext = firstToken === 'drawer';
   const isLogContext = firstToken === 'log';
+  const isHabitContext = firstToken === 'habit';
 
   const { data: exercises = [] } = useQuery({
     queryKey: ['terminal-exercises-list'],
@@ -122,7 +123,7 @@ export function useTerminalAutocomplete(input: string) {
       return res.rows;
     },
     staleTime: Infinity,
-    enabled: isDrawerContext,
+    enabled: isDrawerContext || isHabitContext,
   });
 
   const { data: courses = [] } = useQuery({
@@ -316,18 +317,32 @@ export function useTerminalAutocomplete(input: string) {
       }
     }
     
+    // HABIT command context
+    if (context === 'habit' || context === 'habits') {
+      if (!lastWord) {
+        return habits.map(h => ({ value: h.name, type: 'habit' as const, score: 100 }));
+      }
+      return habits
+        .filter(h => startsWithMatch(h.name, lastWord))
+        .slice(0, 8)
+        .map(h => ({ value: h.name, type: 'habit' as const, score: 100 }));
+    }
+    
     // Default context - show commands that start with input
     return getCommandSuggestions(lastWord).slice(0, 8);
   }, [input, exercises, workouts, skills, tools, augments, projects, notes, media, habits, courses, vaultItems, recipes, resources, ingredients]);
 
   const currentSuggestion = suggestions[0]?.value || '';
   
-  const completeSuggestion = (): string => {
+  const completeSuggestion = (value?: string): string => {
     const parts = input.trim().split(/\s+/);
+    const targetValue = value || currentSuggestion;
+    if (!targetValue) return input;
+
     if (parts.length <= 1) {
-      return currentSuggestion + ' ';
+      return targetValue + ' ';
     }
-    parts[parts.length - 1] = currentSuggestion;
+    parts[parts.length - 1] = targetValue;
     return parts.join(' ') + ' ';
   };
 

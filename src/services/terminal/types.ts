@@ -95,11 +95,12 @@ export const AVAILABLE_COMMANDS: TerminalCommand[] = [
   },
   {
     name: 'habit',
-    description: 'Check-in/out a habit',
-    syntax: 'habit [name]',
+    description: 'Check-in a habit (binary or quantitative)',
+    syntax: 'HABIT [name] [#quantity]',
     examples: [
-      'habit meditation',
-      'habit reading -check',
+      'HABIT meditation',
+      'HABIT pushups #50',
+      'HABIT reading',
     ],
   },
 ];

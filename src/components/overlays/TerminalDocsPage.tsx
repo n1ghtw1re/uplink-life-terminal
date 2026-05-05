@@ -33,7 +33,7 @@ const COMMANDS = [
   { name: 'clear', desc: 'Clear terminal output', syntax: 'clear' },
   { name: 'close', desc: 'Close a widget', syntax: 'close [widget_name]' },
   { name: 'drawer', desc: 'Open or close drawer', syntax: 'drawer [name] | drawer close' },
-  { name: 'habits', desc: 'Check-in/out a habit', syntax: 'habits [name]' },
+  { name: 'HABIT', desc: 'Check-in a habit (binary or quantitative)', syntax: 'HABIT [name] [#quantity]' },
   { name: 'help', desc: 'Show available commands', syntax: 'help' },
   { name: 'list', desc: 'List items (skills, tools, etc.)', syntax: 'list [type]' },
   { name: 'log', desc: 'Log a session against a skill', syntax: 'log [duration] [skill] [flags]' },
@@ -111,7 +111,9 @@ export default function TerminalDocsPage({ onClose }: Props) {
           <div style={{ marginTop: 14, display: 'grid', gap: 10 }}>
             <div style={{ padding: 12, border: `1px solid ${adim}`, background: bgT }}>
               <div style={{ fontSize: 10, color: acc, marginBottom: 4 }}>AUTOCOMPLETE</div>
-              <BodyText>Press <span style={{ color: acc }}>Tab</span> to autocomplete commands and arguments.</BodyText>
+              <BodyText>
+                Press <span style={{ color: acc }}>Tab</span> to autocomplete. Use <span style={{ color: acc }}>←/→</span> arrow keys to cycle through multiple suggestions.
+              </BodyText>
             </div>
             <div style={{ padding: 12, border: `1px solid ${adim}`, background: bgT }}>
               <div style={{ fontSize: 10, color: acc, marginBottom: 4 }}>HISTORY</div>
@@ -132,10 +134,26 @@ export default function TerminalDocsPage({ onClose }: Props) {
                   -a [augment]   Tag an augment (multiple allowed)<br />
                   -m [media]     Tag a media item (book, movie, etc.)<br />
                   -c [course]    Tag an active course<br />
-                  -p [project]   Tag an active project
+                  -p [project]   Tag an active project<br />
+                  -split [s1:p1/s2:p2] Manual XP split (e.g. -split mind:60/grit:40)
                 </div>
                 <BodyText>
-                  Example: <span style={{ color: acc }}>log 1h coding -t vscode -p uplink</span>
+                  Example: <span style={{ color: acc }}>log 1h coding -t vscode -p uplink -split mind:80/body:20</span>
+                </BodyText>
+              </div>
+            </div>
+
+            <div style={{ padding: 12, border: `1px solid ${adim}`, background: bgT }}>
+              <div style={{ fontSize: 10, color: acc, marginBottom: 4 }}>HABIT SYSTEM</div>
+              <div style={{ display: 'grid', gap: 6 }}>
+                <BodyText>Check-in habits directly from the terminal.</BodyText>
+                <div style={{ fontSize: 10, color: dim, fontFamily: mono, background: 'rgba(0,0,0,0.2)', padding: 8 }}>
+                  habit [name]        Check-in a binary habit<br />
+                  habit [name] #[qty] Add to a quantitative habit
+                </div>
+                <BodyText>
+                  Quantities are cumulative for the day. <br />
+                  Example: <span style={{ color: acc }}>habit pushups #25</span>
                 </BodyText>
               </div>
             </div>

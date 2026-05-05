@@ -35,6 +35,8 @@ export default function TerminalWidget({ onClose, onFullscreen, isFullscreen, is
     addError,
     addDivider,
     clearHistory,
+    getPreviousCommand,
+    getNextCommand,
     resetHistoryIndex,
   } = useTerminalHistory();
   
@@ -93,29 +95,37 @@ export default function TerminalWidget({ onClose, onFullscreen, isFullscreen, is
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
-      if (e.shiftKey || (suggestions.length > 0 && suggestionIndex > 0)) {
+      if (e.shiftKey && suggestions.length > 0) {
         e.preventDefault();
-        setInput(completeSuggestion());
+        setInput(completeSuggestion(suggestions[suggestionIndex]?.value));
         setSuggestionIndex(0);
       } else {
         handleSubmit();
       }
     } else if (e.key === 'Tab') {
       e.preventDefault();
-      if (currentSuggestion) {
-        setInput(completeSuggestion());
+      if (suggestions.length > 0) {
+        setInput(completeSuggestion(suggestions[suggestionIndex]?.value));
         setSuggestionIndex(0);
       }
     } else if (e.key === 'Escape') {
       setSuggestionIndex(0);
-    } else if (e.key === 'ArrowLeft' && suggestions.length > 0) {
-      e.preventDefault();
-      setSuggestionIndex(prev => prev < suggestions.length - 1 ? prev + 1 : 0);
     } else if (e.key === 'ArrowRight' && suggestions.length > 0) {
       e.preventDefault();
+      setSuggestionIndex(prev => prev < suggestions.length - 1 ? prev + 1 : 0);
+    } else if (e.key === 'ArrowLeft' && suggestions.length > 0) {
+      e.preventDefault();
       setSuggestionIndex(prev => prev > 0 ? prev - 1 : suggestions.length - 1);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const prevCmd = getPreviousCommand();
+      if (prevCmd !== undefined) setInput(prevCmd);
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const nextCmd = getNextCommand();
+      if (nextCmd !== undefined) setInput(nextCmd);
     }
-  }, [handleSubmit, suggestions, suggestionIndex, currentSuggestion, completeSuggestion]);
+  }, [handleSubmit, suggestions, suggestionIndex, currentSuggestion, completeSuggestion, getPreviousCommand, getNextCommand]);
 
   const renderLine = (line: typeof history[0]) => {
     const isInput = line.type === 'input';
