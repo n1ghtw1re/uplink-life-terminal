@@ -121,6 +121,24 @@ export default function TerminalDocsPage({ onClose }: Props) {
               <div style={{ fontSize: 10, color: acc, marginBottom: 4 }}>SHARED HISTORY</div>
               <BodyText>Sidebar and widget terminals share the same command history.</BodyText>
             </div>
+            <div style={{ padding: 12, border: `1px solid ${acc}`, background: `rgba(153,104,0,0.15)` }}>
+              <div style={{ fontSize: 10, color: acc, marginBottom: 8, fontWeight: 'bold' }}>TAGGING SYSTEM</div>
+              <div style={{ display: 'grid', gap: 6 }}>
+                <BodyText>
+                  Tag related items when logging skills using flags:
+                </BodyText>
+                <div style={{ fontSize: 9, color: acc, fontFamily: mono, padding: '4px 0' }}>
+                  -t [tool]      Tag a tool (multiple allowed)<br />
+                  -a [augment]   Tag an augment (multiple allowed)<br />
+                  -m [media]     Tag a media item (book, movie, etc.)<br />
+                  -c [course]    Tag an active course<br />
+                  -p [project]   Tag an active project
+                </div>
+                <BodyText>
+                  Example: <span style={{ color: acc }}>log 1h coding -t vscode -p uplink</span>
+                </BodyText>
+              </div>
+            </div>
           </div>
         </div>
 

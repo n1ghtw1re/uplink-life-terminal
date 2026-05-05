@@ -61,19 +61,19 @@ const CharSheetPage4 = () => {
     const inputRef = useRef<HTMLInputElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-    useEffect(() => {
-      if (editingField === field) {
-        setTimeout(() => {
-          if (multiline && textareaRef.current) {
-            textareaRef.current.focus();
-            textareaRef.current.setSelectionRange(textareaRef.current.value.length, textareaRef.current.value.length);
-          } else if (!multiline && inputRef.current) {
-            inputRef.current.focus();
-            inputRef.current.setSelectionRange(inputRef.current.value.length, inputRef.current.value.length);
-          }
-        }, 0);
-      }
-    }, [editingField, field, multiline]);
+     useEffect(() => {
+       if (editingField === field) {
+         setTimeout(() => {
+           if (multiline && textareaRef.current) {
+             textareaRef.current.focus();
+             try { textareaRef.current.setSelectionRange(textareaRef.current.value.length, textareaRef.current.value.length); } catch(e) {}
+           } else if (!multiline && inputRef.current) {
+             inputRef.current.focus();
+             try { (inputRef.current as HTMLInputElement).setSelectionRange(inputRef.current.value.length, inputRef.current.value.length); } catch(e) {}
+           }
+         }, 0);
+       }
+     }, [editingField, field, multiline]);
 
     return (
     <div style={{ marginBottom: 12 }}>

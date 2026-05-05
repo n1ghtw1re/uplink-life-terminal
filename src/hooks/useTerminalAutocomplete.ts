@@ -89,7 +89,7 @@ export function useTerminalAutocomplete(input: string) {
       return res.rows;
     },
     staleTime: Infinity,
-    enabled: isDrawerContext,
+    enabled: isDrawerContext || isLogContext,
   });
 
   const { data: notes = [] } = useQuery({
@@ -111,7 +111,7 @@ export function useTerminalAutocomplete(input: string) {
       return res.rows;
     },
     staleTime: Infinity,
-    enabled: isDrawerContext,
+    enabled: isDrawerContext || isLogContext,
   });
 
   const { data: habits = [] } = useQuery({
@@ -133,7 +133,7 @@ export function useTerminalAutocomplete(input: string) {
       return res.rows;
     },
     staleTime: Infinity,
-    enabled: isDrawerContext,
+    enabled: isDrawerContext || isLogContext,
   });
 
   const { data: vaultItems = [] } = useQuery({
@@ -266,13 +266,46 @@ export function useTerminalAutocomplete(input: string) {
           .slice(0, 8)
           .map(aug => ({ value: aug.name, type: 'augment' as const, score: 100 }));
       }
+
+      if (prevWord === '-m') {
+        if (!lastWord) {
+          return media.slice(0, 8).map(m => ({ value: m.title, type: 'media' as const, score: 100 }));
+        }
+        return media
+          .filter(m => startsWithMatch(m.title, lastWord))
+          .slice(0, 8)
+          .map(m => ({ value: m.title, type: 'media' as const, score: 100 }));
+      }
+
+      if (prevWord === '-c') {
+        if (!lastWord) {
+          return courses.slice(0, 8).map(c => ({ value: c.name, type: 'course' as const, score: 100 }));
+        }
+        return courses
+          .filter(c => startsWithMatch(c.name, lastWord))
+          .slice(0, 8)
+          .map(c => ({ value: c.name, type: 'course' as const, score: 100 }));
+      }
+
+      if (prevWord === '-p') {
+        if (!lastWord) {
+          return projects.slice(0, 8).map(p => ({ value: p.name, type: 'project' as const, score: 100 }));
+        }
+        return projects
+          .filter(p => startsWithMatch(p.name, lastWord))
+          .slice(0, 8)
+          .map(p => ({ value: p.name, type: 'project' as const, score: 100 }));
+      }
       
       // Check if we already have flags earlier (show skills)
       const hasToolFlag = parts.some(p => p === '-t');
       const hasAugFlag = parts.some(p => p === '-a');
+      const hasMediaFlag = parts.some(p => p === '-m');
+      const hasCourseFlag = parts.some(p => p === '-c');
+      const hasProjectFlag = parts.some(p => p === '-p');
       
       // log <duration> <unit> - show skills that start with input
-      if (parts.length >= 3 && !hasToolFlag && !hasAugFlag) {
+      if (parts.length >= 3 && !hasToolFlag && !hasAugFlag && !hasMediaFlag && !hasCourseFlag && !hasProjectFlag) {
         if (!lastWord) {
           return skills.slice(0, 8).map(skill => ({ value: skill.name, type: 'skill' as const, score: 100 }));
         }

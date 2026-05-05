@@ -5,7 +5,7 @@ import { getXPDisplayValues, awardSessionXP, getLevelFromXP } from '@/services/x
 import { getDB } from '@/lib/db';
 import { refreshAppData } from '@/lib/refreshAppData';
 import { queryClient } from '@/main';
-import { triggerLevelUp, triggerXPFloat } from '@/components/effects/XPFloatLayer';
+import { triggerXPFloat } from '@/components/effects/XPFloatLayer';
 import { triggerLevelUp as triggerLevelUpAnim } from '@/components/effects/LevelUpAnimation';
 
 export async function executeCommand(input: string, context?: any): Promise<CommandResult> {
@@ -541,7 +541,7 @@ async function executeLog(args: string[], flags: Record<string, string | string[
     return {
       success: false,
       output: '',
-      error: 'Usage: log [duration] [skill] [-t tool1] [-a augment1] [-split stat:percent/...] [-n "note"]\nExample: log 1 hour mma, log 2h coding -t vscode, log 1h cycling -split body:60/grit:40 -n "Great session!"',
+      error: 'Usage: log [duration] [skill] [-t tool1] [-a augment1] [-m media] [-c course] [-p project] [-split stat:percent/...] [-n "note"]\nExample: log 1 hour mma, log 2h coding -t vscode, log 1h cycling -m "Star Wars" -p "Rebuild Site"',
     };
   }
 
@@ -644,7 +644,7 @@ async function executeLog(args: string[], flags: Record<string, string | string[
   // Process -a (augments) flags
   let augmentIds: string[] = [];
   let augmentNames: string[] = [];
-  const augmentFlag = flags.a;
+  const augmentFlag = flags.a || flags.aug;
   if (augmentFlag) {
     const augmentNamesArr = Array.isArray(augmentFlag) ? augmentFlag : [augmentFlag];
     for (const augName of augmentNamesArr) {
@@ -661,6 +661,51 @@ async function executeLog(args: string[], flags: Record<string, string | string[
         output: '',
         error: `Augment(s) not found: ${missing.join(', ')}`,
       };
+    }
+  }
+
+  // Process -m (media) flag
+  let mediaId = null;
+  let mediaTitle = null;
+  const mediaFlag = flags.m || flags.media;
+  if (mediaFlag) {
+    const mediaName = Array.isArray(mediaFlag) ? mediaFlag[0] : mediaFlag;
+    const mediaResult = await db.query<any>(`SELECT id, title FROM media WHERE LOWER(title) = LOWER('${mediaName.replace(/'/g, "''")}')`);
+    if (mediaResult.rows.length > 0) {
+      mediaId = mediaResult.rows[0].id;
+      mediaTitle = mediaResult.rows[0].title;
+    } else {
+      return { success: false, output: '', error: `Media not found: ${mediaName}` };
+    }
+  }
+
+  // Process -c (course) flag
+  let courseId = null;
+  let courseName = null;
+  const courseFlag = flags.c || flags.course;
+  if (courseFlag) {
+    const courseSearchName = Array.isArray(courseFlag) ? courseFlag[0] : courseFlag;
+    const courseResult = await db.query<any>(`SELECT id, name FROM courses WHERE LOWER(name) = LOWER('${courseSearchName.replace(/'/g, "''")}')`);
+    if (courseResult.rows.length > 0) {
+      courseId = courseResult.rows[0].id;
+      courseName = courseResult.rows[0].name;
+    } else {
+      return { success: false, output: '', error: `Course not found: ${courseSearchName}` };
+    }
+  }
+
+  // Process -p (project) flag
+  let projectId = null;
+  let projName = null;
+  const projectFlag = flags.p || flags.project;
+  if (projectFlag) {
+    const projectSearchName = Array.isArray(projectFlag) ? projectFlag[0] : projectFlag;
+    const projectResult = await db.query<any>(`SELECT id, name FROM projects WHERE LOWER(name) = LOWER('${projectSearchName.replace(/'/g, "''")}')`);
+    if (projectResult.rows.length > 0) {
+      projectId = projectResult.rows[0].id;
+      projName = projectResult.rows[0].name;
+    } else {
+      return { success: false, output: '', error: `Project not found: ${projectSearchName}` };
     }
   }
 
@@ -714,9 +759,9 @@ async function executeLog(args: string[], flags: Record<string, string | string[
       ${totalToolXP},
       '${augmentIdsJson}',
       ${totalAugmentXP},
-      NULL,
-      NULL,
-      NULL
+      ${courseId ? `'${courseId}'` : 'NULL'},
+      ${mediaId ? `'${mediaId}'` : 'NULL'},
+      ${projectId ? `'${projectId}'` : 'NULL'}
     );
   `);
 
@@ -825,6 +870,18 @@ async function executeLog(args: string[], flags: Record<string, string | string[
 
   if (augmentNames.length > 0) {
     output += `\n\nAugments: ${augmentNames.join(', ')} (+${xpResult.perAugmentXP} XP each)`;
+  }
+
+  if (mediaTitle) {
+    output += `\n\nMedia: ${mediaTitle}`;
+  }
+
+  if (courseName) {
+    output += `\n\nCourse: ${courseName}`;
+  }
+
+  if (projName) {
+    output += `\n\nProject: ${projName}`;
   }
 
   if (sessionNote) {
