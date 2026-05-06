@@ -17,7 +17,7 @@ const bgS   = 'hsl(var(--bg-secondary))';
 const bgT   = 'hsl(var(--bg-tertiary))';
 const green = '#44ff88';
 
-const CLUSTERS = [
+const TYPES = [
   'ALL',
   'Architecture & Code',
   'Core Intelligence',
@@ -122,7 +122,7 @@ export default function AugmentsPage({ onClose }: Props) {
 
       {/* Cluster tabs */}
       <div style={{ flexShrink: 0, borderBottom: `1px solid ${adim}`, display: 'flex', alignItems: 'center', padding: '0 16px', gap: 2, background: bgS, overflowX: 'auto' }}>
-        {CLUSTERS.map(c => (
+        {TYPES.map(c => (
           <button key={c} onClick={() => { setActiveCluster(c); setSelectedId(null); }} style={{
             padding: '10px 14px', fontSize: 10, flexShrink: 0,
             border: 'none', borderBottom: `2px solid ${activeCluster === c ? acc : 'transparent'}`,

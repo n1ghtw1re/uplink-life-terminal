@@ -84,20 +84,16 @@ const DetailDrawer = ({ open, item, onClose, onOpenLog }: DetailDrawerProps) => 
 
       {/* ── Routed content ── */}
       <div style={{ flex: 1, minHeight: 0, background: 'hsl(var(--bg-primary))', display: 'flex', flexDirection: 'column' }}>
-      {item?.type === 'course'  && <CourseDetailDrawer courseId={item.id} onClose={onClose} />}
-      {item?.type === 'skill'   && <SkillDetailDrawer skillId={item.id} onClose={onClose} onOpenLog={onOpenLog} />}
-      {item?.type === 'augment' && <AugmentDetailDrawer augmentId={item.id} onClose={onClose} />}
-      {item?.type === 'tool'    && <ToolDetailDrawer toolId={item.id} onClose={onClose} />}
-      {item?.type === 'book'    && <MediaDetailDrawer mediaId={item.id} onClose={onClose} />}
-      {item?.type === 'project'  && <ProjectDetailDrawer projectId={item.id} onClose={onClose} />}
-      {item?.type === 'vault' && <VaultItemDrawer itemId={item.id} onClose={onClose} />}
-      {item?.type === 'ingredient' && <IngredientDrawer ingredientId={item.id} onClose={onClose} />}
-      {item?.type === 'recipe' && <RecipeDrawer recipeId={item.id} onClose={onClose} />}
-      {item?.type === 'intake' && <IntakeDrawer logId={item.id} onClose={onClose} />}
-      {item?.type === 'note'   && <NoteDetailDrawer noteId={item.id} embedded onClose={onClose} />}
-      {item?.type === 'resource' && <ResourceDetailDrawer resourceId={item.id} onClose={onClose} />}
-      {item?.type === 'exercise' && <ExerciseDetailDrawer exerciseId={item.id} onClose={onClose} />}
-      {item?.type === 'workout' && <WorkoutDetailDrawer workoutId={item.id} onClose={onClose} />}
+    {item?.type === 'course'  && <CourseDetailDrawer key="course" courseId={item.id} onClose={onClose} />}
+    {item?.type === 'skill'   && <SkillDetailDrawer key="skill" skillId={item.id} onClose={onClose} onOpenLog={onOpenLog} />}
+    {item?.type === 'augment' && <AugmentDetailDrawer key="augment" augmentId={item.id} onClose={onClose} />}
+    {item?.type === 'tool'    && <ToolDetailDrawer key="tool" toolId={item.id} onClose={onClose} />}
+    {item?.type === 'book'    && <MediaDetailDrawer key="book" mediaId={item.id} embedded onClose={onClose} />}
+    {item?.type === 'project'  && <ProjectDetailDrawer key="project" projectId={item.id} onClose={onClose} />}
+    {item?.type === 'note'   && <NoteDetailDrawer key="note" noteId={item.id} embedded onClose={onClose} />}
+    {item?.type === 'resource' && <ResourceDetailDrawer key="resource" resourceId={item.id} onClose={onClose} />}
+    {item?.type === 'exercise' && <ExerciseDetailDrawer key="exercise" exerciseId={item.id} onClose={onClose} />}
+    {item?.type === 'workout' && <WorkoutDetailDrawer key="workout" workoutId={item.id} onClose={onClose} />}
       {item?.type === 'output' && <OutputLogDrawer outputLogId={item.id} onClose={onClose} />}
       {item?.type === 'habit' && item.id && <HabitDrawer habitId={item.id} onClose={onClose} />}
       {!item?.type && null}

@@ -18,6 +18,7 @@ const MEDIA_TYPES = [
   { key: 'documentary',  label: 'DOCUMENTARY',  icon: '🎥' },
   { key: 'tv',           label: 'TV SERIES',    icon: '📺' },
   { key: 'album',        label: 'ALBUM',        icon: '🎵' },
+  { key: 'channel',      label: 'CHANNEL',      icon: '📡' },
 ];
 
 type MediaType = typeof MEDIA_TYPES[number]['key'];
@@ -30,6 +31,7 @@ const STATUS_OPTIONS: Record<string, string[]> = {
   documentary: ['WATCHING', 'QUEUED', 'FINISHED'],
   tv:          ['WATCHING', 'QUEUED', 'FINISHED', 'DROPPED'],
   album:       ['LISTENING', 'QUEUED', 'FINISHED'],
+  channel:     ['WATCHING', 'QUEUED', 'FINISHED'],
 };
 
 const XP_ON_COMPLETE: Record<string, number> = {
@@ -73,6 +75,11 @@ export default function AddMediaModal({ onClose, defaultType = 'book' }: Props) 
   const [director, setDirector]     = useState('');
   const [artist, setArtist]         = useState('');
 
+  // Channel-specific fields
+  const [handleId, setHandleId]     = useState('');
+  const [channelUrl, setChannelUrl] = useState('');
+  const [niche, setNiche]           = useState('');
+
   const handleTypeChange = (t: MediaType) => {
     setType(t);
     setStatus(STATUS_OPTIONS[t][0]);
@@ -111,7 +118,17 @@ export default function AddMediaModal({ onClose, defaultType = 'book' }: Props) 
           seasons:       (type === 'tv' || type === 'game') ? (seasons ? parseInt(seasons) : null) : null,
           current_season: null,
           runtime:       null,
-          platform:      (type === 'documentary' || type === 'tv' || type === 'game') ? (platform || null) : null,
+          platform:      (type === 'documentary' || type === 'tv' || type === 'game' || type === 'channel') ? (platform || null) : null,
+          // Channel-specific fields stored in notes as JSON or use dedicated columns
+          // Storing channel metadata in notes for now
+          ...(type === 'channel' ? {
+            notes: JSON.stringify({
+              handleId,
+              url: channelUrl,
+              niche,
+              originalNotes: notes.trim() || null,
+            }),
+          } : {}),
         });
 
       if (error) throw error;
@@ -202,35 +219,37 @@ export default function AddMediaModal({ onClose, defaultType = 'book' }: Props) 
       </div>
 
       {/* ── Creator + Year ── */}
-      <div style={{ display: 'flex', gap: 10 }}>
-        <div style={{ flex: 2 }}>
-          <div className="crt-field-label">{creatorLabel[type]}</div>
-          <input
-            className="crt-input"
-            style={{ width: '100%' }}
-            placeholder={
-              type === 'book'  ? 'William Gibson' :
-              type === 'album' ? 'Radiohead' :
-              type === 'film' || type === 'documentary' ? 'Denis Villeneuve' :
-              'creator...'
-            }
-            value={creator}
-            onChange={e => setCreator(e.target.value)}
-            maxLength={100}
-          />
+      {type !== 'channel' && (
+        <div style={{ display: 'flex', gap: 10 }}>
+          <div style={{ flex: 2 }}>
+            <div className="crt-field-label">{creatorLabel[type]}</div>
+            <input
+              className="crt-input"
+              style={{ width: '100%' }}
+              placeholder={
+                type === 'book'  ? 'William Gibson' :
+                type === 'album' ? 'Radiohead' :
+                type === 'film' || type === 'documentary' ? 'Denis Villeneuve' :
+                'creator...'
+              }
+              value={creator}
+              onChange={e => setCreator(e.target.value)}
+              maxLength={100}
+            />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div className="crt-field-label">YEAR</div>
+            <input
+              className="crt-input"
+              style={{ width: '100%' }}
+              placeholder="1984"
+              value={year}
+              onChange={e => setYear(e.target.value.replace(/\D/g, '').slice(0, 4))}
+              maxLength={4}
+            />
+          </div>
         </div>
-        <div style={{ flex: 1 }}>
-          <div className="crt-field-label">YEAR</div>
-          <input
-            className="crt-input"
-            style={{ width: '100%' }}
-            placeholder="1984"
-            value={year}
-            onChange={e => setYear(e.target.value.replace(/\D/g, '').slice(0, 4))}
-            maxLength={4}
-          />
-        </div>
-      </div>
+      )}
 
       {/* ── Type-specific meta fields ── */}
       {type === 'book' && (
@@ -351,6 +370,63 @@ export default function AddMediaModal({ onClose, defaultType = 'book' }: Props) 
             <input className="crt-input" style={{ width: '100%' }}
               placeholder="Number of seasons/DLC"
               value={seasons} onChange={e => setSeasons(e.target.value.replace(/\D/g, ''))} />
+          </div>
+        </div>
+      )}
+
+      {/* ── Channel-specific fields ── */}
+      {type === 'channel' && (
+        <div style={{ display: 'grid', gap: 10 }}>
+          <div>
+            <div className="crt-field-label">PLATFORM</div>
+            <select
+              className="crt-input"
+              style={{ width: '100%' }}
+              value={platform}
+              onChange={e => setPlatform(e.target.value)}
+            >
+              <option value="">— select platform —</option>
+              <option value="YouTube">YouTube</option>
+              <option value="Twitch">Twitch</option>
+              <option value="Nebula">Nebula</option>
+              <option value="Patreon">Patreon</option>
+              <option value="Kick">Kick</option>
+              <option value="Rumble">Rumble</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div>
+            <div className="crt-field-label">HANDLE / ID</div>
+            <input
+              className="crt-input"
+              style={{ width: '100%' }}
+              placeholder="@channelname"
+              value={handleId}
+              onChange={e => setHandleId(e.target.value)}
+              maxLength={100}
+            />
+          </div>
+          <div>
+            <div className="crt-field-label">URL</div>
+            <input
+              className="crt-input"
+              style={{ width: '100%' }}
+              placeholder="https://..."
+              value={channelUrl}
+              onChange={e => setChannelUrl(e.target.value)}
+              maxLength={500}
+            />
+          </div>
+          <div>
+            <div className="crt-field-label">NICHE</div>
+            <input
+              className="crt-input"
+              style={{ width: '100%' }}
+              placeholder="e.g. Coding, Gaming, Education"
+              value={niche}
+              onChange={e => setNiche(e.target.value)}
+              maxLength={100}
+            />
           </div>
         </div>
       )}

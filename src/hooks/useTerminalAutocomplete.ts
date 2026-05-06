@@ -26,6 +26,7 @@ export function useTerminalAutocomplete(input: string) {
   const isDrawerContext = firstToken === 'drawer';
   const isLogContext = firstToken === 'log';
   const isHabitContext = firstToken === 'habit';
+  const isDeleteContext = firstToken === 'delete';
 
   const { data: exercises = [] } = useQuery({
     queryKey: ['terminal-exercises-list'],
@@ -53,11 +54,11 @@ export function useTerminalAutocomplete(input: string) {
     queryKey: ['terminal-skills-list'],
     queryFn: async () => {
       const db = await getDB();
-      const res = await db.query<{ id: string; name: string }>('SELECT id, name FROM skills ORDER BY name');
+      const res = await db.query<{ id: string; name: string }>('SELECT id, name FROM skills ORDER BY LOWER(name)');
       return res.rows;
     },
     staleTime: Infinity,
-    enabled: isDrawerContext || isLogContext,
+    enabled: isDrawerContext || isLogContext || isDeleteContext,
   });
 
   const { data: tools = [] } = useQuery({
@@ -79,7 +80,7 @@ export function useTerminalAutocomplete(input: string) {
       return res.rows;
     },
     staleTime: Infinity,
-    enabled: isDrawerContext || isLogContext,
+    enabled: isDrawerContext || isLogContext || isDeleteContext,
   });
 
   const { data: projects = [] } = useQuery({
@@ -327,6 +328,180 @@ export function useTerminalAutocomplete(input: string) {
         .slice(0, 8)
         .map(h => ({ value: h.name, type: 'habit' as const, score: 100 }));
     }
+
+    // DELETE command context - skill, augment, tool, resource, note supported
+    if (isDeleteContext) {
+      // When typing "delete " or "delete s", show available types
+      if (parts.length < 2 || (parts.length === 2 && parts[1])) {
+        const deleteTypes = ['skill', 'augment', 'tool', 'resource', 'note'];
+        const match = deleteTypes.filter(t => t.startsWith(parts[1]?.toLowerCase() || ''));
+        if (match.length > 0) {
+          return match.map(t => ({ value: t, type: 'command' as const, score: 100 }));
+        }
+      }
+
+      // After "delete skill", show skill names
+      if (parts.length >= 2 && parts[1]?.toLowerCase() === 'skill') {
+        if (parts.length < 3 || !lastWord) {
+          return skills.slice(0, 8).map(s => ({ value: s.name, type: 'skill' as const, score: 100 }));
+        }
+        return skills
+          .filter(s => startsWithMatch(s.name, lastWord))
+          .slice(0, 8)
+          .map(s => ({ value: s.name, type: 'skill' as const, score: 100 }));
+      }
+
+      // After "delete augment", show augment names
+      if (parts.length >= 2 && parts[1]?.toLowerCase() === 'augment') {
+        if (parts.length < 3 || !lastWord) {
+          return augments.slice(0, 8).map(a => ({ value: a.name, type: 'augment' as const, score: 100 }));
+        }
+        return augments
+          .filter(a => startsWithMatch(a.name, lastWord))
+          .slice(0, 8)
+          .map(a => ({ value: a.name, type: 'augment' as const, score: 100 }));
+      }
+
+      // After "delete tool", show tool names
+      if (parts.length >= 2 && parts[1]?.toLowerCase() === 'tool') {
+        if (parts.length < 3 || !lastWord) {
+          return tools.slice(0, 8).map(t => ({ value: t.name, type: 'tool' as const, score: 100 }));
+        }
+        return tools
+          .filter(t => startsWithMatch(t.name, lastWord))
+          .slice(0, 8)
+          .map(t => ({ value: t.name, type: 'tool' as const, score: 100 }));
+      }
+
+      // After "delete resource", show resource names (using title field)
+      if (parts.length >= 2 && parts[1]?.toLowerCase() === 'resource') {
+        if (parts.length < 3 || !lastWord) {
+          return resources.slice(0, 8).map(r => ({ value: r.title, type: 'resource' as const, score: 100 }));
+        }
+        return resources
+          .filter(r => startsWithMatch(r.title, lastWord))
+          .slice(0, 8)
+          .map(r => ({ value: r.title, type: 'resource' as const, score: 100 }));
+      }
+
+      // After "delete note", show note names
+      if (parts.length >= 2 && parts[1]?.toLowerCase() === 'note') {
+        if (parts.length < 3 || !lastWord) {
+          return notes.slice(0, 8).map(n => ({ value: n.name, type: 'note' as const, score: 100 }));
+        }
+        return notes
+          .filter(n => startsWithMatch(n.name, lastWord))
+          .slice(0, 8)
+          .map(n => ({ value: n.name, type: 'note' as const, score: 100 }));
+      }
+    }
+
+    // ADD command context - skill, augment, tool, resource, note supported
+    if (firstToken === 'add') {
+      // After "add ", show available types
+      if (parts.length < 2 || (parts.length === 2 && parts[1])) {
+        const addTypes = ['skill', 'augment', 'tool', 'resource', 'note'];
+        const match = addTypes.filter(t => t.startsWith(parts[1]?.toLowerCase() || ''));
+        if (match.length > 0) {
+          return match.map(t => ({ value: t, type: 'command' as const, score: 100 }));
+        }
+      }
+
+      // After "add skill", show flag suggestions (-stats, -n)
+      if (parts.length >= 2 && parts[1]?.toLowerCase() === 'skill') {
+        const skillFlags = ['-stats', '-n'];
+        if (!lastWord.startsWith('-')) {
+          return skillFlags
+            .filter(f => f.startsWith(lastWord.toLowerCase()))
+            .map(f => ({ value: f, type: 'command' as const, score: 100 }));
+        }
+      }
+
+      // After "add augment", show flag suggestions (-type, -url, -d, -n)
+      if (parts.length >= 2 && parts[1]?.toLowerCase() === 'augment') {
+        const augmentFlags = ['-type', '-url', '-d', '-n'];
+        if (lastWord.startsWith('-')) {
+          return augmentFlags
+            .filter(f => f.startsWith(lastWord.toLowerCase()))
+            .map(f => ({ value: f, type: 'command' as const, score: 100 }));
+        }
+
+        // After "-type ", show type options
+        if (parts.includes('-type')) {
+          const typeIndex = parts.indexOf('-type');
+          if (parts.length === typeIndex + 2 || (parts.length > typeIndex + 2 && lastWord)) {
+            const types = ['Architecture & Code', 'Core Intelligence', 'Data & Strategy', 'Identity & Safety', 'Linguistic & Narrative', 'Sonic & Acoustic', 'Visual & Cinematic', 'Workflow & Context'];
+            if (!lastWord) {
+              return types.slice(0, 8).map(t => ({ value: t, type: 'command' as const, score: 100 }));
+            }
+            return types
+              .filter(t => startsWithMatch(t, lastWord))
+              .slice(0, 8)
+              .map(t => ({ value: t, type: 'command' as const, score: 100 }));
+          }
+        }
+      }
+
+      // After "add tool", show flag suggestions (-type, -url, -d, -n)
+      if (parts.length >= 2 && parts[1]?.toLowerCase() === 'tool') {
+        const toolFlags = ['-type', '-url', '-d', '-n'];
+        if (lastWord.startsWith('-')) {
+          return toolFlags
+            .filter(f => f.startsWith(lastWord.toLowerCase()))
+            .map(f => ({ value: f, type: 'command' as const, score: 100 }));
+        }
+
+        // After "-type ", show type options
+        if (parts.includes('-type')) {
+          const typeIndex = parts.indexOf('-type');
+          if (parts.length === typeIndex + 2 || (parts.length > typeIndex + 2 && lastWord)) {
+            const types = ['equipment', 'facility', 'framework', 'hardware', 'instrument', 'language', 'platform', 'software', 'vehicle'];
+            if (!lastWord) {
+              return types.slice(0, 8).map(t => ({ value: t, type: 'command' as const, score: 100 }));
+            }
+            return types
+              .filter(t => startsWithMatch(t, lastWord))
+              .slice(0, 8)
+              .map(t => ({ value: t, type: 'command' as const, score: 100 }));
+          }
+        }
+      }
+
+      // After "add resource", show flag suggestions (-type, -url, -d, -n)
+      if (parts.length >= 2 && parts[1]?.toLowerCase() === 'resource') {
+        const resourceFlags = ['-type', '-url', '-d', '-n'];
+        if (lastWord.startsWith('-')) {
+          return resourceFlags
+            .filter(f => f.startsWith(lastWord.toLowerCase()))
+            .map(f => ({ value: f, type: 'command' as const, score: 100 }));
+        }
+
+        // After "-type ", show type options
+        if (parts.includes('-type')) {
+          const typeIndex = parts.indexOf('-type');
+          if (parts.length === typeIndex + 2 || (parts.length > typeIndex + 2 && lastWord)) {
+            const types = ['Learning', 'Reference', 'Utilities', 'Inspiration', 'Media', 'Community', 'Assets', 'Business', 'Health', 'Productivity', 'Personal', 'Entertainment', 'Misc'];
+            if (!lastWord) {
+              return types.slice(0, 8).map(t => ({ value: t, type: 'command' as const, score: 100 }));
+            }
+            return types
+              .filter(t => startsWithMatch(t, lastWord))
+              .slice(0, 8)
+              .map(t => ({ value: t, type: 'command' as const, score: 100 }));
+          }
+        }
+      }
+
+      // After "add note", show flag suggestions (-content)
+      if (parts.length >= 2 && parts[1]?.toLowerCase() === 'note') {
+        const noteFlags = ['-content'];
+        if (lastWord.startsWith('-')) {
+          return noteFlags
+            .filter(f => f.startsWith(lastWord.toLowerCase()))
+            .map(f => ({ value: f, type: 'command' as const, score: 100 }));
+        }
+      }
+    }
     
     // Default context - show commands that start with input
     return getCommandSuggestions(lastWord).slice(0, 8);
@@ -340,7 +515,7 @@ export function useTerminalAutocomplete(input: string) {
     if (!targetValue) return input;
 
     if (parts.length <= 1) {
-      return targetValue + ' ';
+      return input + ' ' + targetValue + ' ';
     }
     parts[parts.length - 1] = targetValue;
     return parts.join(' ') + ' ';

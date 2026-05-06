@@ -9,14 +9,14 @@ import WidgetWrapper from '../WidgetWrapper';
 import Modal from '../Modal';
 import AddMediaModal from '../modals/AddMediaModal';
 
-const TABS = ['BOOKS', 'COMICS', 'FILMS', 'DOCS', 'TV', 'ALBUMS', 'GAMES', 'ALL'];
+const TABS = ['BOOKS', 'COMICS', 'FILMS', 'DOCS', 'TV', 'ALBUMS', 'GAMES', 'CHANNELS', 'ALL'];
 
 const TAB_TYPE_MAP: Record<string, string> = {
-  BOOKS: 'book', COMICS: 'comic', FILMS: 'film', DOCS: 'documentary', TV: 'tv', ALBUMS: 'album', GAMES: 'game',
+  BOOKS: 'book', COMICS: 'comic', FILMS: 'film', DOCS: 'documentary', TV: 'tv', ALBUMS: 'album', GAMES: 'game', CHANNELS: 'channel',
 };
 
-const TAB_MEDIA_TYPE: Record<string, 'book' | 'comic' | 'film' | 'documentary' | 'tv' | 'album' | 'game'> = {
-  BOOKS: 'book', COMICS: 'comic', FILMS: 'film', DOCS: 'documentary', TV: 'tv', ALBUMS: 'album', GAMES: 'game', ALL: 'book',
+const TAB_MEDIA_TYPE: Record<string, 'book' | 'comic' | 'film' | 'documentary' | 'tv' | 'album' | 'game' | 'channel'> = {
+  BOOKS: 'book', COMICS: 'comic', FILMS: 'film', DOCS: 'documentary', TV: 'tv', ALBUMS: 'album', GAMES: 'game', CHANNELS: 'channel', ALL: 'book',
 };
 
 const IN_PROGRESS = ['READING', 'WATCHING', 'LISTENED', 'LISTENING', 'PLAYING'];

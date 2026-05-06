@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { getDB } from '@/lib/db';
 import { toast } from '@/hooks/use-toast';
 
-const CLUSTERS = [
+const TYPES = [
   'Architecture & Code',
   'Core Intelligence',
   'Data & Strategy',
@@ -84,10 +84,10 @@ export default function AddAugmentModal({ onClose }: Props) {
       {/* Cluster */}
       <div>
         <div style={{ fontSize: 10, color: dim, letterSpacing: 1, marginBottom: 8 }}>
-          CLUSTER <span style={{ color: acc }}>*</span>
+          TYPE <span style={{ color: acc }}>*</span>
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {CLUSTERS.map(c => (
+          {TYPES.map(c => (
             <button key={c} onClick={() => setCategory(c)} style={{
               padding: '5px 12px', fontSize: 9, fontFamily: mono, cursor: 'pointer', letterSpacing: 1,
               border: `1px solid ${category === c ? acc : adim}`,

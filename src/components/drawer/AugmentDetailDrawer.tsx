@@ -14,7 +14,7 @@ const bgS   = 'hsl(var(--bg-secondary))';
 const bgT   = 'hsl(var(--bg-tertiary))';
 const green = '#44ff88';
 
-const CLUSTERS = [
+const TYPES = [
   'Architecture & Code', 'Core Intelligence', 'Data & Strategy', 'Identity & Safety',
   'Linguistic & Narrative', 'Sonic & Acoustic', 'Visual & Cinematic', 'Workflow & Context',
 ];
@@ -212,9 +212,9 @@ export default function AugmentDetailDrawer({ augmentId, onClose }: Props) {
                   style={{ width: '100%', padding: '6px 10px', fontSize: 11, boxSizing: 'border-box', background: bgT, border: `1px solid ${adim}`, color: acc, fontFamily: mono, outline: 'none' }} />
               </div>
               <div>
-                <div style={{ fontSize: 9, color: adim, letterSpacing: 1, marginBottom: 6 }}>CLUSTER</div>
+                <div style={{ fontSize: 9, color: adim, letterSpacing: 1, marginBottom: 6 }}>TYPE</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                  {CLUSTERS.map(c => (
+                  {TYPES.map(c => (
                     <button key={c} onClick={() => setEditCat(c)} style={{
                       padding: '3px 8px', fontSize: 9, fontFamily: mono, cursor: 'pointer',
                       border: `1px solid ${editCat === c ? acc : adim}`,

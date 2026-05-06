@@ -250,23 +250,25 @@ export default function MediaDetailDrawer({ mediaId, onClose }: Props) {
         [completedAt, mediaId]
       );
 
-      // Bonus XP — 50% if legacy, 100% if not
-      const baseXP = Math.floor(getXPValue(item.type) * (item.is_legacy ? 0.5 : 1.0));
-      const source  = getSourceType(item.type);
+      // Bonus XP — skip for channels (no XP bonuses)
+      if (item.type !== 'channel') {
+        const baseXP = Math.floor(getXPValue(item.type) * (item.is_legacy ? 0.5 : 1.0));
+        const source  = getSourceType(item.type);
 
-      if (item.linked_stat && baseXP > 0) {
-        const { awardBonusXP } = await import('@/services/xpService');
-        await awardBonusXP({
-          source,
-          sourceId: mediaId,
-          statKey:  item.linked_stat,
-          amount:   baseXP,
-          notes:    item.title,
-        });
+        if (item.linked_stat && baseXP > 0) {
+          const { awardBonusXP } = await import('@/services/xpService');
+          await awardBonusXP({
+            source,
+            sourceId: mediaId,
+            statKey:  item.linked_stat,
+            amount:   baseXP,
+            notes:    item.title,
+          });
+        }
+
+        setLastXP(baseXP);
+        setTimeout(() => setLastXP(null), 3000);
       }
-
-      setLastXP(baseXP);
-      setTimeout(() => setLastXP(null), 3000);
     },
       onSuccess: async () => {
         await refreshAppData(queryClient);
@@ -347,6 +349,20 @@ export default function MediaDetailDrawer({ mediaId, onClose }: Props) {
   const currentSeason = meta.current_season as number | undefined;
   const totalSeasons  = meta.seasons       as number | undefined;
   const runtime       = meta.runtime       as number | undefined;
+
+  // Channel-specific: parse notes if it's JSON (contains handleId, url, niche)
+  const channelNotes = (() => {
+    if (item.type !== 'channel' || !item.notes) return null;
+    try {
+      const parsed = JSON.parse(item.notes);
+      if (parsed.handleId) return parsed;
+    } catch {}
+    return null;
+  })();
+  const channelHandle = channelNotes?.handleId || '';
+  const channelUrl    = channelNotes?.url || '';
+  const channelNiche  = channelNotes?.niche || '';
+  const originalNotes = channelNotes?.originalNotes || item.notes;
   const platform      = meta.platform      as string | undefined;
   const issueCount    = meta.issue_count   as number | undefined;
   const baseXP        = getXPValue(item.type);
@@ -397,8 +413,8 @@ export default function MediaDetailDrawer({ mediaId, onClose }: Props) {
 
         <div style={{ fontSize: 10, color: dimText, marginBottom: 8 }}>
           {[
-            item.creator,
-            item.year?.toString(),
+            item.type !== 'channel' ? item.creator : null,
+            item.type !== 'channel' ? item.year?.toString() : null,
             runtime ? `${runtime} min` : null,
             totalPages ? `${totalPages} pages` : null,
             issueCount ? `${issueCount} issues` : null,
@@ -406,6 +422,39 @@ export default function MediaDetailDrawer({ mediaId, onClose }: Props) {
             platform,
           ].filter(Boolean).join('  ·  ')}
         </div>
+
+        {/* Channel-specific info */}
+        {item.type === 'channel' && (
+          <div style={{ display: 'grid', gap: 6, marginBottom: 12, fontSize: 10 }}>
+            {platform && (
+              <div style={{ display: 'flex', gap: 8 }}>
+                <span style={{ color: accentDim, width: 70 }}>PLATFORM</span>
+                <span style={{ color: dimText }}>{platform}</span>
+              </div>
+            )}
+            {channelHandle && (
+              <div style={{ display: 'flex', gap: 8 }}>
+                <span style={{ color: accentDim, width: 70 }}>HANDLE</span>
+                <span style={{ color: dimText }}>{channelHandle}</span>
+              </div>
+            )}
+            {channelUrl && (
+              <div style={{ display: 'flex', gap: 8 }}>
+                <span style={{ color: accentDim, width: 70 }}>URL</span>
+                <a href={channelUrl} target="_blank" rel="noopener noreferrer"
+                   style={{ color: accent, textDecoration: 'underline', wordBreak: 'break-all' }}>
+                  {channelUrl}
+                </a>
+              </div>
+            )}
+            {channelNiche && (
+              <div style={{ display: 'flex', gap: 8 }}>
+                <span style={{ color: accentDim, width: 70 }}>NICHE</span>
+                <span style={{ color: dimText }}>{channelNiche}</span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Linked stat tag */}
         {item.linked_stat && (
@@ -538,7 +587,7 @@ export default function MediaDetailDrawer({ mediaId, onClose }: Props) {
         <SectionLabel label="RATING" />
         <StarRating rating={item.rating} onRate={r => updateItem.mutate({ rating: r || null })} />
 
-        {!isFinished && (
+        {!isFinished && item.type !== 'channel' && (
           <>
             <SectionLabel label="XP ON COMPLETION" />
             <div style={{ fontSize: 10, color: dimText }}>

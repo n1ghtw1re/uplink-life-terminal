@@ -9,9 +9,70 @@ import { triggerXPFloat } from '@/components/effects/XPFloatLayer';
 import { triggerLevelUp as triggerLevelUpAnim } from '@/components/effects/LevelUpAnimation';
 import { todayStr, calcCheckInXP, MAX_SHIELDS } from '@/services/habitService';
 
+// Pending delete state (module-level for confirmation across calls)
+let pendingDelete: { type: string; name: string; id: string } | null = null;
+
 export async function executeCommand(input: string, context?: any): Promise<CommandResult> {
   if (!input.trim()) {
     return { success: true, output: '' };
+  }
+
+  // Handle y/n confirmation for pending delete
+  const trimmed = input.trim().toLowerCase();
+  if (pendingDelete && (trimmed === 'y' || trimmed === 'n')) {
+    if (trimmed === 'n') {
+      const name = pendingDelete.name;
+      pendingDelete = null;
+      return { success: true, output: `Delete cancelled for '${name}'.` };
+    }
+    // If 'y', perform the delete directly with stored id
+    const { type, name, id } = pendingDelete;
+    pendingDelete = null;
+
+    try {
+      const db = await getDB();
+
+      if (type === 'skill') {
+        await db.query(`DELETE FROM skills WHERE id = $1`, [id]);
+        queryClient.invalidateQueries({ queryKey: ['skills'] });
+        queryClient.invalidateQueries({ queryKey: ['terminal-skills-list'] });
+        return { success: true, output: `Skill '${name}' deleted.` };
+      }
+
+      if (type === 'augment') {
+        await db.query(`DELETE FROM augments WHERE id = $1`, [id]);
+        queryClient.invalidateQueries({ queryKey: ['augments'] });
+        queryClient.invalidateQueries({ queryKey: ['terminal-augments-list'] });
+        return { success: true, output: `Augment '${name}' deleted.` };
+      }
+
+      if (type === 'tool') {
+        await db.query(`DELETE FROM tools WHERE id = $1`, [id]);
+        queryClient.invalidateQueries({ queryKey: ['tools'] });
+        queryClient.invalidateQueries({ queryKey: ['tools-for-lifepath'] });
+        queryClient.invalidateQueries({ queryKey: ['terminal-tools-list'] });
+        return { success: true, output: `Tool '${name}' deleted.` };
+      }
+
+      if (type === 'resource') {
+        await db.query(`DELETE FROM resources WHERE id = $1`, [id]);
+        queryClient.invalidateQueries({ queryKey: ['resources'] });
+        queryClient.invalidateQueries({ queryKey: ['terminal-resources-list'] });
+        return { success: true, output: `Resource '${name}' deleted.` };
+      }
+
+      if (type === 'note') {
+        await db.query(`UPDATE notes SET status = 'DELETED' WHERE id = $1`, [id]);
+        queryClient.invalidateQueries({ queryKey: ['notes'] });
+        queryClient.invalidateQueries({ queryKey: ['terminal-notes-list'] });
+        return { success: true, output: `Note '${name}' deleted.` };
+      }
+
+      return { success: false, output: '', error: `Unknown delete type: ${type}` };
+    } catch (err: any) {
+      console.error('[DELETE] Error:', err);
+      return { success: false, output: '', error: err.message || 'Failed to delete' };
+    }
   }
 
   const parsed = parseCommand(input);
@@ -44,6 +105,10 @@ export async function executeCommand(input: string, context?: any): Promise<Comm
         return executeDrawer(args, drawerHandler, context?.closeDrawerHandler);
       case 'habit':
         return executeHabit(args);
+      case 'add':
+        return executeAdd(args, flags);
+      case 'delete':
+        return executeDelete(args);
       default:
         return { success: false, output: '', error: `Unknown command: ${command}. Type 'help' for available commands.` };
     }
@@ -79,7 +144,7 @@ async function executeList(args: string[], context?: any): Promise<CommandResult
 
   if (!item || item === 'skills' || item === 'skill') {
     const res = await db.query<{ id: string; name: string; level: number; xp: number; active: boolean }>(
-      `SELECT id, name, level, xp, active FROM skills WHERE active = true ORDER BY name`
+      `SELECT id, name, level, xp, active FROM skills WHERE active = true ORDER BY LOWER(name)`
     );
     
     if (res.rows.length === 0) {
@@ -98,7 +163,7 @@ async function executeList(args: string[], context?: any): Promise<CommandResult
 
   if (item === 'exercises' || item === 'exercise') {
     const res = await db.query<{ id: string; name: string; level: number; xp: number }>(
-      `SELECT id, name, level, xp FROM exercises WHERE active = true ORDER BY name`
+      `SELECT id, name, level, xp FROM exercises WHERE active = true ORDER BY LOWER(name)`
     );
 
     if (res.rows.length === 0) {
@@ -117,7 +182,7 @@ async function executeList(args: string[], context?: any): Promise<CommandResult
 
   if (item === 'workouts' || item === 'workout') {
     const res = await db.query<{ id: string; name: string; completed_count: number }>(
-      `SELECT id, name, completed_count FROM workouts WHERE active = true ORDER BY name`
+      `SELECT id, name, completed_count FROM workouts WHERE active = true ORDER BY LOWER(name)`
     );
 
     if (res.rows.length === 0) {
@@ -136,7 +201,7 @@ async function executeList(args: string[], context?: any): Promise<CommandResult
 
   if (item === 'tools' || item === 'tool') {
     const res = await db.query<{ id: string; name: string; level: number; xp: number; active: boolean }>(
-      `SELECT id, name, level, xp, active FROM tools WHERE active = true ORDER BY name`
+      `SELECT id, name, level, xp, active FROM tools WHERE active = true ORDER BY LOWER(name)`
     );
     
     if (res.rows.length === 0) {
@@ -155,7 +220,7 @@ async function executeList(args: string[], context?: any): Promise<CommandResult
 
   if (item === 'augments' || item === 'augment' || item === 'aug') {
     const res = await db.query<{ id: string; name: string; level: number; xp: number; active: boolean }>(
-      `SELECT id, name, level, xp, active FROM augments WHERE active = true ORDER BY name`
+      `SELECT id, name, level, xp, active FROM augments WHERE active = true ORDER BY LOWER(name)`
     );
     
     if (res.rows.length === 0) {
@@ -174,7 +239,7 @@ async function executeList(args: string[], context?: any): Promise<CommandResult
 
   if (item === 'projects' || item === 'project') {
     const res = await db.query<{ id: string; name: string; status: string }>(
-      `SELECT id, name, status FROM projects ORDER BY name`
+      `SELECT id, name, status FROM projects ORDER BY LOWER(name)`
     );
     
     if (res.rows.length === 0) {
@@ -193,7 +258,7 @@ async function executeList(args: string[], context?: any): Promise<CommandResult
 
   if (item === 'media' || item === 'books') {
     const res = await db.query<{ id: string; title: string; type: string; status: string }>(
-      `SELECT id, title, type, status FROM media ORDER BY title`
+      `SELECT id, title, type, status FROM media ORDER BY LOWER(title)`
     );
     
     if (res.rows.length === 0) {
@@ -212,7 +277,7 @@ async function executeList(args: string[], context?: any): Promise<CommandResult
 
   if (item === 'habits' || item === 'habit') {
     const res = await db.query<{ id: string; name: string; stat_key: string; status: string; current_streak: number }>(
-      `SELECT id, name, stat_key, status, current_streak FROM habits WHERE status = 'ACTIVE' ORDER BY name`
+      `SELECT id, name, stat_key, status, current_streak FROM habits WHERE status = 'ACTIVE' ORDER BY LOWER(name)`
     );
     
     if (res.rows.length === 0) {
@@ -231,7 +296,7 @@ async function executeList(args: string[], context?: any): Promise<CommandResult
 
   if (item === 'courses' || item === 'course') {
     const res = await db.query<{ id: string; name: string; status: string; progress: number }>(
-      `SELECT id, name, status, progress FROM courses ORDER BY name`
+      `SELECT id, name, status, progress FROM courses ORDER BY LOWER(name)`
     );
     
     if (res.rows.length === 0) {
@@ -250,7 +315,7 @@ async function executeList(args: string[], context?: any): Promise<CommandResult
 
   if (item === 'vault') {
     const res = await db.query<{ id: string; title: string; category: string }>(
-      `SELECT id, title, category FROM vault_items ORDER BY title`
+        `SELECT id, title, category FROM vault_items ORDER BY LOWER(title)`
     );
     
     if (res.rows.length === 0) {
@@ -270,7 +335,7 @@ async function executeList(args: string[], context?: any): Promise<CommandResult
   if (item === 'recipes' || item === 'recipe') {
     try {
       const res = await db.query<{ id: string; name: string; category: string }>(
-        `SELECT id, name, category FROM recipes ORDER BY name`
+        `SELECT id, name, category FROM recipes ORDER BY LOWER(name)`
       );
       
       if (res.rows.length === 0) {
@@ -316,7 +381,7 @@ async function executeList(args: string[], context?: any): Promise<CommandResult
   if (item === 'ingredients' || item === 'ingredient') {
     try {
       const res = await db.query<{ id: string; name: string }>(
-        `SELECT id, name FROM custom_ingredients ORDER BY name`
+        `SELECT id, name FROM custom_ingredients ORDER BY LOWER(name)`
       );
       
       if (res.rows.length === 0) {
@@ -337,7 +402,7 @@ async function executeList(args: string[], context?: any): Promise<CommandResult
   if (item === 'notes' || item === 'note') {
     try {
       const res = await db.query<{ id: string; name: string }>(
-        `SELECT id, name FROM notes ORDER BY name`
+        `SELECT id, name FROM notes ORDER BY LOWER(name)`
       );
       
       if (res.rows.length === 0) {
@@ -542,7 +607,7 @@ async function executeLog(args: string[], flags: Record<string, string | string[
     return {
       success: false,
       output: '',
-      error: 'Usage: log [duration] [skill] [-t tool1] [-a augment1] [-m media] [-c course] [-p project] [-split stat:percent/...] [-n "note"]\nExample: log 1 hour mma, log 2h coding -t vscode, log 1h cycling -m "Star Wars" -p "Rebuild Site"',
+      error: 'Usage: log [duration] [skill] [-t tool1] [-a augment1] [-m media] [-c course] [-p project] [-stats stat:percent/...] [-n "note"]\nExample: log 1 hour mma, log 2h coding -t vscode, log 1h cycling -m "Star Wars" -p "Rebuild Site"',
     };
   }
 
@@ -608,12 +673,12 @@ async function executeLog(args: string[], flags: Record<string, string | string[
     defaultSplit = [100];
   }
 
-  // Parse -split flag (format: body:60/grit:40 or body:100)
+  // Parse -stats flag for stat split (format: body:60/grit:40 or body:100)
   let statSplit = buildStatSplitFromKeys(statKeys, defaultSplit);
-  const splitFlag = flags.split;
-  if (splitFlag) {
-    const splitValue = Array.isArray(splitFlag) ? splitFlag[0] : splitFlag;
-    const parsedSplit = parseSplitFlag(splitValue);
+  const statsFlag = flags.stats;
+  if (statsFlag) {
+    const statsValue = Array.isArray(statsFlag) ? statsFlag[0] : statsFlag;
+    const parsedSplit = parseSplitFlag(statsValue);
     if (parsedSplit) {
       statSplit = parsedSplit;
     }
@@ -1083,6 +1148,570 @@ function buildStatSplitFromKeys(statKeys: string[], defaultSplit: number[]): { s
     { stat: primary, percent: primaryPercent },
     { stat: secondary, percent: 100 - primaryPercent },
   ];
+}
+
+async function executeAdd(args: string[], flags: Record<string, string | string[]>): Promise<CommandResult> {
+  if (args.length === 0) {
+    return {
+      success: false,
+      output: '',
+      error: "Usage: add skill [name] -stats [stat1:%/stat2:%] [-n note]\n       add augment [name] -type [type] [-url http://...] [-d description] [-n note]\n       add tool [name] -type [type] [-url http://...] [-d description] [-n note]\nExample: add skill sword fighting -stats body:50/flow:50 -n this is a note\nExample: add skill reading -stats mind\nExample: add augment mma -type Core Intelligence -url https://... -d fighting technique\nExample: add tool vscode -type software -url https://code.visualstudio.com -d editor"
+    };
+  }
+
+  const type = args[0]?.toLowerCase();
+  if (type === 'skill') {
+    return executeAddSkill(args.slice(1), flags);
+  }
+
+  if (type === 'augment') {
+    return executeAddAugment(args.slice(1), flags);
+  }
+
+  if (type === 'tool') {
+    return executeAddTool(args.slice(1), flags);
+  }
+
+  if (type === 'resource') {
+    return executeAddResource(args.slice(1), flags);
+  }
+
+  if (type === 'note') {
+    return executeAddNote(args.slice(1), flags);
+  }
+
+  return { success: false, output: '', error: `Unknown type: ${type}. Supported types: skill, augment, tool, resource, note` };
+}
+
+async function executeAddSkill(nameArgs: string[], flags: Record<string, string | string[]>): Promise<CommandResult> {
+  try {
+    const name = nameArgs.join(' ');
+    if (!name) {
+      return { success: false, output: '', error: "Please provide a skill name." };
+    }
+
+    const statsFlag = (flags['stats'] as string) || '';
+    const notesFlag = (flags['n'] as string) || '';
+
+    if (!statsFlag) {
+      return { success: false, output: '', error: "Please provide stats using -stats flag.\nExample: -stats body:50/flow:50 or -stats mind" };
+    }
+
+    // Parse stats
+    const statParts = statsFlag.split('/').map(s => s.trim());
+    const statKeys: string[] = [];
+    const split: number[] = [];
+
+    for (const part of statParts) {
+      const match = part.match(/^(\w+):(\d+)$/);
+      if (match) {
+        statKeys.push(match[1].toLowerCase());
+        split.push(parseInt(match[2]));
+      } else {
+        // Single stat without percentage
+        statKeys.push(part.toLowerCase());
+        split.push(100);
+      }
+    }
+
+    // Validate stat keys
+    const VALID_STATS = ['body', 'wire', 'mind', 'cool', 'grit', 'flow', 'ghost'];
+    for (const k of statKeys) {
+      if (!VALID_STATS.includes(k)) {
+        return { success: false, output: '', error: `Invalid stat: ${k}. Valid stats: ${VALID_STATS.join(', ')}` };
+      }
+    }
+
+    if (statKeys.length === 0 || statKeys.length > 2) {
+      return { success: false, output: '', error: "Please provide 1 or 2 stats.\nExample: -stats body:50/flow:50 or -stats mind" };
+    }
+
+    // Normalize split if single stat or doesn't sum to 100
+    if (statKeys.length === 1) {
+      split[0] = 100;
+    } else if (split.reduce((a, b) => a + b, 0) !== 100) {
+      // Auto-normalize
+      const total = split.reduce((a, b) => a + b, 0);
+      for (let i = 0; i < split.length; i++) {
+        split[i] = Math.round((split[i] / total) * 100);
+      }
+      // Fix rounding
+      const diff = 100 - split.reduce((a, b) => a + b, 0);
+      split[0] += diff;
+    }
+
+    const db = await getDB();
+
+    // Check duplicate
+    const existing = await db.query(
+      `SELECT id FROM skills WHERE LOWER(name) = LOWER($1) LIMIT 1`,
+      [name]
+    );
+    if (existing.rows.length > 0) {
+      return { success: false, output: '', error: `Skill '${name}' already exists.` };
+    }
+
+    // Insert skill
+    const id = crypto.randomUUID();
+    await db.query(
+      `INSERT INTO skills (id, name, stat_keys, default_split, notes, is_custom, active, xp, level, icon, created_at)
+       VALUES ($1, $2, $3, $4, $5, true, true, 0, 1, 'o', NOW())`,
+      [id, name, JSON.stringify(statKeys), JSON.stringify(split), notesFlag || null]
+    );
+
+    // Refresh queries
+    queryClient.invalidateQueries({ queryKey: ['skills'] });
+    queryClient.invalidateQueries({ queryKey: ['terminal-skills-list'] });
+
+    const statsDisplay = statKeys.map((k, i) => `${k.toUpperCase()}:${split[i]}%`).join('/');
+    return { success: true, output: `Skill '${name}' added.\nStats: ${statsDisplay}${notesFlag ? '\nNotes: ' + notesFlag : ''}` };
+  } catch (err: any) {
+    console.error('[ADD SKILL] Error:', err);
+    return { success: false, output: '', error: err.message || 'Failed to add skill' };
+  }
+}
+
+async function executeAddAugment(nameArgs: string[], flags: Record<string, string | string[]>): Promise<CommandResult> {
+  try {
+    const name = nameArgs.join(' ').trim();
+    if (!name) {
+      return { success: false, output: '', error: "Please provide an augment name." };
+    }
+
+    const typeFlag = (flags['type'] as string) || '';
+    const urlFlag = (flags['url'] as string) || '';
+    const descFlag = (flags['d'] as string) || '';
+    const notesFlag = (flags['n'] as string) || '';
+
+    if (!typeFlag) {
+      return { success: false, output: '', error: "Please provide a type using -type flag.\nExample: -type Core Intelligence" };
+    }
+
+    const db = await getDB();
+
+    // Check duplicate
+    const existing = await db.query(
+      `SELECT id FROM augments WHERE LOWER(name) = LOWER($1) LIMIT 1`,
+      [name]
+    );
+    if (existing.rows.length > 0) {
+      return { success: false, output: '', error: `Augment '${name}' already exists.` };
+    }
+
+    // Insert augment
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+    await db.query(
+      `INSERT INTO augments (id, name, category, url, description, notes, xp, level, active, is_custom, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, 0, 0, true, true, $7)`,
+      [id, name, typeFlag, urlFlag || null, descFlag || null, notesFlag || null, now]
+    );
+
+    // Refresh queries
+    queryClient.invalidateQueries({ queryKey: ['augments'] });
+    queryClient.invalidateQueries({ queryKey: ['terminal-augments-list'] });
+
+    return {
+      success: true,
+      output: `Augment '${name}' added.\nType: ${typeFlag}${urlFlag ? '\nURL: ' + urlFlag : ''}${descFlag ? '\nDescription: ' + descFlag : ''}${notesFlag ? '\nNotes: ' + notesFlag : ''}`
+    };
+  } catch (err: any) {
+    console.error('[ADD AUGMENT] Error:', err);
+    return { success: false, output: '', error: err.message || 'Failed to add augment' };
+  }
+}
+
+async function executeAddTool(nameArgs: string[], flags: Record<string, string | string[]>): Promise<CommandResult> {
+  try {
+    const name = nameArgs.join(' ').trim();
+    if (!name) {
+      return { success: false, output: '', error: "Please provide a tool name." };
+    }
+
+    const typeFlag = (flags['type'] as string) || '';
+    const urlFlag = (flags['url'] as string) || '';
+    const descFlag = (flags['d'] as string) || '';
+    const notesFlag = (flags['n'] as string) || '';
+
+    if (!typeFlag) {
+      return { success: false, output: '', error: "Please provide a type using -type flag.\nExample: -type software" };
+    }
+
+    const db = await getDB();
+
+    // Check duplicate
+    const existing = await db.query(
+      `SELECT id FROM tools WHERE LOWER(name) = LOWER($1) LIMIT 1`,
+      [name]
+    );
+    if (existing.rows.length > 0) {
+      return { success: false, output: '', error: `Tool '${name}' already exists.` };
+    }
+
+    // Insert tool
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+    await db.query(
+      `INSERT INTO tools (id, name, type, url, description, notes, is_custom, active, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, true, true, $7)`,
+      [id, name, typeFlag, urlFlag || null, descFlag || null, notesFlag || null, now]
+    );
+
+    // Refresh queries
+    queryClient.invalidateQueries({ queryKey: ['tools'] });
+    queryClient.invalidateQueries({ queryKey: ['tools-for-lifepath'] });
+    queryClient.invalidateQueries({ queryKey: ['terminal-tools-list'] });
+
+    return {
+      success: true,
+      output: `Tool '${name}' added.\nType: ${typeFlag}${urlFlag ? '\nURL: ' + urlFlag : ''}${descFlag ? '\nDescription: ' + descFlag : ''}${notesFlag ? '\nNotes: ' + notesFlag : ''}`
+    };
+  } catch (err: any) {
+    console.error('[ADD TOOL] Error:', err);
+    return { success: false, output: '', error: err.message || 'Failed to add tool' };
+  }
+}
+
+async function executeAddResource(nameArgs: string[], flags: Record<string, string | string[]>): Promise<CommandResult> {
+  try {
+    const name = nameArgs.join(' ').trim();
+    if (!name) {
+      return { success: false, output: '', error: "Please provide a resource name." };
+    }
+
+    const typeFlag = (flags['type'] as string) || '';
+    const urlFlag = (flags['url'] as string) || '';
+    const descFlag = (flags['d'] as string) || '';
+    const notesFlag = (flags['n'] as string) || '';
+
+    if (!typeFlag) {
+      return { success: false, output: '', error: "Please provide a type using -type flag.\nExample: -type Learning" };
+    }
+
+    const db = await getDB();
+
+    // Check duplicate
+    const existing = await db.query(
+      `SELECT id FROM resources WHERE LOWER(title) = LOWER($1) LIMIT 1`,
+      [name]
+    );
+    if (existing.rows.length > 0) {
+      return { success: false, output: '', error: `Resource '${name}' already exists.` };
+    }
+
+    // Insert resource
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+    await db.query(
+      `INSERT INTO resources (id, title, category, url, description, notes, status, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, 'UNREAD', $7)`,
+      [id, name, typeFlag, urlFlag || null, descFlag || null, notesFlag || null, now]
+    );
+
+    // Refresh queries
+    queryClient.invalidateQueries({ queryKey: ['resources'] });
+    queryClient.invalidateQueries({ queryKey: ['terminal-resources-list'] });
+
+    return {
+      success: true,
+      output: `Resource '${name}' added.\nType: ${typeFlag}${urlFlag ? '\nURL: ' + urlFlag : ''}${descFlag ? '\nDescription: ' + descFlag : ''}${notesFlag ? '\nNotes: ' + notesFlag : ''}`
+    };
+  } catch (err: any) {
+    console.error('[ADD RESOURCE] Error:', err);
+    return { success: false, output: '', error: err.message || 'Failed to add resource' };
+  }
+}
+
+async function executeAddNote(nameArgs: string[], flags: Record<string, string | string[]>): Promise<CommandResult> {
+  try {
+    const name = nameArgs.join(' ').trim();
+    if (!name) {
+      return { success: false, output: '', error: "Please provide a note name." };
+    }
+
+    const contentFlag = (flags['content'] as string) || '';
+    if (!contentFlag) {
+      return { success: false, output: '', error: "Please provide content using -content flag.\nExample: -content your note content here" };
+    }
+
+    const db = await getDB();
+
+    // Check duplicate
+    const existing = await db.query(
+      `SELECT id FROM notes WHERE LOWER(name) = LOWER($1) LIMIT 1`,
+      [name]
+    );
+    if (existing.rows.length > 0) {
+      return { success: false, output: '', error: `Note '${name}' already exists.` };
+    }
+
+    // Insert note
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+    await db.query(
+      `INSERT INTO notes (id, name, content, status, created_at, updated_at)
+       VALUES ($1, $2, $3, 'ACTIVE', $4, $4)`,
+      [id, name, contentFlag, now]
+    );
+
+    // Refresh queries
+    queryClient.invalidateQueries({ queryKey: ['notes'] });
+    queryClient.invalidateQueries({ queryKey: ['terminal-notes-list'] });
+
+    return {
+      success: true,
+      output: `Note '${name}' added.\nContent: ${contentFlag}`
+    };
+  } catch (err: any) {
+    console.error('[ADD NOTE] Error:', err);
+    return { success: false, output: '', error: err.message || 'Failed to add note' };
+  }
+}
+
+async function executeDelete(args: string[]): Promise<CommandResult> {
+  if (args.length === 0) {
+    return { success: false, output: '', error: "Usage: delete skill [name] | delete augment [name] | delete tool [name] | delete resource [name]\nExample: delete skill reading" };
+  }
+
+  const type = args[0]?.toLowerCase();
+
+  if (type === 'skill') {
+    return executeDeleteSkill(args.slice(1));
+  }
+
+  if (type === 'augment') {
+    return executeDeleteAugment(args.slice(1));
+  }
+
+  if (type === 'tool') {
+    return executeDeleteTool(args.slice(1));
+  }
+
+  if (type === 'resource') {
+    return executeDeleteResource(args.slice(1));
+  }
+
+  if (type === 'note') {
+    return executeDeleteNote(args.slice(1));
+  }
+
+  return { success: false, output: '', error: `Unknown type: ${type}. Supported types: skill, augment, tool, resource, note` };
+}
+
+async function executeDeleteSkill(nameArgs: string[]): Promise<CommandResult> {
+  try {
+    const name = nameArgs.join(' ').trim();
+    if (!name) {
+      return { success: false, output: '', error: "Please provide a skill name." };
+    }
+
+    const db = await getDB();
+
+    // Check if there's a pending confirmation
+    if (pendingDelete && pendingDelete.name.toLowerCase() === name.toLowerCase()) {
+      // User confirmed - perform the delete
+      await db.query(`DELETE FROM skills WHERE id = $1`, [pendingDelete.id]);
+
+      pendingDelete = null;
+
+      // Refresh queries
+      queryClient.invalidateQueries({ queryKey: ['skills'] });
+      queryClient.invalidateQueries({ queryKey: ['terminal-skills-list'] });
+
+      return { success: true, output: `Skill '${name}' deleted.` };
+    }
+
+    // Look up the skill
+    const res = await db.query(
+      `SELECT id, name FROM skills WHERE LOWER(name) = LOWER($1) LIMIT 1`,
+      [name]
+    );
+
+    if (res.rows.length === 0) {
+      return { success: false, output: '', error: `Skill '${name}' not found.` };
+    }
+
+    // Set pending delete and ask for confirmation
+    pendingDelete = { type: 'skill', name: res.rows[0].name, id: res.rows[0].id };
+
+    return { success: true, output: `Delete skill '${res.rows[0].name}'? Type: y (yes) or n (no)` };
+  } catch (err: any) {
+    console.error('[DELETE SKILL] Error:', err);
+    return { success: false, output: '', error: err.message || 'Failed to delete skill' };
+  }
+}
+
+async function executeDeleteAugment(nameArgs: string[]): Promise<CommandResult> {
+  try {
+    const name = nameArgs.join(' ').trim();
+    if (!name) {
+      return { success: false, output: '', error: "Please provide an augment name." };
+    }
+
+    const db = await getDB();
+
+    // Check if there's a pending confirmation
+    if (pendingDelete && pendingDelete.name.toLowerCase() === name.toLowerCase() && pendingDelete.type === 'augment') {
+      // User confirmed - perform the delete
+      await db.query(`DELETE FROM augments WHERE id = $1`, [pendingDelete.id]);
+
+      pendingDelete = null;
+
+      // Refresh queries
+      queryClient.invalidateQueries({ queryKey: ['augments'] });
+      queryClient.invalidateQueries({ queryKey: ['terminal-augments-list'] });
+
+      return { success: true, output: `Augment '${name}' deleted.` };
+    }
+
+    // Look up the augment
+    const res = await db.query(
+      `SELECT id, name FROM augments WHERE LOWER(name) = LOWER($1) LIMIT 1`,
+      [name]
+    );
+
+    if (res.rows.length === 0) {
+      return { success: false, output: '', error: `Augment '${name}' not found.` };
+    }
+
+    // Set pending delete and ask for confirmation
+    pendingDelete = { type: 'augment', name: res.rows[0].name, id: res.rows[0].id };
+
+    return { success: true, output: `Delete augment '${res.rows[0].name}'? Type: y (yes) or n (no)` };
+  } catch (err: any) {
+    console.error('[DELETE AUGMENT] Error:', err);
+    return { success: false, output: '', error: err.message || 'Failed to delete augment' };
+  }
+}
+
+async function executeDeleteTool(nameArgs: string[]): Promise<CommandResult> {
+  try {
+    const name = nameArgs.join(' ').trim();
+    if (!name) {
+      return { success: false, output: '', error: "Please provide a tool name." };
+    }
+
+    const db = await getDB();
+
+    // Check if there's a pending confirmation
+    if (pendingDelete && pendingDelete.name.toLowerCase() === name.toLowerCase() && pendingDelete.type === 'tool') {
+      // User confirmed - perform the delete
+      await db.query(`DELETE FROM tools WHERE id = $1`, [pendingDelete.id]);
+
+      pendingDelete = null;
+
+      // Refresh queries
+      queryClient.invalidateQueries({ queryKey: ['tools'] });
+      queryClient.invalidateQueries({ queryKey: ['tools-for-lifepath'] });
+      queryClient.invalidateQueries({ queryKey: ['terminal-tools-list'] });
+
+      return { success: true, output: `Tool '${name}' deleted.` };
+    }
+
+    // Look up the tool
+    const res = await db.query(
+      `SELECT id, name FROM tools WHERE LOWER(name) = LOWER($1) LIMIT 1`,
+      [name]
+    );
+
+    if (res.rows.length === 0) {
+      return { success: false, output: '', error: `Tool '${name}' not found.` };
+    }
+
+    // Set pending delete and ask for confirmation
+    pendingDelete = { type: 'tool', name: res.rows[0].name, id: res.rows[0].id };
+
+    return { success: true, output: `Delete tool '${res.rows[0].name}'? Type: y (yes) or n (no)` };
+  } catch (err: any) {
+    console.error('[DELETE TOOL] Error:', err);
+    return { success: false, output: '', error: err.message || 'Failed to delete tool' };
+  }
+}
+
+async function executeDeleteResource(nameArgs: string[]): Promise<CommandResult> {
+  try {
+    const name = nameArgs.join(' ').trim();
+    if (!name) {
+      return { success: false, output: '', error: "Please provide a resource name." };
+    }
+
+    const db = await getDB();
+
+    // Check if there's a pending confirmation
+    if (pendingDelete && pendingDelete.name.toLowerCase() === name.toLowerCase() && pendingDelete.type === 'resource') {
+      // User confirmed - perform the delete
+      await db.query(`DELETE FROM resources WHERE id = $1`, [pendingDelete.id]);
+
+      pendingDelete = null;
+
+      // Refresh queries
+      queryClient.invalidateQueries({ queryKey: ['resources'] });
+      queryClient.invalidateQueries({ queryKey: ['terminal-resources-list'] });
+
+      return { success: true, output: `Resource '${name}' deleted.` };
+    }
+
+    // Look up the resource (using title field)
+    const res = await db.query(
+      `SELECT id, title FROM resources WHERE LOWER(title) = LOWER($1) LIMIT 1`,
+      [name]
+    );
+
+    if (res.rows.length === 0) {
+      return { success: false, output: '', error: `Resource '${name}' not found.` };
+    }
+
+    // Set pending delete and ask for confirmation
+    pendingDelete = { type: 'resource', name: res.rows[0].title, id: res.rows[0].id };
+
+    return { success: true, output: `Delete resource '${res.rows[0].title}'? Type: y (yes) or n (no)` };
+  } catch (err: any) {
+    console.error('[DELETE RESOURCE] Error:', err);
+    return { success: false, output: '', error: err.message || 'Failed to delete resource' };
+  }
+}
+
+async function executeDeleteNote(nameArgs: string[]): Promise<CommandResult> {
+  try {
+    const name = nameArgs.join(' ').trim();
+    if (!name) {
+      return { success: false, output: '', error: "Please provide a note name." };
+    }
+
+    const db = await getDB();
+
+    // Check if there's a pending confirmation
+    if (pendingDelete && pendingDelete.name.toLowerCase() === name.toLowerCase() && pendingDelete.type === 'note') {
+      // User confirmed - perform the delete (set status to 'DELETED')
+      await db.query(`UPDATE notes SET status = 'DELETED' WHERE id = $1`, [pendingDelete.id]);
+
+      pendingDelete = null;
+
+      // Refresh queries
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
+      queryClient.invalidateQueries({ queryKey: ['terminal-notes-list'] });
+
+      return { success: true, output: `Note '${name}' deleted.` };
+    }
+
+    // Look up the note (using name field)
+    const res = await db.query(
+      `SELECT id, name FROM notes WHERE LOWER(name) = LOWER($1) AND status != 'DELETED' LIMIT 1`,
+      [name]
+    );
+
+    if (res.rows.length === 0) {
+      return { success: false, output: '', error: `Note '${name}' not found.` };
+    }
+
+    // Set pending delete and ask for confirmation
+    pendingDelete = { type: 'note', name: res.rows[0].name, id: res.rows[0].id };
+
+    return { success: true, output: `Delete note '${res.rows[0].name}'? Type: y (yes) or n (no)` };
+  } catch (err: any) {
+    console.error('[DELETE NOTE] Error:', err);
+    return { success: false, output: '', error: err.message || 'Failed to delete note' };
+  }
 }
 
 async function executeHabit(args: string[]): Promise<CommandResult> {

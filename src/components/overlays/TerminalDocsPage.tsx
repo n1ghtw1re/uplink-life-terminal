@@ -34,6 +34,8 @@ const COMMANDS = [
   { name: 'close', desc: 'Close a widget', syntax: 'close [widget_name]' },
   { name: 'drawer', desc: 'Open or close drawer', syntax: 'drawer [name] | drawer close' },
   { name: 'HABIT', desc: 'Check-in a habit (binary or quantitative)', syntax: 'HABIT [name] [#quantity]' },
+  { name: 'ADD', desc: 'Add a new entity (Skills, tools, augments, etc)', syntax: 'ADD [type] [name] [flags]' },
+  { name: 'DELETE', desc: 'Delete an entity (requires y/n confirmation)', syntax: 'DELETE [type] [name]' },
   { name: 'help', desc: 'Show available commands', syntax: 'help' },
   { name: 'list', desc: 'List items (skills, tools, etc.)', syntax: 'list [type]' },
   { name: 'log', desc: 'Log a session against a skill', syntax: 'log [duration] [skill] [flags]' },
@@ -135,10 +137,16 @@ export default function TerminalDocsPage({ onClose }: Props) {
                   -m [media]     Tag a media item (book, movie, etc.)<br />
                   -c [course]    Tag an active course<br />
                   -p [project]   Tag an active project<br />
-                  -split [s1:p1/s2:p2] Manual XP split (e.g. -split mind:60/grit:40)
+                  -n [note]      Add a note to the session/skill<br />
+                  -stats [s1:p1/s2:p2] Stat split for XP (log or add skill)<br />
+                  -type [type]   Entity type/category<br />
+                  -url [url]     Entity URL<br />
+                  -d [desc]      Entity description
                 </div>
                 <BodyText>
-                  Example: <span style={{ color: acc }}>log 1h coding -t vscode -p uplink -split mind:80/body:20</span>
+                  Example: <span style={{ color: acc }}>log 1h coding -t vscode -p uplink -n built the login form -stats mind:80/body:20</span><br />
+                  Example: <span style={{ color: acc }}>add skill karate -stats body:100 -n trained in kyokushin</span><br />
+                  Example: <span style={{ color: acc }}>add augment mma -type Core Intelligence -url https://... -d fighting technique -n trained today</span>
                 </BodyText>
               </div>
             </div>

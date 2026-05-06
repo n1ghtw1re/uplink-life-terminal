@@ -76,12 +76,6 @@ export const AVAILABLE_COMMANDS: TerminalCommand[] = [
     examples: ['list skills', 'list tools'],
   },
   {
-    name: 'drawer',
-    description: 'Open drawer for an item',
-    syntax: 'drawer [name]',
-    examples: ['drawer cycling', 'drawer vscode', 'drawer Snow White'],
-  },
-  {
     name: 'log',
     description: 'Log a session against a skill',
     syntax: 'log [duration] [skill] [flags]',
@@ -101,6 +95,31 @@ export const AVAILABLE_COMMANDS: TerminalCommand[] = [
       'HABIT meditation',
       'HABIT pushups #50',
       'HABIT reading',
+    ],
+  },
+  {
+    name: 'add',
+    description: 'Add a new skill, augment, tool, resource, or note',
+    syntax: 'add skill [name] -stats [stat1:%/stat2:%] [-n note] | add augment [name] -type [type] [-url http://...] [-d desc] [-n note] | add tool [name] -type [type] [-url http://...] [-d desc] [-n note] | add resource [name] -type [type] [-url http://...] [-d desc] [-n note] | add note [name] -content [content]',
+    examples: [
+      'add skill sword fighting -stats body:50/flow:50 -n this is a note',
+      'add skill reading -stats mind',
+      'add augment mma -type Core Intelligence -url https://... -d fighting technique -n trained today',
+      'add tool vscode -type software -url https://code.visualstudio.com -d editor -n great tool',
+      'add resource React Docs -type Learning -url https://react.dev -d official docs -n great resource',
+      'add note meeting -content discussed project timeline',
+    ],
+  },
+  {
+    name: 'delete',
+    description: 'Delete a skill, augment, tool, resource, or note (with confirmation)',
+    syntax: 'delete skill [name] | delete augment [name] | delete tool [name] | delete resource [name] | delete note [name]',
+    examples: [
+      'delete skill reading',
+      'delete augment mma',
+      'delete tool vscode',
+      'delete resource React Docs',
+      'delete note meeting',
     ],
   },
 ];
