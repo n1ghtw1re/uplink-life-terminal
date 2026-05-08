@@ -1,0 +1,975 @@
+// src/services/terminal/commandExecutor.ts
+import { parseCommand, parseDuration } from './commandParser';
+import { AVAILABLE_COMMANDS, type CommandResult } from './types';
+import { getXPDisplayValues, awardSessionXP, getLevelFromXP } from '@/services/xpService';
+import { getDB } from '@/lib/db';
+import { refreshAppData } from '@/lib/refreshAppData';
+import { queryClient } from '@/main';
+import { triggerXPFloat } from '@/components/effects/XPFloatLayer';
+import { triggerLevelUp as triggerLevelUpAnim } from '@/components/effects/LevelUpAnimation';
+import { todayStr, calcCheckInXP, MAX_SHIELDS } from '@/services/habitService';
+
+// Pending delete state (module-level for confirmation across calls)
+let pendingDelete: { type: string; name: string; id: string } | null = null;
+
+export async function executeCommand(input: string, context?: any): Promise<CommandResult> {
+  if (!input.trim()) {
+    return { success: true, output: '' };
+  }
+
+  // Handle y/n confirmation for pending delete
+  const trimmed = input.trim().toLowerCase();
+  if (pendingDelete && (trimmed === 'y' || trimmed === 'n')) {
+    if (trimmed === 'n') {
+      const name = pendingDelete.name;
+      pendingDelete = null;
+      return { success: true, output: `Delete cancelled for '${name}'.` };
+    }
+    // If 'y', perform the delete directly with stored id
+    const { type, name, id } = pendingDelete;
+    pendingDelete = null;
+
+    try {
+      const db = await getDB();
+
+      if (type === 'skill') {
+        await db.query(`DELETE FROM skills WHERE id = $1`, [id]);
+        queryClient.invalidateQueries({ queryKey: ['skills'] });
+        queryClient.invalidateQueries({ queryKey: ['terminal-skills-list'] });
+        return { success: true, output: `Skill '${name}' deleted.` };
+      }
+
+      if (type === 'augment') {
+        await db.query(`DELETE FROM augments WHERE id = $1`, [id]);
+        queryClient.invalidateQueries({ queryKey: ['augments'] });
+        queryClient.invalidateQueries({ queryKey: ['terminal-augments-list'] });
+        return { success: true, output: `Augment '${name}' deleted.` };
+      }
+
+      if (type === 'tool') {
+        await db.query(`DELETE FROM tools WHERE id = $1`, [id]);
+        queryClient.invalidateQueries({ queryKey: ['tools'] });
+        queryClient.invalidateQueries({ queryKey: ['tools-for-lifepath'] });
+        queryClient.invalidateQueries({ queryKey: ['terminal-tools-list'] });
+        return { success: true, output: `Tool '${name}' deleted.` };
+      }
+
+      if (type === 'resource') {
+        await db.query(`DELETE FROM resources WHERE id = $1`, [id]);
+        queryClient.invalidateQueries({ queryKey: ['resources'] });
+        queryClient.invalidateQueries({ queryKey: ['terminal-resources-list'] });
+        return { success: true, output: `Resource '${name}' deleted.` };
+      }
+
+      if (type === 'note') {
+        await db.query(`UPDATE notes SET status = 'DELETED' WHERE id = $1`, [id]);
+        queryClient.invalidateQueries({ queryKey: ['notes'] });
+        queryClient.invalidateQueries({ queryKey: ['terminal-notes-list'] });
+        return { success: true, output: `Note '${name}' deleted.` };
+      }
+
+      return { success: false, output: '', error: `Unknown delete type: ${type}` };
+    } catch (err: any) {
+      console.error('[DELETE] Error:', err);
+      return { success: false, output: '', error: err.message || 'Failed to delete' };
+    }
+  }
+
+  const parsed = parseCommand(input);
+  const { command, args, flags } = parsed;
+
+  if (!command) {
+    return { success: true, output: '' };
+  }
+
+  const widgetHandler = context?.widgetHandler;
+  const drawerHandler = context?.drawerHandler;
+
+  try {
+    switch (command) {
+      case 'help':
+        return executeHelp();
+      case 'status':
+        return executeStatus(context);
+      case 'clear':
+        return { success: true, output: '__CLEAR__' };
+      case 'log':
+        return executeLog(args, flags, context);
+      case 'open':
+        return executeOpen(args, widgetHandler);
+      case 'close':
+        return executeClose(args, widgetHandler);
+      case 'list':
+        return executeList(args, context);
+      case 'drawer':
+        return executeDrawer(args, drawerHandler, context?.closeDrawerHandler);
+      case 'habit':
+        return executeHabit(args);
+      case 'add':
+        return executeAdd(args, flags);
+      case 'delete':
+        return executeDelete(args);
+      default:
+        return { success: false, output: '', error: `Unknown command: ${command}. Type 'help' for available commands.` };
+    }
+  } catch (err: any) {
+    return {
+      success: false,
+      output: '',
+      error: err.message || 'An error occurred',
+    };
+  }
+}
+
+function executeHelp(): CommandResult {
+  const output = AVAILABLE_COMMANDS
+    .map(cmd => {
+      const examples = cmd.examples?.length ? `\n  Examples:\n    ${cmd.examples.slice(0, 2).map(e => '> ' + e).join('\n    ')}` : '';
+      const syntax = cmd.syntax ? `\n  Syntax: ${cmd.syntax}` : '';
+      return `${cmd.name.padEnd(10)}${cmd.description}${syntax}${examples}`;
+    })
+    .join('\n\n');
+
+  return {
+    success: true,
+    output: `COMMAND     DESCRIPTION\n─────────────────────────────────────────\n${output}`,
+  };
+}
+
+async function executeList(args: string[], context?: any): Promise<CommandResult> {
+  const item = args[0]?.toLowerCase();
+  const db = await getDB();
+
+  const truncate = (name: string, maxLen = 15) => name.length > maxLen ? name.slice(0, maxLen - 2) + '..' : name;
+
+  if (!item || item === 'skills' || item === 'skill') {
+    const res = await db.query<{ id: string; name: string; level: number; xp: number; active: boolean }>(
+      `SELECT id, name, level, xp, active FROM skills WHERE active = true ORDER BY LOWER(name)`
+    );
+    
+    if (res.rows.length === 0) {
+      return { success: true, output: 'No skills found. Add skills from the Skills page.' };
+    }
+
+    const output = res.rows.map(s => 
+      `${truncate(s.name).padEnd(15)} LVL ${String(s.level || 1).padEnd(3)} XP ${String(s.xp || 0).padStart(8)}`
+    ).join('\n');
+
+    return {
+      success: true,
+      output: `SKILLS (${res.rows.length})\n─────────────────────────────────────────────\n${output}`,
+    };
+  }
+
+  if (item === 'exercises' || item === 'exercise') {
+    const res = await db.query<{ id: string; name: string; level: number; xp: number }>(
+      `SELECT id, name, level, xp FROM exercises WHERE active = true ORDER BY LOWER(name)`
+    );
+
+    if (res.rows.length === 0) {
+      return { success: true, output: 'No exercises found. Add exercises from the Exercise page.' };
+    }
+
+    const output = res.rows.map(e =>
+      `${truncate(e.name).padEnd(15)} LVL ${String(e.level || 0).padEnd(3)} XP ${String(e.xp || 0).padStart(8)}`
+    ).join('\n');
+
+    return {
+      success: true,
+      output: `EXERCISE (${res.rows.length})\n---------------------------------------------\n${output}`,
+    };
+  }
+
+  if (item === 'workouts' || item === 'workout') {
+    const res = await db.query<{ id: string; name: string; completed_count: number }>(
+      `SELECT id, name, completed_count FROM workouts WHERE active = true ORDER BY LOWER(name)`
+    );
+
+    if (res.rows.length === 0) {
+      return { success: true, output: 'No workouts found. Add workouts from the Workouts page.' };
+    }
+
+    const output = res.rows.map(w =>
+      `${truncate(w.name).padEnd(15)} DONE ${String(w.completed_count || 0).padStart(4)}`
+    ).join('\n');
+
+    return {
+      success: true,
+      output: `WORKOUTS (${res.rows.length})\n---------------------------------------------\n${output}`,
+    };
+  }
+
+  if (item === 'tools' || item === 'tool') {
+    const res = await db.query<{ id: string; name: string; level: number; xp: number; active: boolean }>(
+      `SELECT id, name, level, xp, active FROM tools WHERE active = true ORDER BY LOWER(name)`
+    );
+    
+    if (res.rows.length === 0) {
+      return { success: true, output: 'No tools found. Add tools from the Tools page.' };
+    }
+
+    const output = res.rows.map(t => 
+      `${truncate(t.name).padEnd(15)} LVL ${String(t.level || 1).padEnd(3)} XP ${String(t.xp || 0).padStart(8)}`
+    ).join('\n');
+
+    return {
+      success: true,
+      output: `TOOLS (${res.rows.length})\n─────────────────────────────────────────────\n${output}`,
+    };
+  }
+
+  if (item === 'augments' || item === 'augment' || item === 'aug') {
+    const res = await db.query<{ id: string; name: string; level: number; xp: number; active: boolean }>(
+      `SELECT id, name, level, xp, active FROM augments WHERE active = true ORDER BY LOWER(name)`
+    );
+    
+    if (res.rows.length === 0) {
+      return { success: true, output: 'No augments found. Add augments from the Augments page.' };
+    }
+
+    const output = res.rows.map(a => 
+      `${truncate(a.name).padEnd(15)} LVL ${String(a.level || 1).padEnd(3)} XP ${String(a.xp || 0).padStart(8)}`
+    ).join('\n');
+
+    return {
+      success: true,
+      output: `AUGMENTS (${res.rows.length})\n─────────────────────────────────────────────\n${output}`,
+    };
+  }
+
+  if (item === 'projects' || item === 'project') {
+    const res = await db.query<{ id: string; name: string; status: string }>(
+      `SELECT id, name, status FROM projects ORDER BY LOWER(name)`
+    );
+    
+    if (res.rows.length === 0) {
+      return { success: true, output: 'No projects found. Add projects from the Projects page.' };
+    }
+
+    const output = res.rows.map(p => 
+      `${truncate(p.name).padEnd(15)} ${(p.status || 'ACTIVE').padEnd(10)}`
+    ).join('\n');
+
+    return {
+      success: true,
+      output: `PROJECTS (${res.rows.length})\n─────────────────────────────────────────────\n${output}`,
+    };
+  }
+
+  if (item === 'media' || item === 'books') {
+    const res = await db.query<{ id: string; title: string; type: string; status: string }>(
+      `SELECT id, title, type, status FROM media ORDER BY LOWER(title)`
+    );
+    
+    if (res.rows.length === 0) {
+      return { success: true, output: 'No media found. Add media from the Media page.' };
+    }
+
+    const output = res.rows.map(m => 
+      `${truncate(m.title).padEnd(15)} ${(m.type || 'book').toUpperCase().padEnd(12)} ${(m.status || 'QUEUED').padEnd(10)}`
+    ).join('\n');
+
+    return {
+      success: true,
+      output: `MEDIA (${res.rows.length})\n─────────────────────────────────────────────\n${output}`,
+    };
+  }
+
+  if (item === 'habits' || item === 'habit') {
+    const res = await db.query<{ id: string; name: string; stat_key: string; status: string; current_streak: number }>(
+      `SELECT id, name, stat_key, status, current_streak FROM habits WHERE status = 'ACTIVE' ORDER BY LOWER(name)`
+    );
+    
+    if (res.rows.length === 0) {
+      return { success: true, output: 'No habits found. Add habits from the Habits page.' };
+    }
+
+    const output = res.rows.map(h => 
+      `${truncate(h.name).padEnd(15)} ${(h.stat_key || 'body').toUpperCase().padEnd(8)} 🔥${String(h.current_streak || 0).padStart(3)}`
+    ).join('\n');
+
+    return {
+      success: true,
+      output: `HABITS (${res.rows.length})\n─────────────────────────────────────────────\n${output}`,
+    };
+  }
+
+  if (item === 'courses' || item === 'course') {
+    const res = await db.query<{ id: string; name: string; status: string; progress: number }>(
+      `SELECT id, name, status, progress FROM courses ORDER BY LOWER(name)`
+    );
+    
+    if (res.rows.length === 0) {
+      return { success: true, output: 'No courses found. Add courses from the Courses page.' };
+    }
+
+    const output = res.rows.map(c => 
+      `${truncate(c.name).padEnd(15)} ${(c.status || 'QUEUED').padEnd(12)} ${String(c.progress || 0).padStart(3)}%`
+    ).join('\n');
+
+    return {
+      success: true,
+      output: `COURSES (${res.rows.length})\n─────────────────────────────────────────────\n${output}`,
+    };
+  }
+
+  if (item === 'vault') {
+    const res = await db.query<{ id: string; title: string; category: string }>(
+        `SELECT id, title, category FROM vault_items ORDER BY LOWER(title)`
+    );
+    
+    if (res.rows.length === 0) {
+      return { success: true, output: 'No vault items found. Add items from the Vault page.' };
+    }
+
+    const output = res.rows.map(v => 
+      `${truncate(v.title).padEnd(15)} ${(v.category || 'SIGNAL').padEnd(10)}`
+    ).join('\n');
+
+    return {
+      success: true,
+      output: `VAULT (${res.rows.length})\n─────────────────────────────────────────────\n${output}`,
+    };
+  }
+
+  if (item === 'recipes' || item === 'recipe') {
+    try {
+      const res = await db.query<{ id: string; name: string; category: string }>(
+        `SELECT id, name, category FROM recipes ORDER BY LOWER(name)`
+      );
+      
+      if (res.rows.length === 0) {
+        return { success: true, output: 'No recipes found. Add recipes from the Recipes page.' };
+      }
+
+      const output = res.rows.map(r => 
+        `${truncate(r.name).padEnd(15)} ${(r.category || 'Dinner').padEnd(10)}`
+      ).join('\n');
+
+      return {
+        success: true,
+        output: `RECIPES (${res.rows.length})\n─────────────────────────────────────────────\n${output}`,
+      };
+    } catch {
+      return { success: true, output: 'No recipes found. Add recipes from the Recipes page.' };
+    }
+  }
+
+  if (item === 'resources' || item === 'resource') {
+    try {
+      const res = await db.query<{ id: string; title: string; category: string }>(
+        `SELECT id, title, category FROM resources ORDER BY title`
+      );
+      
+      if (res.rows.length === 0) {
+        return { success: true, output: 'No resources found. Add resources from the Resources page.' };
+      }
+
+      const output = res.rows.map(r => 
+        `${truncate(r.title).padEnd(15)} ${(r.category || 'Learning').padEnd(12)}`
+      ).join('\n');
+
+      return {
+        success: true,
+        output: `RESOURCES (${res.rows.length})\n─────────────────────────────────────────────\n${output}`,
+      };
+    } catch {
+      return { success: true, output: 'No resources found. Add resources from the Resources page.' };
+    }
+  }
+
+  if (item === 'ingredients' || item === 'ingredient') {
+    try {
+      const res = await db.query<{ id: string; name: string }>(
+        `SELECT id, name FROM custom_ingredients ORDER BY LOWER(name)`
+      );
+      
+      if (res.rows.length === 0) {
+        return { success: true, output: 'No ingredients found. Add ingredients from the Recipes page.' };
+      }
+
+      const output = res.rows.map(i => truncate(i.name).padEnd(15)).join('\n');
+
+      return {
+        success: true,
+        output: `INGREDIENTS (${res.rows.length})\n─────────────────────────────────────────────\n${output}`,
+      };
+    } catch {
+      return { success: true, output: 'No ingredients found. Add ingredients from the Recipes page.' };
+    }
+  }
+
+  if (item === 'notes' || item === 'note') {
+    try {
+      const res = await db.query<{ id: string; name: string }>(
+        `SELECT id, name FROM notes ORDER BY LOWER(name)`
+      );
+      
+      if (res.rows.length === 0) {
+        return { success: true, output: 'No notes found. Add notes from the Notes page.' };
+      }
+
+      const output = res.rows.map(n => truncate(n.name).padEnd(15)).join('\n');
+
+      return {
+        success: true,
+        output: `NOTES (${res.rows.length})\n─────────────────────────────────────────────\n${output}`,
+      };
+    } catch {
+      return { success: true, output: 'No notes found. Add notes from the Notes page.' };
+    }
+  }
+
+  return {
+    success: false,
+    output: '',
+    error: `Unknown list type: ${item}. Available: skills, exercises, workouts, tools, augments, projects, media, habits, courses, vault, recipes, resources, ingredients, notes`,
+  };
+}
+
+async function executeDrawer(args: string[], drawerHandler?: (type: string, name: string) => void, closeDrawerHandler?: () => void): Promise<CommandResult> {
+  if (args.length < 1) {
+    return {
+      success: false,
+      output: '',
+      error: 'Usage: drawer [name] or drawer close\nExample: drawer cycling, drawer vscode, drawer close',
+    };
+  }
+
+  const nameArg = args.join(' ').toLowerCase();
+
+  if (nameArg === 'close' || nameArg === 'close drawer') {
+    if (closeDrawerHandler) {
+      closeDrawerHandler();
+      return { success: true, output: 'Drawer closed' };
+    }
+    return { success: false, output: '', error: 'No drawer is currently open' };
+  }
+
+  const db = await getDB();
+
+  // Search for the item in order of priority
+  // Skills
+  const skillRes = await db.query<{ id: string; name: string }>(
+    `SELECT id, name FROM skills WHERE LOWER(name) = LOWER('${nameArg.replace(/'/g, "''")}') AND active = true`
+  );
+  if (skillRes.rows.length > 0) {
+    if (drawerHandler) drawerHandler('skill', skillRes.rows[0].id);
+    return { success: true, output: `Opening drawer for skill: ${skillRes.rows[0].name}` };
+  }
+
+  const exerciseRes = await db.query<{ id: string; name: string }>(
+    `SELECT id, name FROM exercises WHERE LOWER(name) = LOWER('${nameArg.replace(/'/g, "''")}') AND active = true`
+  );
+  if (exerciseRes.rows.length > 0) {
+    if (drawerHandler) drawerHandler('exercise', exerciseRes.rows[0].id);
+    return { success: true, output: `Opening drawer for exercise: ${exerciseRes.rows[0].name}` };
+  }
+
+  const workoutRes = await db.query<{ id: string; name: string }>(
+    `SELECT id, name FROM workouts WHERE LOWER(name) = LOWER('${nameArg.replace(/'/g, "''")}') AND active = true`
+  );
+  if (workoutRes.rows.length > 0) {
+    if (drawerHandler) drawerHandler('workout', workoutRes.rows[0].id);
+    return { success: true, output: `Opening drawer for workout: ${workoutRes.rows[0].name}` };
+  }
+
+  // Tools
+  const toolRes = await db.query<{ id: string; name: string }>(
+    `SELECT id, name FROM tools WHERE LOWER(name) = LOWER('${nameArg.replace(/'/g, "''")}') AND active = true`
+  );
+  if (toolRes.rows.length > 0) {
+    if (drawerHandler) drawerHandler('tool', toolRes.rows[0].id);
+    return { success: true, output: `Opening drawer for tool: ${toolRes.rows[0].name}` };
+  }
+
+  // Augments
+  const augRes = await db.query<{ id: string; name: string }>(
+    `SELECT id, name FROM augments WHERE LOWER(name) = LOWER('${nameArg.replace(/'/g, "''")}') AND active = true`
+  );
+  if (augRes.rows.length > 0) {
+    if (drawerHandler) drawerHandler('augment', augRes.rows[0].id);
+    return { success: true, output: `Opening drawer for augment: ${augRes.rows[0].name}` };
+  }
+
+  // Projects
+  const projRes = await db.query<{ id: string; name: string }>(
+    `SELECT id, name FROM projects WHERE LOWER(name) = LOWER('${nameArg.replace(/'/g, "''")}')`
+  );
+  if (projRes.rows.length > 0) {
+    if (drawerHandler) drawerHandler('project', projRes.rows[0].id);
+    return { success: true, output: `Opening drawer for project: ${projRes.rows[0].name}` };
+  }
+
+  // Notes
+  const noteRes = await db.query<{ id: string; name: string }>(
+    `SELECT id, name FROM notes WHERE LOWER(name) = LOWER('${nameArg.replace(/'/g, "''")}')`
+  );
+  if (noteRes.rows.length > 0) {
+    if (drawerHandler) drawerHandler('note', noteRes.rows[0].id);
+    return { success: true, output: `Opening drawer for note: ${noteRes.rows[0].name}` };
+  }
+
+  // Media (books)
+  const mediaRes = await db.query<{ id: string; title: string }>(
+    `SELECT id, title FROM media WHERE LOWER(title) = LOWER('${nameArg.replace(/'/g, "''")}')`
+  );
+  if (mediaRes.rows.length > 0) {
+    if (drawerHandler) drawerHandler('book', mediaRes.rows[0].id);
+    return { success: true, output: `Opening drawer for media: ${mediaRes.rows[0].title}` };
+  }
+
+  // Habits - disabled due to persistent drawer rendering issues
+  /*
+  const habitRes = await db.query<{ id: string; name: string }>(
+    `SELECT id, name FROM habits WHERE LOWER(name) = LOWER('${nameArg.replace(/'/g, "''")}')`
+  );
+  if (habitRes.rows.length > 0) {
+    if (drawerHandler) drawerHandler('habit', habitRes.rows[0].id);
+    return { success: true, output: `Opening drawer for habit: ${habitRes.rows[0].name}` };
+  }
+  */
+
+  // Courses
+  const courseRes = await db.query<{ id: string; name: string }>(
+    `SELECT id, name FROM courses WHERE LOWER(name) = LOWER('${nameArg.replace(/'/g, "''")}')`
+  );
+  if (courseRes.rows.length > 0) {
+    if (drawerHandler) drawerHandler('course', courseRes.rows[0].id);
+    return { success: true, output: `Opening drawer for course: ${courseRes.rows[0].name}` };
+  }
+
+  // Vault items
+  const vaultRes = await db.query<{ id: string; title: string }>(
+    `SELECT id, title FROM vault_items WHERE LOWER(title) = LOWER('${nameArg.replace(/'/g, "''")}')`
+  );
+  if (vaultRes.rows.length > 0) {
+    if (drawerHandler) drawerHandler('vault', vaultRes.rows[0].id);
+    return { success: true, output: `Opening drawer for vault item: ${vaultRes.rows[0].title}` };
+  }
+
+  // Recipes
+  const recipeRes = await db.query<{ id: string; name: string }>(
+    `SELECT id, name FROM recipes WHERE LOWER(name) = LOWER('${nameArg.replace(/'/g, "''")}')`
+  );
+  if (recipeRes.rows.length > 0) {
+    if (drawerHandler) drawerHandler('recipe', recipeRes.rows[0].id);
+    return { success: true, output: `Opening drawer for recipe: ${recipeRes.rows[0].name}` };
+  }
+
+  // Resources
+  const resourceRes = await db.query<{ id: string; title: string }>(
+    `SELECT id, title FROM resources WHERE LOWER(title) = LOWER('${nameArg.replace(/'/g, "''")}')`
+  );
+  if (resourceRes.rows.length > 0) {
+    if (drawerHandler) drawerHandler('resource', resourceRes.rows[0].id);
+    return { success: true, output: `Opening drawer for resource: ${resourceRes.rows[0].title}` };
+  }
+
+  // Ingredients
+  const ingredientRes = await db.query<{ id: string; name: string }>(
+    `SELECT id, name FROM custom_ingredients WHERE LOWER(name) = LOWER('${nameArg.replace(/'/g, "''")}')`
+  );
+  if (ingredientRes.rows.length > 0) {
+    if (drawerHandler) drawerHandler('ingredient', ingredientRes.rows[0].id);
+    return { success: true, output: `Opening drawer for ingredient: ${ingredientRes.rows[0].name}` };
+  }
+
+  return {
+    success: false,
+    output: '',
+    error: `Item "${nameArg}" not found. Use 'list skills' to see available items.`,
+  };
+}
+
+async function executeStatus(context?: any): Promise<CommandResult> {
+  if (!context?.operator) {
+    return {
+      success: false,
+      output: '',
+      error: 'Unable to fetch operator status',
+    };
+  }
+
+  const op = context.operator;
+  const xpValues = getXPDisplayValues(op.totalXp || 0);
+  
+  const output = `OPERATOR: ${op.callsign || 'Unknown'}\nLVL ${op.level || 1} ${op.levelTitle || 'Novice'}\n\nXP: ${(op.totalXp || 0).toLocaleString()} / ${xpValues.totalXPToNextLevel.toLocaleString()}\n\nCLASS: ${op.customClass || 'None selected'}`;
+
+  return {
+    success: true,
+    output,
+  };
+}
+
+async function executeLog(args: string[], flags: Record<string, string | string[]>, context?: any): Promise<CommandResult> {
+  if (args.length < 2) {
+    return {
+      success: false,
+      output: '',
+      error: 'Usage: log [duration] [skill|exercise] [-t tool1] [-a augment1] [-m media] [-c course] [-p project] [-stats stat:percent/...] [-n "note"]\n       log [duration] [exercise] -set1 [value] [-set2...] [-intensity N] [-n note]\nExample: log 1 hour mma, log 2h coding -t vscode, log 30m bench press -set1 200-10 -set2 200-8',
+    };
+  }
+
+  const duration = parseDuration(args);
+  if (!duration) {
+    return {
+      success: false,
+      output: '',
+      error: 'Invalid duration. Use format: log 1 hour mma, log 2h coding, log 45m meditation',
+    };
+  }
+
+  const targetName = duration.remainingArgs.join(' ');
+
+  if (!targetName) {
+    return {
+      success: false,
+      output: '',
+      error: 'Please specify a skill or exercise name',
+    };
+  }
+
+  const db = await getDB();
+  
+  // Try skill first (backward compatibility)
+  const skillResult = await db.query<any>(`SELECT id, name, stat_keys, default_split, xp FROM skills WHERE LOWER(name) = LOWER('${targetName.replace(/'/g, "''")}')`);
+
+  if (skillResult.rows.length > 0) {
+    const skill = skillResult.rows[0];
+    return executeSkillLog(skill, duration, flags);
+  }
+
+  // Try exercise
+  const exerciseResult = await db.query<any>(`SELECT id, name, quantity_type, metric_type, primary_stat, secondary_stat, primary_pct, secondary_pct FROM exercises WHERE LOWER(name) = LOWER('${targetName.replace(/'/g, "''")}')`);
+
+  if (exerciseResult.rows.length > 0) {
+    const exercise = exerciseResult.rows[0];
+    return executeExerciseLog(exercise, duration, flags);
+  }
+
+  return {
+    success: false,
+    output: '',
+    error: `"${targetName}" not found. Please specify a valid skill or exercise name.`,
+  };
+}
+
+// ─── HELPER: Process skill log ────────────────────────
+async function executeSkillLog(skill: any, duration: { minutes: number; remainingArgs: string[] }, flags: Record<string, string | string[]>): Promise<CommandResult> {
+  const db = await getDB();
+
+  let statKeys: string[] = [];
+  try {
+    const rawStatKeys = skill.stat_keys;
+    if (Array.isArray(rawStatKeys)) {
+      statKeys = rawStatKeys;
+    } else if (typeof rawStatKeys === 'string') {
+      if (rawStatKeys.startsWith('[')) {
+        statKeys = JSON.parse(rawStatKeys);
+      } else {
+        statKeys = rawStatKeys.split(',');
+      }
+    }
+  } catch {
+    statKeys = [];
+  }
+  
+  let defaultSplit: number[] = [100];
+  try {
+    const rawSplit = skill.default_split;
+    if (Array.isArray(rawSplit)) {
+      defaultSplit = rawSplit;
+    } else if (typeof rawSplit === 'string') {
+      if (rawSplit.startsWith('[')) {
+        defaultSplit = JSON.parse(rawSplit);
+      }
+    }
+  } catch {
+    defaultSplit = [100];
+  }
+
+  // Parse -stats flag for stat split (format: body:60/grit:40 or body:100)
+  let statSplit = buildStatSplitFromKeys(statKeys, defaultSplit);
+  const statsFlag = flags.stats;
+  if (statsFlag) {
+    const statsValue = Array.isArray(statsFlag) ? statsFlag[0] : statsFlag;
+    const parsedSplit = parseSplitFlag(statsValue);
+    if (parsedSplit) {
+      statSplit = parsedSplit;
+    }
+  }
+
+  // Process -t (tools) flags
+  let toolIds: string[] = [];
+  let toolNames: string[] = [];
+  const toolFlag = flags.t;
+  if (toolFlag) {
+    const toolNamesArr = Array.isArray(toolFlag) ? toolFlag : [toolFlag];
+    for (const toolName of toolNamesArr) {
+      const toolResult = await db.query<any>(`SELECT id, name FROM tools WHERE LOWER(name) = LOWER('${toolName.replace(/'/g, "''")}')`);
+      if (toolResult.rows.length > 0) {
+        toolIds.push(toolResult.rows[0].id);
+        toolNames.push(toolResult.rows[0].name);
+      }
+    }
+    if (toolNamesArr.length > toolNames.length) {
+      const missing = toolNamesArr.filter(tn => !toolNames.includes(tn));
+      return {
+        success: false,
+        output: '',
+        error: `Tool(s) not found: ${missing.join(', ')}`,
+      };
+    }
+  }
+
+  // Process -a (augments) flags
+  let augmentIds: string[] = [];
+  let augmentNames: string[] = [];
+  const augmentFlag = flags.a || flags.aug;
+  if (augmentFlag) {
+    const augmentNamesArr = Array.isArray(augmentFlag) ? augmentFlag : [augmentFlag];
+    for (const augName of augmentNamesArr) {
+      const augResult = await db.query<any>(`SELECT id, name FROM augments WHERE LOWER(name) = LOWER('${augName.replace(/'/g, "''")}')`);
+      if (augResult.rows.length > 0) {
+        augmentIds.push(augResult.rows[0].id);
+        augmentNames.push(augResult.rows[0].name);
+      }
+    }
+    if (augmentNamesArr.length > augmentNames.length) {
+      const missing = augmentNamesArr.filter(an => !augmentNames.includes(an));
+      return {
+        success: false,
+        output: '',
+        error: `Augment(s) not found: ${missing.join(', ')}`,
+      };
+    }
+  }
+
+  // Process -m (media) flag
+  let mediaId = null;
+  let mediaTitle = null;
+  const mediaFlag = flags.m || flags.media;
+  if (mediaFlag) {
+    const mediaName = Array.isArray(mediaFlag) ? mediaFlag[0] : mediaFlag;
+    const mediaResult = await db.query<any>(`SELECT id, title FROM media WHERE LOWER(title) = LOWER('${mediaName.replace(/'/g, "''")}')`);
+    if (mediaResult.rows.length > 0) {
+      mediaId = mediaResult.rows[0].id;
+      mediaTitle = mediaResult.rows[0].title;
+    } else {
+      return { success: false, output: '', error: `Media not found: ${mediaName}` };
+    }
+  }
+
+  // Process -c (course) flag
+  let courseId = null;
+  let courseName = null;
+  const courseFlag = flags.c || flags.course;
+  if (courseFlag) {
+    const courseSearchName = Array.isArray(courseFlag) ? courseFlag[0] : courseFlag;
+    const courseResult = await db.query<any>(`SELECT id, name FROM courses WHERE LOWER(name) = LOWER('${courseSearchName.replace(/'/g, "''")}')`);
+    if (courseResult.rows.length > 0) {
+      courseId = courseResult.rows[0].id;
+      courseName = courseResult.rows[0].name;
+    } else {
+      return { success: false, output: '', error: `Course not found: ${courseSearchName}` };
+    }
+  }
+
+  // Process -p (project) flag
+  let projectId = null;
+  let projName = null;
+  const projectFlag = flags.p || flags.project;
+  if (projectFlag) {
+    const projectSearchName = Array.isArray(projectFlag) ? projectFlag[0] : projectFlag;
+    const projectResult = await db.query<any>(`SELECT id, name FROM projects WHERE LOWER(name) = LOWER('${projectSearchName.replace(/'/g, "''")}')`);
+    if (projectResult.rows.length > 0) {
+      projectId = projectResult.rows[0].id;
+      projName = projectResult.rows[0].name;
+    } else {
+      return { success: false, output: '', error: `Project not found: ${projectSearchName}` };
+    }
+  }
+
+  // Process -n (note) flag
+  const noteFlag = flags.n;
+  let sessionNote = null;
+  if (noteFlag) {
+    sessionNote = Array.isArray(noteFlag) ? noteFlag[0] : noteFlag;
+    sessionNote = sessionNote.replace(/'/g, "''");
+  }
+
+  const sessionId = crypto.randomUUID();
+  const xpResult = await awardSessionXP({
+    sessionId,
+    skillId: skill.id,
+    skillName: skill.name,
+    durationMinutes: duration.minutes,
+    statSplit,
+    toolIds,
+    augmentIds,
+    isLegacy: false,
+  });
+
+  const now = new Date().toISOString();
+  const toolIdsJson = JSON.stringify(toolIds);
+  const augmentIdsJson = JSON.stringify(augmentIds);
+  const totalToolXP = xpResult.perToolXP * toolIds.length;
+  const totalAugmentXP = xpResult.perAugmentXP * augmentIds.length;
+  
+  await db.exec(`
+    INSERT INTO sessions (
+      id, skill_id, skill_name, duration_minutes,
+      stat_split, notes, is_legacy, logged_at,
+      skill_xp, stat_xp, master_xp,
+      tool_ids, total_tool_xp,
+      augment_ids, total_augment_xp,
+      course_id, media_id, project_id
+    ) VALUES (
+      '${sessionId}',
+      '${skill.id}',
+      '${skill.name.replace(/'/g, "''")}',
+      ${duration.minutes},
+      '${JSON.stringify(statSplit)}',
+      ${sessionNote ? `'${sessionNote}'` : 'NULL'},
+      false,
+      '${now}',
+      ${xpResult.skillXP},
+      '${JSON.stringify(xpResult.statXPMap)}',
+      ${xpResult.masterXP},
+      '${toolIdsJson}',
+      ${totalToolXP},
+      '${augmentIdsJson}',
+      ${totalAugmentXP},
+      ${courseId ? `'${courseId}'` : 'NULL'},
+      ${mediaId ? `'${mediaId}'` : 'NULL'},
+      ${projectId ? `'${projectId}'` : 'NULL'}
+    );
+  `);
+
+  // Update cache directly like QuickLogOverlay does
+  if (toolIds.length > 0 && xpResult.perToolXP > 0) {
+    queryClient.setQueryData(['tools'], (prev: any[] | undefined) =>
+      prev?.map((tool) => {
+        if (!toolIds.includes(tool.id)) return tool;
+        const nextXp = Number(tool.xp ?? 0) + xpResult.perToolXP;
+        const nextLevel = getLevelFromXP(nextXp);
+        return {
+          ...tool,
+          xp: nextXp,
+          level: nextLevel.level,
+          xpInLevel: nextLevel.xpInLevel,
+          xpForLevel: nextLevel.xpForLevel,
+        };
+      }) ?? prev
+    );
+
+    queryClient.setQueryData(['tool-session-counts'], (prev: Record<string, number> | undefined) => {
+      const next = { ...(prev ?? {}) };
+      for (const toolId of toolIds) next[toolId] = (next[toolId] ?? 0) + 1;
+      return next;
+    });
+
+    queryClient.setQueryData(['tool-last-session'], (prev: Record<string, string> | undefined) => {
+      const next = { ...(prev ?? {}) };
+      for (const toolId of toolIds) next[toolId] = now;
+      return next;
+    });
+  }
+
+  if (augmentIds.length > 0 && xpResult.perAugmentXP > 0) {
+    queryClient.setQueryData(['augments'], (prev: any[] | undefined) =>
+      prev?.map((augment) => {
+        if (!augmentIds.includes(augment.id)) return augment;
+        const nextXp = Number(augment.xp ?? 0) + xpResult.perAugmentXP;
+        const nextLevel = getLevelFromXP(nextXp);
+        return {
+          ...augment,
+          xp: nextXp,
+          level: nextLevel.level,
+          xpInLevel: nextLevel.xpInLevel,
+          xpForLevel: nextLevel.xpForLevel,
+        };
+      }) ?? prev
+    );
+
+    queryClient.setQueryData(['augment-session-counts'], (prev: Record<string, number> | undefined) => {
+      const next = { ...(prev ?? {}) };
+      for (const augId of augmentIds) next[augId] = (next[augId] ?? 0) + 1;
+      return next;
+    });
+
+    queryClient.setQueryData(['augment-last-session'], (prev: Record<string, string> | undefined) => {
+      const next = { ...(prev ?? {}) };
+      for (const augId of augmentIds) next[augId] = now;
+      return next;
+    });
+  }
+
+  await refreshAppData(queryClient);
+
+  // Trigger visual effects
+  if (xpResult.masterXP > 0) {
+    setTimeout(() => triggerXPFloat(window.innerWidth / 2 + 60, window.innerHeight / 2 - 80, xpResult.masterXP, undefined, false), 200);
+  }
+  if (xpResult.perToolXP > 0 && toolIds.length > 0) {
+    setTimeout(() => triggerXPFloat(window.innerWidth / 2 - 60, window.innerHeight / 2 - 40, xpResult.perToolXP * toolIds.length, undefined, false), 400);
+  }
+  if (xpResult.perAugmentXP > 0 && augmentIds.length > 0) {
+    setTimeout(() => triggerXPFloat(window.innerWidth / 2, window.innerHeight / 2, xpResult.perAugmentXP * augmentIds.length, undefined, false), 600);
+  }
+
+  // Fire level up animation if master leveled up
+  if (xpResult.masterLeveledUp) {
+    setTimeout(() => {
+      triggerLevelUpAnim({
+        level: xpResult.newMasterLevel,
+        className: 'OPERATOR',
+        totalXP: xpResult.masterTotalXP,
+        unlocks: xpResult.newMasterLevel === 3  ? ['GREEN PHOSPHOR THEME'] :
+                 xpResult.newMasterLevel === 5  ? ['DOS CLASSIC THEME'] :
+                 xpResult.newMasterLevel === 7  ? ['BLOOD RED THEME'] :
+                 xpResult.newMasterLevel === 9  ? ['ICE BLUE THEME'] :
+                 xpResult.newMasterLevel === 10 ? ['CUSTOM TERMINAL PROMPT'] : [],
+      });
+    }, 800);
+  }
+
+  const statXpSummary = xpResult.statXPMap
+    .filter((s: any) => s.amount > 0)
+    .map((s: any) => `${s.stat}: +${s.amount}`)
+    .join(', ');
+
+  let output = `Session logged successfully!\n\nSkill: ${skill.name}\nDuration: ${duration.minutes} minutes\n\nXP Awarded:\n  Skill XP: +${xpResult.skillXP}\n  Master XP: +${xpResult.masterXP}`;
+  
+  if (statXpSummary) {
+    output += `\n  Stat XP: ${statXpSummary}`;
+  }
+  
+  if (toolNames.length > 0) {
+    output += `\n\nTools: ${toolNames.join(', ')} (+${xpResult.perToolXP} XP each)`;
+  }
+
+  if (augmentNames.length > 0) {
+    output += `\n\nAugments: ${augmentNames.join(', ')} (+${xpResult.perAugmentXP} XP each)`;
+  }
+
+  if (mediaTitle) {
+    output += `\n\nMedia: ${mediaTitle}`;
+  }
+
+  if (courseName) {
+    output += `\n\nCourse: ${courseName}`;
+  }
+
+  if (projName) {
+    output += `\n\nProject: ${projName}`;
+  }
+
+  if (sessionNote) {
+    output += `\n\nNote: ${sessionNote}`;
+  }
+
+  return {
+    success: true,
+    output,

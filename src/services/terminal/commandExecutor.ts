@@ -68,6 +68,14 @@ export async function executeCommand(input: string, context?: any): Promise<Comm
         return { success: true, output: `Note '${name}' deleted.` };
       }
 
+      if (type === 'course') {
+        await db.query(`DELETE FROM courses WHERE id = $1`, [id]);
+        queryClient.invalidateQueries({ queryKey: ['courses'] });
+        queryClient.invalidateQueries({ queryKey: ['courses-all'] });
+        queryClient.invalidateQueries({ queryKey: ['terminal-courses-list'] });
+        return { success: true, output: `Course '${name}' deleted.` };
+      }
+
       return { success: false, output: '', error: `Unknown delete type: ${type}` };
     } catch (err: any) {
       console.error('[DELETE] Error:', err);
@@ -607,7 +615,7 @@ async function executeLog(args: string[], flags: Record<string, string | string[
     return {
       success: false,
       output: '',
-      error: 'Usage: log [duration] [skill] [-t tool1] [-a augment1] [-m media] [-c course] [-p project] [-stats stat:percent/...] [-n "note"]\nExample: log 1 hour mma, log 2h coding -t vscode, log 1h cycling -m "Star Wars" -p "Rebuild Site"',
+      error: 'Usage: log [duration] [skill|exercise] [-t tool1] [-a augment1] [-m media] [-c course] [-p project] [-stats stat:percent/...] [-n "note"]\n       log [duration] [exercise] -set1 [value] [-set2...] [-intensity N] [-n note]\nExample: log 1 hour mma, log 2h coding -t vscode, log 30m bench press -set1 200-10 -set2 200-8',
     };
   }
 
@@ -620,29 +628,45 @@ async function executeLog(args: string[], flags: Record<string, string | string[
     };
   }
 
-  const skillName = duration.remainingArgs.join(' ');
+  const targetName = duration.remainingArgs.join(' ');
 
-  if (!skillName) {
+  if (!targetName) {
     return {
       success: false,
       output: '',
-      error: 'Please specify a skill name',
+      error: 'Please specify a skill or exercise name',
     };
   }
 
   const db = await getDB();
   
-  const skillResult = await db.query<any>(`SELECT id, name, stat_keys, default_split, xp FROM skills WHERE LOWER(name) = LOWER('${skillName.replace(/'/g, "''")}')`);
+  // Try skill first (backward compatibility)
+  const skillResult = await db.query<any>(`SELECT id, name, stat_keys, default_split, xp FROM skills WHERE LOWER(name) = LOWER('${targetName.replace(/'/g, "''")}')`);
 
-  if (skillResult.rows.length === 0) {
-    return {
-      success: false,
-      output: '',
-      error: `Skill "${skillName}" not found. Use 'help' to see available commands.`,
-    };
+  if (skillResult.rows.length > 0) {
+    const skill = skillResult.rows[0];
+    return executeSkillLog(skill, duration, flags);
   }
 
-  const skill = skillResult.rows[0];
+  // Try exercise
+  const exerciseResult = await db.query<any>(`SELECT id, name, quantity_type, metric_type, primary_stat, secondary_stat, primary_pct, secondary_pct FROM exercises WHERE LOWER(name) = LOWER('${targetName.replace(/'/g, "''")}')`);
+
+  if (exerciseResult.rows.length > 0) {
+    const exercise = exerciseResult.rows[0];
+    return executeExerciseLog(exercise, duration, flags);
+  }
+
+  return {
+    success: false,
+    output: '',
+    error: `"${targetName}" not found. Please specify a valid skill or exercise name.`,
+  };
+}
+
+// ─── HELPER: Process skill log ────────────────────────
+async function executeSkillLog(skill: any, duration: { minutes: number; remainingArgs: string[] }, flags: Record<string, string | string[]>): Promise<CommandResult> {
+  const db = await getDB();
+
   let statKeys: string[] = [];
   try {
     const rawStatKeys = skill.stat_keys;
@@ -673,7 +697,7 @@ async function executeLog(args: string[], flags: Record<string, string | string[
     defaultSplit = [100];
   }
 
-  // Parse -stats flag for stat split (format: body:60/grit:40 or body:100)
+  // Parse -stats flag
   let statSplit = buildStatSplitFromKeys(statKeys, defaultSplit);
   const statsFlag = flags.stats;
   if (statsFlag) {
@@ -831,16 +855,16 @@ async function executeLog(args: string[], flags: Record<string, string | string[
     );
   `);
 
-  // Update cache directly like QuickLogOverlay does
+  // Update cache
   if (toolIds.length > 0 && xpResult.perToolXP > 0) {
     queryClient.setQueryData(['tools'], (prev: any[] | undefined) =>
       prev?.map((tool) => {
         if (!toolIds.includes(tool.id)) return tool;
-        const nextXp = Number(tool.xp ?? 0) + xpResult.perToolXP;
-        const nextLevel = getLevelFromXP(nextXp);
+        const nextXP = Number(tool.xp ?? 0) + xpResult.perToolXP;
+        const nextLevel = getLevelFromXP(nextXP);
         return {
           ...tool,
-          xp: nextXp,
+          xp: nextXP,
           level: nextLevel.level,
           xpInLevel: nextLevel.xpInLevel,
           xpForLevel: nextLevel.xpForLevel,
@@ -865,11 +889,11 @@ async function executeLog(args: string[], flags: Record<string, string | string[
     queryClient.setQueryData(['augments'], (prev: any[] | undefined) =>
       prev?.map((augment) => {
         if (!augmentIds.includes(augment.id)) return augment;
-        const nextXp = Number(augment.xp ?? 0) + xpResult.perAugmentXP;
-        const nextLevel = getLevelFromXP(nextXp);
+        const nextXP = Number(augment.xp ?? 0) + xpResult.perAugmentXP;
+        const nextLevel = getLevelFromXP(nextXP);
         return {
           ...augment,
-          xp: nextXp,
+          xp: nextXP,
           level: nextLevel.level,
           xpInLevel: nextLevel.xpInLevel,
           xpForLevel: nextLevel.xpForLevel,
@@ -919,41 +943,385 @@ async function executeLog(args: string[], flags: Record<string, string | string[
     }, 800);
   }
 
-  const statXpSummary = xpResult.statXPMap
+  const statXPSummary = xpResult.statXPMap
     .filter((s: any) => s.amount > 0)
     .map((s: any) => `${s.stat}: +${s.amount}`)
     .join(', ');
 
   let output = `Session logged successfully!\n\nSkill: ${skill.name}\nDuration: ${duration.minutes} minutes\n\nXP Awarded:\n  Skill XP: +${xpResult.skillXP}\n  Master XP: +${xpResult.masterXP}`;
   
-  if (statXpSummary) {
-    output += `\n  Stat XP: ${statXpSummary}`;
+  if (statXPSummary) {
+    output += `\n  Stat XP: ${statXPSummary}`;
   }
   
   if (toolNames.length > 0) {
     output += `\n\nTools: ${toolNames.join(', ')} (+${xpResult.perToolXP} XP each)`;
   }
-
+  
   if (augmentNames.length > 0) {
     output += `\n\nAugments: ${augmentNames.join(', ')} (+${xpResult.perAugmentXP} XP each)`;
   }
-
+  
   if (mediaTitle) {
     output += `\n\nMedia: ${mediaTitle}`;
   }
-
+  
   if (courseName) {
     output += `\n\nCourse: ${courseName}`;
   }
-
+  
   if (projName) {
     output += `\n\nProject: ${projName}`;
   }
-
+  
   if (sessionNote) {
     output += `\n\nNote: ${sessionNote}`;
   }
+  
+  return {
+    success: true,
+    output,
+  };
+}
 
+// ─── HELPER: Process exercise log ────────────────────────
+async function executeExerciseLog(exercise: any, duration: { minutes: number; remainingArgs: string[] }, flags: Record<string, string | string[]>): Promise<CommandResult> {
+  const db = await getDB();
+
+  // Parse sets from flags (-set1, -set2, etc.)
+  const sets: any[] = [];
+  const setKeys = Object.keys(flags).filter(k => k.startsWith('set'));
+  
+  for (const key of setKeys.sort()) {
+    const value = Array.isArray(flags[key]) ? (flags[key] as string[])[0] : flags[key] as string;
+    if (!value) continue;
+
+    const isStrength = exercise.metric_type === 'weight_reps' || (exercise.quantity_type && exercise.quantity_type.includes('weight'));
+
+    if (isStrength) {
+      // Format: "200-10" (weight-reps)
+      const parts = value.split('-');
+      if (parts.length >= 2) {
+        sets.push({ weight: parts[0], reps: parts[1] });
+      }
+    } else {
+      // Format: "10" (reps or distance)
+      sets.push({ value: value });
+    }
+  }
+
+  if (sets.length === 0) {
+    return {
+      success: false,
+      output: '',
+      error: `Please provide at least one set using -set1 flag.\nExample: -set1 10 (reps) or -set1 200-10 (weight-reps)`,
+    };
+  }
+
+  // Parse intensity (1-10, default 5)
+  let intensity = 5;
+  const intensityFlag = flags.intensity;
+  if (intensityFlag) {
+    const intVal = parseInt(Array.isArray(intensityFlag) ? intensityFlag[0] : intensityFlag);
+    if (!isNaN(intVal) && intVal >= 1 && intVal <= 10) {
+      intensity = intVal;
+    }
+  }
+
+  // Parse stats
+  let statKeys: string[] = [];
+  let statSplit: { stat: string; percent: number }[] = [];
+
+  const statsFlag = flags.stats;
+  if (statsFlag) {
+    const statsValue = Array.isArray(statsFlag) ? statsFlag[0] : statsFlag;
+    const parsedSplit = parseSplitFlag(statsValue);
+    if (parsedSplit) {
+      statSplit = parsedSplit;
+      statKeys = parsedSplit.map(s => s.stat);
+    }
+  } else {
+    // Use exercise defaults
+    statKeys = [exercise.primary_stat, exercise.secondary_stat].filter(Boolean);
+    statSplit = [
+      { stat: exercise.primary_stat, percent: exercise.primary_pct || 50 },
+      { stat: exercise.secondary_stat, percent: exercise.secondary_pct || 50 }
+    ].filter(s => s.stat);
+  }
+
+  // Process -t (tools) flags
+  let toolIds: string[] = [];
+  let toolNames: string[] = [];
+  const toolFlag = flags.t;
+  if (toolFlag) {
+    const toolNamesArr = Array.isArray(toolFlag) ? toolFlag : [toolFlag];
+    for (const toolName of toolNamesArr) {
+      const toolResult = await db.query<any>(`SELECT id, name FROM tools WHERE LOWER(name) = LOWER('${toolName.replace(/'/g, "''")}')`);
+      if (toolResult.rows.length > 0) {
+        toolIds.push(toolResult.rows[0].id);
+        toolNames.push(toolResult.rows[0].name);
+      }
+    }
+    if (toolNamesArr.length > toolNames.length) {
+      const missing = toolNamesArr.filter(tn => !toolNames.includes(tn));
+      return {
+        success: false,
+        output: '',
+        error: `Tool(s) not found: ${missing.join(', ')}`,
+      };
+    }
+  }
+
+  // Process -a (augments) flags
+  let augmentIds: string[] = [];
+  let augmentNames: string[] = [];
+  const augmentFlag = flags.a || flags.aug;
+  if (augmentFlag) {
+    const augmentNamesArr = Array.isArray(augmentFlag) ? augmentFlag : [augmentFlag];
+    for (const augName of augmentNamesArr) {
+      const augResult = await db.query<any>(`SELECT id, name FROM augments WHERE LOWER(name) = LOWER('${augName.replace(/'/g, "''")}')`);
+      if (augResult.rows.length > 0) {
+        augmentIds.push(augResult.rows[0].id);
+        augmentNames.push(augResult.rows[0].name);
+      }
+    }
+    if (augmentNamesArr.length > augmentNames.length) {
+      const missing = augmentNamesArr.filter(an => !augmentNames.includes(an));
+      return {
+        success: false,
+        output: '',
+        error: `Augment(s) not found: ${missing.join(', ')}`,
+      };
+    }
+  }
+
+  // Process -m (media) flag
+  let mediaId = null;
+  let mediaTitle = null;
+  const mediaFlag = flags.m || flags.media;
+  if (mediaFlag) {
+    const mediaName = Array.isArray(mediaFlag) ? mediaFlag[0] : mediaFlag;
+    const mediaResult = await db.query<any>(`SELECT id, title FROM media WHERE LOWER(title) = LOWER('${mediaName.replace(/'/g, "''")}')`);
+    if (mediaResult.rows.length > 0) {
+      mediaId = mediaResult.rows[0].id;
+      mediaTitle = mediaResult.rows[0].title;
+    } else {
+      return { success: false, output: '', error: `Media not found: ${mediaName}` };
+    }
+  }
+
+  // Process -c (course) flag
+  let courseId = null;
+  let courseName = null;
+  const courseFlag = flags.c || flags.course;
+  if (courseFlag) {
+    const courseSearchName = Array.isArray(courseFlag) ? courseFlag[0] : courseFlag;
+    const courseResult = await db.query<any>(`SELECT id, name FROM courses WHERE LOWER(name) = LOWER('${courseSearchName.replace(/'/g, "''")}')`);
+    if (courseResult.rows.length > 0) {
+      courseId = courseResult.rows[0].id;
+      courseName = courseResult.rows[0].name;
+    } else {
+      return { success: false, output: '', error: `Course not found: ${courseSearchName}` };
+    }
+  }
+
+  // Process -p (project) flag
+  let projectId = null;
+  let projName = null;
+  const projectFlag = flags.p || flags.project;
+  if (projectFlag) {
+    const projectSearchName = Array.isArray(projectFlag) ? projectFlag[0] : projectFlag;
+    const projectResult = await db.query<any>(`SELECT id, name FROM projects WHERE LOWER(name) = LOWER('${projectSearchName.replace(/'/g, "''")}')`);
+    if (projectResult.rows.length > 0) {
+      projectId = projectResult.rows[0].id;
+      projName = projectResult.rows[0].name;
+    } else {
+      return { success: false, output: '', error: `Project not found: ${projectSearchName}` };
+    }
+  }
+
+  // Process -n (note) flag
+  const noteFlag = flags.n;
+  let sessionNote = null;
+  if (noteFlag) {
+    sessionNote = Array.isArray(noteFlag) ? noteFlag[0] : noteFlag;
+    sessionNote = sessionNote.replace(/'/g, "''");
+  }
+
+  // Calculate XP
+  const baseXP = duration.minutes * 10 * (intensity / 5);
+  const exerciseXP = Math.floor(baseXP * 0.5);
+  const statXP = Math.floor(baseXP * 0.25);
+  const masterXP = Math.floor(baseXP * 0.25);
+
+  // Build details_json
+  const isStrength = exercise.metric_type === 'weight_reps' || (exercise.quantity_type && exercise.quantity_type.includes('weight'));
+  let totals: any = { setCount: sets.length };
+  
+  if (isStrength) {
+    totals.totalWeight = sets.reduce((sum: number, s: any) => sum + (parseFloat(s.weight) || 0) * (parseInt(s.reps) || 0), 0);
+    totals.totalReps = sets.reduce((sum: number, s: any) => sum + (parseInt(s.reps) || 0), 0);
+  } else {
+    totals.total = sets.reduce((sum: number, s: any) => sum + (parseFloat(s.value) || 0), 0);
+  }
+
+  const detailsJson = {
+    quantityType: exercise.quantity_type,
+    metric: exercise.metric_type,
+    entryIntensity: intensity,
+    sets: sets,
+    totals: totals
+  };
+
+  // Insert into output_logs
+  const outputLogId = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const toolIdsJson = JSON.stringify(toolIds);
+  const augmentIdsJson = JSON.stringify(augmentIds);
+  const statSplitJson = JSON.stringify(statSplit);
+
+  await db.exec(`
+    INSERT INTO output_logs (
+      id, target_type, target_id, duration_minutes, intensity,
+      stat_split, notes, tool_ids, total_tool_xp,
+      augment_ids, total_augment_xp, course_id, media_id, project_id
+    ) VALUES (
+      '${outputLogId}',
+      'exercise',
+      '${exercise.id}',
+      ${duration.minutes},
+      ${intensity},
+      '${statSplitJson}',
+      ${sessionNote ? `'${sessionNote}'` : 'NULL'},
+      '${toolIdsJson}',
+      ${exerciseXP},
+      '${augmentIdsJson}',
+      ${masterXP},
+      ${courseId ? `'${courseId}'` : 'NULL'},
+      ${mediaId ? `'${mediaId}'` : 'NULL'},
+      ${projectId ? `'${projectId}'` : 'NULL'}
+    );
+  `);
+
+  // Insert into output_log_exercises
+  const outputExId = crypto.randomUUID();
+  await db.exec(`
+    INSERT INTO output_log_exercises (
+      id, output_log_id, exercise_id, xp_awarded, details_json
+    ) VALUES (
+      '${outputExId}',
+      '${outputLogId}',
+      '${exercise.id}',
+      ${exerciseXP},
+      '${JSON.stringify(detailsJson)}'
+    );
+  `);
+
+  // Update exercise XP
+  const newExerciseXP = Number(exercise.xp || 0) + exerciseXP;
+  const newLevel = getLevelFromXP(newExerciseXP);
+  await db.exec(`UPDATE exercises SET xp = ${newExerciseXP}, level = ${newLevel.level} WHERE id = '${exercise.id}';`);
+
+  // Update tool XP
+  if (toolIds.length > 0 && exerciseXP > 0) {
+    const perToolXP = exerciseXP;
+    queryClient.setQueryData(['tools'], (prev: any[] | undefined) =>
+      prev?.map((tool) => {
+        if (!toolIds.includes(tool.id)) return tool;
+        const nextXP = Number(tool.xp ?? 0) + perToolXP;
+        const nextLevel = getLevelFromXP(nextXP);
+        return {
+          ...tool,
+          xp: nextXP,
+          level: nextLevel.level,
+          xpInLevel: nextLevel.xpInLevel,
+          xpForLevel: nextLevel.xpForLevel,
+        };
+      }) ?? prev
+    );
+  }
+
+  // Update augment XP
+  if (augmentIds.length > 0 && exerciseXP > 0) {
+    const perAugXP = exerciseXP;
+    queryClient.setQueryData(['augments'], (prev: any[] | undefined) =>
+      prev?.map((augment) => {
+        if (!augmentIds.includes(augment.id)) return augment;
+        const nextXP = Number(augment.xp ?? 0) + perAugXP;
+        const nextLevel = getLevelFromXP(nextXP);
+        return {
+          ...augment,
+          xp: nextXP,
+          level: nextLevel.level,
+          xpInLevel: nextLevel.xpInLevel,
+          xpForLevel: nextLevel.xpForLevel,
+        };
+      }) ?? prev
+    );
+  }
+
+  await refreshAppData(queryClient);
+  queryClient.invalidateQueries({ queryKey: ['output-widget-logs'] });
+
+  // Trigger visual effects
+  if (masterXP > 0) {
+    setTimeout(() => triggerXPFloat(window.innerWidth / 2 + 60, window.innerHeight / 2 - 80, masterXP, undefined, false), 200);
+  }
+  if (exerciseXP > 0 && toolIds.length > 0) {
+    setTimeout(() => triggerXPFloat(window.innerWidth / 2 - 60, window.innerHeight / 2 - 40, exerciseXP * toolIds.length, undefined, false), 400);
+  }
+  if (exerciseXP > 0 && augmentIds.length > 0) {
+    setTimeout(() => triggerXPFloat(window.innerWidth / 2, window.innerHeight / 2, exerciseXP * augmentIds.length, undefined, false), 600);
+  }
+
+  // Build output message
+  let output = `Exercise '${exercise.name}' logged.\n\nDuration: ${duration.minutes}m | Intensity: ${intensity}`;
+  
+  // Show sets
+  output += `\n\nSets: ${sets.length}`;
+  if (isStrength) {
+    const setDetails = sets.map((s: any, i: number) => `${s.weight}×${s.reps}`).join(', ');
+    output += ` (${setDetails})`;
+    output += `\nTotal: ${totals.totalWeight}lbs, ${totals.totalReps} reps`;
+  } else {
+    const setDetails = sets.map((s: any, i: number) => s.value).join(', ');
+    output += ` (${setDetails})`;
+    output += `\nTotal: ${totals.total}`;
+  }
+
+  // XP
+  output += `\n\nXP: ${exerciseXP + masterXP + statXP}`;
+  output += `\n  Exercise: +${exerciseXP}`;
+  if (statXP > 0 && statKeys.length > 0) {
+    const statXPSummary = statSplit.map(s => `${s.stat}: +${Math.floor(statXP * s.percent / 100)}`).join(', ');
+    output += `\n  Stat: ${statXPSummary}`;
+  }
+  output += `\n  Master: +${masterXP}`;
+
+  if (toolNames.length > 0) {
+    output += `\n\nTools: ${toolNames.join(', ')} (+${exerciseXP} XP each)`;
+  }
+  
+  if (augmentNames.length > 0) {
+    output += `\n\nAugments: ${augmentNames.join(', ')} (+${exerciseXP} XP each)`;
+  }
+  
+  if (mediaTitle) {
+    output += `\n\nMedia: ${mediaTitle}`;
+  }
+  
+  if (courseName) {
+    output += `\n\nCourse: ${courseName}`;
+  }
+  
+  if (projName) {
+    output += `\n\nProject: ${projName}`;
+  }
+  
+  if (sessionNote) {
+    output += `\n\nNote: ${sessionNote}`;
+  }
+  
   return {
     success: true,
     output,
@@ -1180,7 +1548,11 @@ async function executeAdd(args: string[], flags: Record<string, string | string[
     return executeAddNote(args.slice(1), flags);
   }
 
-  return { success: false, output: '', error: `Unknown type: ${type}. Supported types: skill, augment, tool, resource, note` };
+  if (type === 'course') {
+    return executeAddCourse(args.slice(1), flags);
+  }
+
+  return { success: false, output: '', error: `Unknown type: ${type}. Supported types: skill, augment, tool, resource, note, course` };
 }
 
 async function executeAddSkill(nameArgs: string[], flags: Record<string, string | string[]>): Promise<CommandResult> {
@@ -1468,6 +1840,85 @@ async function executeAddNote(nameArgs: string[], flags: Record<string, string |
   }
 }
 
+async function executeAddCourse(nameArgs: string[], flags: Record<string, string | string[]>): Promise<CommandResult> {
+  try {
+    const name = nameArgs.join(' ').trim();
+    if (!name) {
+      return { success: false, output: '', error: "Please provide a course name." };
+    }
+
+    const statsFlag = (flags['stats'] as string) || '';
+    if (!statsFlag) {
+      return { success: false, output: '', error: "Please provide stats using -stats flag.\nExample: -stats body:50/flow:50 or -stats mind" };
+    }
+
+    const statParts = statsFlag.split('/').map(s => s.trim());
+    const statKeys: string[] = [];
+    const split: number[] = [];
+
+    for (const part of statParts) {
+      const match = part.match(/^(\w+):(\d+)$/);
+      if (match) {
+        statKeys.push(match[1].toLowerCase());
+        split.push(parseInt(match[2]));
+      } else {
+        statKeys.push(part.toLowerCase());
+        split.push(100);
+      }
+    }
+
+    const VALID_STATS = ['body', 'wire', 'mind', 'cool', 'grit', 'flow', 'ghost'];
+    for (const k of statKeys) {
+      if (!VALID_STATS.includes(k)) {
+        return { success: false, output: '', error: `Invalid stat: ${k}. Valid stats: ${VALID_STATS.join(', ')}` };
+      }
+    }
+
+    if (statKeys.length === 0 || statKeys.length > 2) {
+      return { success: false, output: '', error: "Please provide 1 or 2 stats.\nExample: -stats body:50/flow:50 or -stats mind" };
+    }
+
+    if (statKeys.length === 1) {
+      split[0] = 100;
+    } else if (split.reduce((a, b) => a + b, 0) !== 100) {
+      const total = split.reduce((a, b) => a + b, 0);
+      for (let i = 0; i < split.length; i++) {
+        split[i] = Math.round((split[i] / total) * 100);
+      }
+      const diff = 100 - split.reduce((a, b) => a + b, 0);
+      split[0] += diff;
+    }
+
+    const db = await getDB();
+
+    const existing = await db.query(
+      `SELECT id FROM courses WHERE LOWER(name) = LOWER($1) LIMIT 1`,
+      [name]
+    );
+    if (existing.rows.length > 0) {
+      return { success: false, output: '', error: `Course '${name}' already exists.` };
+    }
+
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+    await db.query(
+      `INSERT INTO courses (id, name, linked_stats, default_split, status, created_at)
+       VALUES ($1, $2, $3, $4, 'ACTIVE', $5)`,
+      [id, name, JSON.stringify(statKeys), JSON.stringify(split), now]
+    );
+
+    queryClient.invalidateQueries({ queryKey: ['courses'] });
+    queryClient.invalidateQueries({ queryKey: ['courses-all'] });
+    queryClient.invalidateQueries({ queryKey: ['terminal-courses-list'] });
+
+    const statsDisplay = statKeys.map((k, i) => `${k.toUpperCase()}:${split[i]}%`).join('/');
+    return { success: true, output: `Course '${name}' added.\nStats: ${statsDisplay}` };
+  } catch (err: any) {
+    console.error('[ADD COURSE] Error:', err);
+    return { success: false, output: '', error: err.message || 'Failed to add course' };
+  }
+}
+
 async function executeDelete(args: string[]): Promise<CommandResult> {
   if (args.length === 0) {
     return { success: false, output: '', error: "Usage: delete skill [name] | delete augment [name] | delete tool [name] | delete resource [name]\nExample: delete skill reading" };
@@ -1495,7 +1946,11 @@ async function executeDelete(args: string[]): Promise<CommandResult> {
     return executeDeleteNote(args.slice(1));
   }
 
-  return { success: false, output: '', error: `Unknown type: ${type}. Supported types: skill, augment, tool, resource, note` };
+  if (type === 'course') {
+    return executeDeleteCourse(args.slice(1));
+  }
+
+  return { success: false, output: '', error: `Unknown type: ${type}. Supported types: skill, augment, tool, resource, note, course` };
 }
 
 async function executeDeleteSkill(nameArgs: string[]): Promise<CommandResult> {
@@ -1711,6 +2166,45 @@ async function executeDeleteNote(nameArgs: string[]): Promise<CommandResult> {
   } catch (err: any) {
     console.error('[DELETE NOTE] Error:', err);
     return { success: false, output: '', error: err.message || 'Failed to delete note' };
+  }
+}
+
+async function executeDeleteCourse(nameArgs: string[]): Promise<CommandResult> {
+  try {
+    const name = nameArgs.join(' ').trim();
+    if (!name) {
+      return { success: false, output: '', error: "Please provide a course name." };
+    }
+
+    const db = await getDB();
+
+    if (pendingDelete && pendingDelete.name.toLowerCase() === name.toLowerCase() && pendingDelete.type === 'course') {
+      await db.query(`DELETE FROM courses WHERE id = $1`, [pendingDelete.id]);
+
+      pendingDelete = null;
+
+      queryClient.invalidateQueries({ queryKey: ['courses'] });
+      queryClient.invalidateQueries({ queryKey: ['courses-all'] });
+      queryClient.invalidateQueries({ queryKey: ['terminal-courses-list'] });
+
+      return { success: true, output: `Course '${name}' deleted.` };
+    }
+
+    const res = await db.query(
+      `SELECT id, name FROM courses WHERE LOWER(name) = LOWER($1) LIMIT 1`,
+      [name]
+    );
+
+    if (res.rows.length === 0) {
+      return { success: false, output: '', error: `Course '${name}' not found.` };
+    }
+
+    pendingDelete = { type: 'course', name: res.rows[0].name, id: res.rows[0].id };
+
+    return { success: true, output: `Delete course '${res.rows[0].name}'? Type: y (yes) or n (no)` };
+  } catch (err: any) {
+    console.error('[DELETE COURSE] Error:', err);
+    return { success: false, output: '', error: err.message || 'Failed to delete course' };
   }
 }
 

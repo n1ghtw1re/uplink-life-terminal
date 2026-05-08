@@ -77,14 +77,16 @@ export const AVAILABLE_COMMANDS: TerminalCommand[] = [
   },
   {
     name: 'log',
-    description: 'Log a session against a skill',
-    syntax: 'log [duration] [skill] [flags]',
+    description: 'Log a session (skill or exercise)',
+    syntax: 'log [duration] [skill|exercise] [flags]',
     examples: [
-      'log 1 hour mma',
+      'log 1h coding -t vscode',
       'log 2h music production',
       'log 45m meditation',
       'log 1h reading -m Snow White',
-      'log 2 hours coding -t vs code -p Uplink',
+      'log 2 hours coding -t vscode -p Uplink',
+      'log 30m bench press -set1 200-10 -set2 200-8 -intensity 6',
+      'log 30m cycling -set1 10',
     ],
   },
   {
@@ -99,11 +101,12 @@ export const AVAILABLE_COMMANDS: TerminalCommand[] = [
   },
   {
     name: 'add',
-    description: 'Add a new skill, augment, tool, resource, or note',
-    syntax: 'add skill [name] -stats [stat1:%/stat2:%] [-n note] | add augment [name] -type [type] [-url http://...] [-d desc] [-n note] | add tool [name] -type [type] [-url http://...] [-d desc] [-n note] | add resource [name] -type [type] [-url http://...] [-d desc] [-n note] | add note [name] -content [content]',
+    description: 'Add a new skill, augment, tool, resource, note, or course',
+    syntax: 'add skill [name] -stats [.../...] [-n note] | add course [name] -stats [.../...] | add augment|tool|resource [name] -type [type] [-url ...] [-d desc] [-n note] | add note [name] -content [content]',
     examples: [
       'add skill sword fighting -stats body:50/flow:50 -n this is a note',
       'add skill reading -stats mind',
+      'add course python -stats mind:50/flow:50',
       'add augment mma -type Core Intelligence -url https://... -d fighting technique -n trained today',
       'add tool vscode -type software -url https://code.visualstudio.com -d editor -n great tool',
       'add resource React Docs -type Learning -url https://react.dev -d official docs -n great resource',
@@ -112,14 +115,15 @@ export const AVAILABLE_COMMANDS: TerminalCommand[] = [
   },
   {
     name: 'delete',
-    description: 'Delete a skill, augment, tool, resource, or note (with confirmation)',
-    syntax: 'delete skill [name] | delete augment [name] | delete tool [name] | delete resource [name] | delete note [name]',
+    description: 'Delete a skill, augment, tool, resource, note, or course (with confirmation)',
+    syntax: 'delete skill|augment|tool|resource|note|course [name]',
     examples: [
       'delete skill reading',
       'delete augment mma',
       'delete tool vscode',
       'delete resource React Docs',
       'delete note meeting',
+      'delete course python',
     ],
   },
 ];

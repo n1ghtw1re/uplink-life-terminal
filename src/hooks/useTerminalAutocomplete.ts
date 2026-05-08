@@ -36,7 +36,7 @@ export function useTerminalAutocomplete(input: string) {
       return res.rows;
     },
     staleTime: Infinity,
-    enabled: isDrawerContext,
+    enabled: isDrawerContext || isLogContext,
   });
 
   const { data: workouts = [] } = useQuery({
@@ -69,7 +69,7 @@ export function useTerminalAutocomplete(input: string) {
       return res.rows;
     },
     staleTime: Infinity,
-    enabled: isDrawerContext || isLogContext,
+    enabled: isDrawerContext || isLogContext || isDeleteContext,
   });
 
   const { data: augments = [] } = useQuery({
@@ -102,7 +102,7 @@ export function useTerminalAutocomplete(input: string) {
       return res.rows;
     },
     staleTime: Infinity,
-    enabled: isDrawerContext,
+    enabled: isDrawerContext || isLogContext || isDeleteContext,
   });
 
   const { data: media = [] } = useQuery({
@@ -135,7 +135,7 @@ export function useTerminalAutocomplete(input: string) {
       return res.rows;
     },
     staleTime: Infinity,
-    enabled: isDrawerContext || isLogContext,
+    enabled: isDrawerContext || isLogContext || isDeleteContext,
   });
 
   const { data: vaultItems = [] } = useQuery({
@@ -168,7 +168,7 @@ export function useTerminalAutocomplete(input: string) {
       return res.rows;
     },
     staleTime: Infinity,
-    enabled: isDrawerContext,
+    enabled: isDrawerContext || isLogContext || isDeleteContext,
   });
 
   const { data: ingredients = [] } = useQuery({
@@ -305,16 +305,29 @@ export function useTerminalAutocomplete(input: string) {
       const hasMediaFlag = parts.some(p => p === '-m');
       const hasCourseFlag = parts.some(p => p === '-c');
       const hasProjectFlag = parts.some(p => p === '-p');
+      const hasSetFlag = parts.some(p => p.startsWith('-set'));
+      const hasIntensityFlag = parts.some(p => p === '-intensity');
       
-      // log <duration> <unit> - show skills that start with input
-      if (parts.length >= 3 && !hasToolFlag && !hasAugFlag && !hasMediaFlag && !hasCourseFlag && !hasProjectFlag) {
+      // log <duration> <unit> - show skills AND exercises that start with input
+      if (parts.length >= 3 && !hasToolFlag && !hasAugFlag && !hasMediaFlag && !hasCourseFlag && !hasProjectFlag && !hasSetFlag && !hasIntensityFlag) {
+        const combined = [
+          ...skills.map(s => ({ value: s.name, type: 'skill' as const, score: 100 })),
+          ...exercises.map(e => ({ value: e.name, type: 'exercise' as const, score: 90 }))
+        ];
         if (!lastWord) {
-          return skills.slice(0, 8).map(skill => ({ value: skill.name, type: 'skill' as const, score: 100 }));
+          return combined.slice(0, 8);
         }
-        return skills
-          .filter(skill => startsWithMatch(skill.name, lastWord))
-          .slice(0, 8)
-          .map(skill => ({ value: skill.name, type: 'skill' as const, score: 100 }));
+        return combined
+          .filter(item => startsWithMatch(item.value, lastWord))
+          .slice(0, 8);
+      }
+
+      // After exercise name, show exercise-specific flags
+      if (parts.length >= 3 && (hasSetFlag || hasIntensityFlag || lastWord.startsWith('-'))) {
+        const exerciseFlags = ['-set1', '-set2', '-set3', '-intensity', '-t', '-a', '-m', '-c', '-p', '-stats', '-n'];
+        return exerciseFlags
+          .filter(f => f.startsWith(lastWord.toLowerCase()))
+          .map(f => ({ value: f, type: 'command' as const, score: 100 }));
       }
     }
     
@@ -333,7 +346,7 @@ export function useTerminalAutocomplete(input: string) {
     if (isDeleteContext) {
       // When typing "delete " or "delete s", show available types
       if (parts.length < 2 || (parts.length === 2 && parts[1])) {
-        const deleteTypes = ['skill', 'augment', 'tool', 'resource', 'note'];
+        const deleteTypes = ['skill', 'augment', 'tool', 'resource', 'note', 'course'];
         const match = deleteTypes.filter(t => t.startsWith(parts[1]?.toLowerCase() || ''));
         if (match.length > 0) {
           return match.map(t => ({ value: t, type: 'command' as const, score: 100 }));
@@ -394,13 +407,24 @@ export function useTerminalAutocomplete(input: string) {
           .slice(0, 8)
           .map(n => ({ value: n.name, type: 'note' as const, score: 100 }));
       }
+
+      // After "delete course", show course names
+      if (parts.length >= 2 && parts[1]?.toLowerCase() === 'course') {
+        if (parts.length < 3 || !lastWord) {
+          return courses.slice(0, 8).map(c => ({ value: c.name, type: 'course' as const, score: 100 }));
+        }
+        return courses
+          .filter(c => startsWithMatch(c.name, lastWord))
+          .slice(0, 8)
+          .map(c => ({ value: c.name, type: 'course' as const, score: 100 }));
+      }
     }
 
     // ADD command context - skill, augment, tool, resource, note supported
     if (firstToken === 'add') {
       // After "add ", show available types
       if (parts.length < 2 || (parts.length === 2 && parts[1])) {
-        const addTypes = ['skill', 'augment', 'tool', 'resource', 'note'];
+        const addTypes = ['skill', 'augment', 'tool', 'resource', 'note', 'course'];
         const match = addTypes.filter(t => t.startsWith(parts[1]?.toLowerCase() || ''));
         if (match.length > 0) {
           return match.map(t => ({ value: t, type: 'command' as const, score: 100 }));
@@ -455,7 +479,7 @@ export function useTerminalAutocomplete(input: string) {
         if (parts.includes('-type')) {
           const typeIndex = parts.indexOf('-type');
           if (parts.length === typeIndex + 2 || (parts.length > typeIndex + 2 && lastWord)) {
-            const types = ['equipment', 'facility', 'framework', 'hardware', 'instrument', 'language', 'platform', 'software', 'vehicle'];
+            const types = ['equipment', 'facility', 'framework', 'hardware', 'instrument', 'language', 'platform', 'software', 'technique', 'vehicle'];
             if (!lastWord) {
               return types.slice(0, 8).map(t => ({ value: t, type: 'command' as const, score: 100 }));
             }
@@ -497,6 +521,16 @@ export function useTerminalAutocomplete(input: string) {
         const noteFlags = ['-content'];
         if (lastWord.startsWith('-')) {
           return noteFlags
+            .filter(f => f.startsWith(lastWord.toLowerCase()))
+            .map(f => ({ value: f, type: 'command' as const, score: 100 }));
+        }
+      }
+
+      // After "add course", show flag suggestions (-stats)
+      if (parts.length >= 2 && parts[1]?.toLowerCase() === 'course') {
+        const courseFlags = ['-stats'];
+        if (lastWord.startsWith('-')) {
+          return courseFlags
             .filter(f => f.startsWith(lastWord.toLowerCase()))
             .map(f => ({ value: f, type: 'command' as const, score: 100 }));
         }

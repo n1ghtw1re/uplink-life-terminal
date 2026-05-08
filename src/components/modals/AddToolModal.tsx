@@ -14,7 +14,7 @@ const bright= 'hsl(var(--accent-bright))';
 const bgS   = 'hsl(var(--bg-secondary))';
 const bgT   = 'hsl(var(--bg-tertiary))';
 
-const TOOL_TYPES = ['equipment', 'facility', 'framework', 'hardware', 'instrument', 'language', 'platform', 'software', 'vehicle'];
+const TOOL_TYPES = ['equipment', 'facility', 'framework', 'hardware', 'instrument', 'language', 'platform', 'software', 'technique', 'vehicle'];
 const TOP_CATEGORIES = ['Physical','Knowledge','Creation','Career','Social','Exploration','Inner Path','Home','Technology'];
 
 interface Props { onClose: () => void; initialLifepathId?: string; }

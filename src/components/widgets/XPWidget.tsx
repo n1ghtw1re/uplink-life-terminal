@@ -20,17 +20,30 @@ const XPWidget = ({ onClose, onFullscreen, isFullscreen }: WidgetProps) => {
   const { user } = useAuth();
   const { data: op } = useOperator(user?.id);
 
-  // Fetch recent XP log entries
+  // Fetch recent XP log entries with skill/exercise names and duration
   const { data: recentXP } = useQuery({
     queryKey: ['xp-recent'],
     queryFn: async () => {
       const db  = await import('@/lib/db').then(m => m.getDB());
-      const res = await db.query<{ amount: number; source: string; notes: string | null; logged_at: string }>(
-        `SELECT x.amount, x.source, COALESCE(x.notes, s.skill_name) as notes, x.logged_at
+      const res = await db.query<any>(
+        `SELECT x.amount, x.source, x.logged_at,
+           CASE 
+             WHEN x.source = 'session' THEN s.skill_name
+             WHEN x.source = 'exercise_output' THEN e.name
+             ELSE COALESCE(x.notes, x.source)
+           END as target_name,
+           CASE
+             WHEN x.source = 'session' THEN s.duration_minutes
+             WHEN x.source = 'exercise_output' THEN ol.duration_minutes
+             ELSE 0
+           END as duration_minutes
          FROM xp_log x
-         LEFT JOIN sessions s ON s.id = x.source_id
+         LEFT JOIN sessions s ON x.source = 'session' AND s.id = x.source_id
+         LEFT JOIN output_logs ol ON x.source = 'exercise_output' AND ol.id = x.source_id
+         LEFT JOIN output_log_exercises ole ON ole.output_log_id = ol.id
+         LEFT JOIN exercises e ON ole.exercise_id = e.id
          WHERE x.tier = 'master'
-         ORDER BY x.logged_at DESC LIMIT 5;`
+         ORDER BY x.logged_at DESC LIMIT 8;`
       );
       return res.rows;
     },
@@ -70,12 +83,23 @@ const XPWidget = ({ onClose, onFullscreen, isFullscreen }: WidgetProps) => {
       </div>
 
       {recentXP && recentXP.length > 0 ? (
-        recentXP.map((entry, i) => (
-          <div key={i} style={{ fontSize: 10, marginBottom: 3, color: 'hsl(var(--text-dim))' }}>
-            <span style={{ color: 'hsl(var(--accent))' }}>+{entry.amount} XP</span>
-            {entry.notes ? ` — ${entry.notes}` : ` — ${entry.source.replace(/_/g, ' ')}`}
-          </div>
-        ))
+        recentXP.map((entry, i) => {
+          const d = new Date(entry.logged_at);
+          const day = d.toLocaleDateString('en', { weekday: 'short' }).toUpperCase();
+          const time = d.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit', hour12: false });
+          const hours = (entry.duration_minutes / 60).toFixed(2).replace(/\.?0+$/, '');
+          return (
+            <div key={i} style={{ fontSize: 9, fontFamily: "'IBM Plex Mono', monospace", marginBottom: 3, color: 'hsl(var(--text-dim))' }}>
+              <span style={{ color: 'hsl(var(--accent-dim))' }}>{day} {time}</span>
+              <span style={{ color: 'hsl(var(--text-dim))' }}> - </span>
+              <span style={{ color: 'hsl(var(--accent))' }}>{entry.target_name ?? entry.source}</span>
+              <span style={{ color: 'hsl(var(--text-dim))' }}> - </span>
+              <span style={{ color: 'hsl(var(--text-dim))' }}>{hours} hr</span>
+              <span style={{ color: 'hsl(var(--text-dim))' }}> - </span>
+              <span style={{ color: 'hsl(var(--accent-dim))' }}>XP {entry.amount}</span>
+            </div>
+          );
+        })
       ) : (
         <div style={{ fontSize: 10, color: 'hsl(var(--text-dim))', marginBottom: 8 }}>
           No activity yet. Log a session to earn XP.

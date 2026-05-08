@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { getDB } from '@/lib/db';
+import { refreshAppData } from '@/lib/refreshAppData';
 import { toast } from '@/hooks/use-toast';
 import { SortableObjective } from '@/components/ui/SortableObjective';
 
@@ -286,6 +287,7 @@ export default function ProjectDetailDrawer({ projectId, onClose }: Props) {
     },
       onSuccess: async () => {
         await refreshAppData(queryClient);
+        queryClient.invalidateQueries({ queryKey: ['project', projectId] });
         setEditing(false);
         toast({ title: '✓ PROJECT UPDATED' });
       },
@@ -297,8 +299,9 @@ export default function ProjectDetailDrawer({ projectId, onClose }: Props) {
       await db.exec(`DELETE FROM projects WHERE id = '${projectId}'`);
     },
       onSuccess: async () => {
-        await refreshAppData(queryClient);
         onClose?.();
+        toast({ title: '✓ PROJECT DELETED' });
+        await refreshAppData(queryClient);
       },
   });
 
