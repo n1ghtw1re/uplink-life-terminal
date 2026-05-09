@@ -649,7 +649,7 @@ async function executeLog(args: string[], flags: Record<string, string | string[
   }
 
   // Try exercise
-  const exerciseResult = await db.query<any>(`SELECT id, name, quantity_type, metric_type, primary_stat, secondary_stat, primary_pct, secondary_pct FROM exercises WHERE LOWER(name) = LOWER('${targetName.replace(/'/g, "''")}')`);
+  const exerciseResult = await db.query<any>(`SELECT id, name, xp, quantity_type, metric_type, primary_stat, secondary_stat, primary_pct, secondary_pct FROM exercises WHERE LOWER(name) = LOWER('${targetName.replace(/'/g, "''")}')`);
 
   if (exerciseResult.rows.length > 0) {
     const exercise = exerciseResult.rows[0];

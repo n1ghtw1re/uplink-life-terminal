@@ -836,4 +836,16 @@ CREATE TABLE IF NOT EXISTS background_records (
   } catch (e) {
     console.error('Migration batch 11 failed:', e);
   }
+
+  // ── Batch 12: Backfill exercise XP from output_log_exercises ─────────────
+  // Fixes terminal overwrite bug where exercises.xp was set to just the
+  // current session's XP instead of accumulating.
+  try {
+    await db.exec(`
+      UPDATE exercises e SET
+        xp = COALESCE((SELECT SUM(xp_awarded) FROM output_log_exercises WHERE exercise_id = e.id), 0)
+    `);
+  } catch (e) {
+    console.error('Migration batch 12 failed:', e);
+  }
 }
