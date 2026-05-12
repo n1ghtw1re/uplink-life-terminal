@@ -34,7 +34,7 @@ const COMMANDS = [
   { name: 'close', desc: 'Close a widget', syntax: 'close [widget_name]' },
   { name: 'drawer', desc: 'Open or close drawer', syntax: 'drawer [name] | drawer close' },
   { name: 'HABIT', desc: 'Check-in a habit (binary or quantitative)', syntax: 'HABIT [name] [#quantity]' },
-  { name: 'ADD', desc: 'Add a new entity (Skills, tools, augments, etc)', syntax: 'ADD [type] [name] [flags]' },
+  { name: 'ADD', desc: 'Add a new entity or planner event', syntax: 'ADD [type] [name] [flags]' },
   { name: 'DELETE', desc: 'Delete an entity (requires y/n confirmation)', syntax: 'DELETE [type] [name]' },
   { name: 'help', desc: 'Show available commands', syntax: 'help' },
   { name: 'list', desc: 'List items (skills, tools, etc.)', syntax: 'list [type]' },
@@ -135,6 +135,7 @@ export default function TerminalDocsPage({ onClose }: Props) {
                   -t [tool]      Tag a tool (multiple allowed)<br />
                   -a [augment]   Tag an augment (multiple allowed)<br />
                   -m [media]     Tag a media item (book, movie, etc.)<br />
+                  -complete      Mark tagged media as completed<br />
                   -c [course]    Tag an active course<br />
                   -p [project]   Tag an active project<br />
                   -n [note]      Add a note to the session/skill<br />
@@ -144,7 +145,7 @@ export default function TerminalDocsPage({ onClose }: Props) {
                   -d [desc]      Entity description
                 </div>
                 <BodyText>
-                  Example: <span style={{ color: acc }}>log 1h coding -t vscode -p uplink -n built the login form -stats mind:80/body:20</span><br />
+                  Example: <span style={{ color: acc }}>log 1h coding -t vscode -m Star Wars -complete -p uplink -n built the login form -stats mind:80/body:20</span><br />
                   Example: <span style={{ color: acc }}>add skill karate -stats body:100 -n trained in kyokushin</span><br />
                   Example: <span style={{ color: acc }}>add augment mma -type Core Intelligence -url https://... -d fighting technique -n trained today</span>
                 </BodyText>
@@ -162,6 +163,21 @@ export default function TerminalDocsPage({ onClose }: Props) {
                 <BodyText>
                   Quantities are cumulative for the day. <br />
                   Example: <span style={{ color: acc }}>habit pushups #25</span>
+                </BodyText>
+              </div>
+            </div>
+            <div style={{ padding: 12, border: `1px solid ${adim}`, background: bgT }}>
+              <div style={{ fontSize: 10, color: acc, marginBottom: 4 }}>PLANNER EVENTS</div>
+              <div style={{ display: 'grid', gap: 6 }}>
+                <BodyText>Add planner events directly from terminal. Date and name are required, time is optional.</BodyText>
+                <div style={{ fontSize: 10, color: dim, fontFamily: mono, background: 'rgba(0,0,0,0.2)', padding: 8 }}>
+                  add event [event_name] -date mm/dd/yy [-time hh:mm AM/PM]
+                </div>
+                <BodyText>
+                  Example: <span style={{ color: acc }}>add event Team Sync -date 05/20/26 -time 09:30 AM</span><br />
+                  Example: <span style={{ color: acc }}>add event Team Sync -date 05/20/26</span><br />
+                  Delete specific duplicates: <span style={{ color: acc }}>delete English Class -date 12/03/26</span><br />
+                  Recurrence is always set to <span style={{ color: acc }}>NONE</span> for terminal-added events.
                 </BodyText>
               </div>
             </div>

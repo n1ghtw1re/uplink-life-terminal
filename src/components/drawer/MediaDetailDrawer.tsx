@@ -29,6 +29,7 @@ interface MediaItem {
   completed_at: string | null;
   created_at: string;
   meta: Record<string, unknown> | null;
+  completed_count: number;
 }
 
 interface Props {
@@ -252,7 +253,7 @@ export default function MediaDetailDrawer({ mediaId, onClose }: Props) {
       const completedAt = new Date().toISOString();
 
       await db.query(
-        `UPDATE media SET status = 'FINISHED', completed_at = $1 WHERE id = $2`,
+        `UPDATE media SET status = 'FINISHED', completed_at = $1, completed_count = COALESCE(completed_count, 0) + 1 WHERE id = $2`,
         [completedAt, mediaId]
       );
 
@@ -487,6 +488,10 @@ export default function MediaDetailDrawer({ mediaId, onClose }: Props) {
           <div style={{ fontSize: 8, color: accentDim, letterSpacing: 1 }}>TOTAL TIME</div>
           <div style={{ fontFamily: vt, fontSize: 20, color: accent }}>{formatTotalTime(totalMinutes)}</div>
         </div>
+        <div style={{ marginBottom: 10, border: `1px solid ${accentDim}`, background: bgSec, padding: '6px 8px' }}>
+          <div style={{ fontSize: 8, color: accentDim, letterSpacing: 1 }}>TIMES COMPLETED</div>
+          <div style={{ fontFamily: vt, fontSize: 20, color: accent }}>{item.completed_count ?? 0}</div>
+        </div>
 
         {/* Book/comic progress */}
         {(item.type === 'book' || item.type === 'comic') && totalPages && (
@@ -708,26 +713,26 @@ export default function MediaDetailDrawer({ mediaId, onClose }: Props) {
           {editing ? '[ CANCEL EDIT ]' : '[ EDIT ]'}
         </button>
 
-        {!isFinished && (
-          <button
-            onClick={() => markFinished.mutate()}
-            disabled={markFinished.isPending}
-            style={{
-              width: '100%', height: 36,
-              border: `1px solid ${accent}`,
-              background: 'transparent', color: accent,
-              fontFamily: mono, fontSize: 11,
-              cursor: 'pointer', marginBottom: 8, letterSpacing: 1,
-              opacity: markFinished.isPending ? 0.6 : 1,
-            }}
-            onMouseEnter={e => { e.currentTarget.style.background = accent; e.currentTarget.style.color = 'hsl(var(--bg-primary))'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = accent; }}
-          >
-            {markFinished.isPending
-              ? '[ PROCESSING... ]'
-              : `[ ✓ MARK ${getFinishLabel(item.type)} — +${baseXP} XP ]`}
-          </button>
-        )}
+        <button
+          onClick={() => markFinished.mutate()}
+          disabled={markFinished.isPending}
+          style={{
+            width: '100%', height: 36,
+            border: `1px solid ${accent}`,
+            background: 'transparent', color: accent,
+            fontFamily: mono, fontSize: 11,
+            cursor: 'pointer', marginBottom: 8, letterSpacing: 1,
+            opacity: markFinished.isPending ? 0.6 : 1,
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = accent; e.currentTarget.style.color = 'hsl(var(--bg-primary))'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = accent; }}
+        >
+          {markFinished.isPending
+            ? '[ PROCESSING... ]'
+            : isFinished
+              ? `[ COMPLETE AGAIN - +${baseXP} XP ]`
+              : `[ MARK ${getFinishLabel(item.type)} - +${baseXP} XP ]`}
+        </button>
 
         <button
           onClick={() => setShowDelete(v => !v)}
@@ -751,3 +756,4 @@ export default function MediaDetailDrawer({ mediaId, onClose }: Props) {
     </div>
   );
 }
+

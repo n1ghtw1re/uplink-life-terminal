@@ -265,6 +265,7 @@ async function initSchema(db: PGlite) {
       current_season  INTEGER,
       platform        TEXT,
       issue_count     INTEGER,
+      completed_count INTEGER NOT NULL DEFAULT 0,
       created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
@@ -738,6 +739,13 @@ CREATE TABLE IF NOT EXISTS background_records (
     ALTER TABLE workouts ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
     ALTER TABLE workout_exercises ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0;
     ALTER TABLE workout_exercises ADD COLUMN IF NOT EXISTS quantity_label TEXT;
+  `);
+
+  await db.exec(`
+    ALTER TABLE media ADD COLUMN IF NOT EXISTS completed_count INTEGER NOT NULL DEFAULT 0;
+    UPDATE media
+    SET completed_count = 1
+    WHERE status = 'FINISHED' AND COALESCE(completed_count, 0) = 0;
   `);
 
   // ── Batch 10: background_records sort_order ──────────────────────────────

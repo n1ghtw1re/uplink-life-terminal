@@ -94,8 +94,12 @@ const DetailDrawer = ({ open, item, onClose, onOpenLog }: DetailDrawerProps) => 
     {item?.type === 'resource' && <ResourceDetailDrawer key="resource" resourceId={item.id} onClose={onClose} />}
     {item?.type === 'exercise' && <ExerciseDetailDrawer key="exercise" exerciseId={item.id} onClose={onClose} />}
     {item?.type === 'workout' && <WorkoutDetailDrawer key="workout" workoutId={item.id} onClose={onClose} />}
-      {item?.type === 'output' && <OutputLogDrawer outputLogId={item.id} onClose={onClose} />}
+        {item?.type === 'output' && <OutputLogDrawer outputLogId={item.id} onClose={onClose} />}
       {item?.type === 'habit' && item.id && <HabitDrawer habitId={item.id} onClose={onClose} />}
+      {item?.type === 'vault'      && <VaultItemDrawer key="vault" itemId={item.id} onClose={onClose} />}
+      {item?.type === 'recipe'     && <RecipeDrawer key="recipe" recipeId={item.id} onClose={onClose} />}
+      {item?.type === 'ingredient' && <IngredientDrawer key="ingredient" ingredientId={item.id} onClose={onClose} />}
+      {item?.type === 'intake'     && <IntakeDrawer key="intake" logId={item.id} onClose={onClose} />}
       {!item?.type && null}
       </div>
     </div>

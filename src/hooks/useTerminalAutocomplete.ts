@@ -138,6 +138,17 @@ export function useTerminalAutocomplete(input: string) {
     enabled: isDrawerContext || isLogContext || isDeleteContext,
   });
 
+  const { data: plannerEvents = [] } = useQuery({
+    queryKey: ['terminal-events-list'],
+    queryFn: async () => {
+      const db = await getDB();
+      const res = await db.query<{ id: string; title: string }>('SELECT id, title FROM planner_entries ORDER BY date ASC, time ASC NULLS LAST, title ASC');
+      return res.rows;
+    },
+    staleTime: Infinity,
+    enabled: isDeleteContext,
+  });
+
   const { data: vaultItems = [] } = useQuery({
     queryKey: ['terminal-vault-list'],
     queryFn: async () => {
@@ -324,7 +335,7 @@ export function useTerminalAutocomplete(input: string) {
 
       // After exercise name, show exercise-specific flags
       if (parts.length >= 3 && (hasSetFlag || hasIntensityFlag || lastWord.startsWith('-'))) {
-        const exerciseFlags = ['-set1', '-set2', '-set3', '-intensity', '-t', '-a', '-m', '-c', '-p', '-stats', '-n'];
+        const exerciseFlags = ['-set1', '-set2', '-set3', '-intensity', '-t', '-a', '-m', '-complete', '-c', '-p', '-stats', '-n'];
         return exerciseFlags
           .filter(f => f.startsWith(lastWord.toLowerCase()))
           .map(f => ({ value: f, type: 'command' as const, score: 100 }));
@@ -346,10 +357,16 @@ export function useTerminalAutocomplete(input: string) {
     if (isDeleteContext) {
       // When typing "delete " or "delete s", show available types
       if (parts.length < 2 || (parts.length === 2 && parts[1])) {
-        const deleteTypes = ['skill', 'augment', 'tool', 'resource', 'note', 'course'];
+        const deleteTypes = ['event', 'skill', 'augment', 'tool', 'resource', 'note', 'course'];
         const match = deleteTypes.filter(t => t.startsWith(parts[1]?.toLowerCase() || ''));
         if (match.length > 0) {
           return match.map(t => ({ value: t, type: 'command' as const, score: 100 }));
+        }
+        if (parts[1]) {
+          return plannerEvents
+            .filter(e => startsWithMatch(e.title, parts[1]))
+            .slice(0, 8)
+            .map(e => ({ value: e.title, type: 'command' as const, score: 90 }));
         }
       }
 
@@ -418,13 +435,41 @@ export function useTerminalAutocomplete(input: string) {
           .slice(0, 8)
           .map(c => ({ value: c.name, type: 'course' as const, score: 100 }));
       }
+
+      // After "delete event", show event names
+      if (parts.length >= 2 && parts[1]?.toLowerCase() === 'event') {
+        const eventQuery = parts.slice(2).join(' ').trim();
+        if (!eventQuery) {
+          return plannerEvents.slice(0, 8).map(e => ({ value: e.title, type: 'command' as const, score: 100 }));
+        }
+        return plannerEvents
+          .filter(e => startsWithMatch(e.title, eventQuery))
+          .slice(0, 8)
+          .map(e => ({ value: e.title, type: 'command' as const, score: 100 }));
+      }
+
+      // Shortcut: delete [event name]
+      if (parts.length >= 2) {
+        const firstArg = parts[1]?.toLowerCase();
+        const isTypedDeleteMode = ['event', 'skill', 'augment', 'tool', 'resource', 'note', 'course'].includes(firstArg);
+        if (!isTypedDeleteMode) {
+          const eventQuery = parts.slice(1).join(' ').trim();
+          if (!eventQuery) {
+            return plannerEvents.slice(0, 8).map(e => ({ value: e.title, type: 'command' as const, score: 90 }));
+          }
+          return plannerEvents
+            .filter(e => startsWithMatch(e.title, eventQuery))
+            .slice(0, 8)
+            .map(e => ({ value: e.title, type: 'command' as const, score: 90 }));
+        }
+      }
     }
 
     // ADD command context - skill, augment, tool, resource, note supported
     if (firstToken === 'add') {
       // After "add ", show available types
       if (parts.length < 2 || (parts.length === 2 && parts[1])) {
-        const addTypes = ['skill', 'augment', 'tool', 'resource', 'note', 'course'];
+        const addTypes = ['event', 'skill', 'augment', 'tool', 'resource', 'note', 'course'];
         const match = addTypes.filter(t => t.startsWith(parts[1]?.toLowerCase() || ''));
         if (match.length > 0) {
           return match.map(t => ({ value: t, type: 'command' as const, score: 100 }));
@@ -535,11 +580,21 @@ export function useTerminalAutocomplete(input: string) {
             .map(f => ({ value: f, type: 'command' as const, score: 100 }));
         }
       }
+
+      // After "add event", show flag suggestions (-date, -time)
+      if (parts.length >= 2 && parts[1]?.toLowerCase() === 'event') {
+        const eventFlags = ['-date', '-time'];
+        if (lastWord.startsWith('-')) {
+          return eventFlags
+            .filter(f => f.startsWith(lastWord.toLowerCase()))
+            .map(f => ({ value: f, type: 'command' as const, score: 100 }));
+        }
+      }
     }
     
     // Default context - show commands that start with input
     return getCommandSuggestions(lastWord).slice(0, 8);
-  }, [input, exercises, workouts, skills, tools, augments, projects, notes, media, habits, courses, vaultItems, recipes, resources, ingredients]);
+  }, [input, exercises, workouts, skills, tools, augments, projects, notes, media, habits, courses, plannerEvents, vaultItems, recipes, resources, ingredients]);
 
   const currentSuggestion = suggestions[0]?.value || '';
   

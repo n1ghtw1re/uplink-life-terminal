@@ -1,7 +1,7 @@
 // src/services/terminal/commandExecutor.ts
 import { parseCommand, parseDuration } from './commandParser';
 import { AVAILABLE_COMMANDS, type CommandResult } from './types';
-import { getXPDisplayValues, awardSessionXP, getLevelFromXP } from '@/services/xpService';
+import { getXPDisplayValues, awardSessionXP, getLevelFromXP, awardBonusXP } from '@/services/xpService';
 import { getDB } from '@/lib/db';
 import { refreshAppData } from '@/lib/refreshAppData';
 import { queryClient } from '@/main';
@@ -11,6 +11,20 @@ import { todayStr, calcCheckInXP, MAX_SHIELDS } from '@/services/habitService';
 
 // Pending delete state (module-level for confirmation across calls)
 let pendingDelete: { type: string; name: string; id: string } | null = null;
+
+const MEDIA_COMPLETION_XP: Record<string, number> = {
+  book: 100,
+  comic: 50,
+  film: 40,
+  documentary: 50,
+  tv: 75,
+  album: 30,
+  game: 60,
+};
+
+function getMediaCompletionSource(type: string): string {
+  return `${type || 'media'}_complete`;
+}
 
 export async function executeCommand(input: string, context?: any): Promise<CommandResult> {
   if (!input.trim()) {
@@ -607,7 +621,7 @@ async function executeLog(args: string[], flags: Record<string, string | string[
     return {
       success: false,
       output: '',
-      error: 'Usage: log [duration] [skill|exercise] [-t tool1] [-a augment1] [-m media] [-c course] [-p project] [-stats stat:percent/...] [-n "note"]\n       log [duration] [exercise] -set1 [value] [-set2...] [-intensity N] [-n note]\nExample: log 1 hour mma, log 2h coding -t vscode, log 30m bench press -set1 200-10 -set2 200-8',
+      error: 'Usage: log [duration] [skill|exercise] [-t tool1] [-a augment1] [-m media] [-complete] [-c course] [-p project] [-stats stat:percent/...] [-n "note"]\n       log [duration] [exercise] -set1 [value] [-set2...] [-intensity N] [-m media] [-complete] [-n note]\nExample: log 1 hour mma, log 2h coding -t vscode -m Star Wars -complete, log 30m bench press -set1 200-10 -set2 200-8',
     };
   }
 
@@ -749,13 +763,15 @@ async function executeSkillLog(skill: any, duration: { minutes: number; remainin
   // Process -m (media) flag
   let mediaId = null;
   let mediaTitle = null;
+  let mediaType = null;
   const mediaFlag = flags.m || flags.media;
   if (mediaFlag) {
     const mediaName = Array.isArray(mediaFlag) ? mediaFlag[0] : mediaFlag;
-    const mediaResult = await db.query<any>(`SELECT id, title FROM media WHERE LOWER(title) = LOWER('${mediaName.replace(/'/g, "''")}')`);
+    const mediaResult = await db.query<any>(`SELECT id, title, type FROM media WHERE LOWER(title) = LOWER('${mediaName.replace(/'/g, "''")}')`);
     if (mediaResult.rows.length > 0) {
       mediaId = mediaResult.rows[0].id;
       mediaTitle = mediaResult.rows[0].title;
+      mediaType = mediaResult.rows[0].type;
     } else {
       return { success: false, output: '', error: `Media not found: ${mediaName}` };
     }
@@ -846,6 +862,34 @@ async function executeSkillLog(skill: any, duration: { minutes: number; remainin
       ${projectId ? `'${projectId}'` : 'NULL'}
     );
   `);
+
+  let mediaCompleteMessage: string | null = null;
+  const shouldCompleteMedia = mediaId && Object.prototype.hasOwnProperty.call(flags, 'complete');
+  if (shouldCompleteMedia) {
+    const completedAt = new Date().toISOString();
+    await db.query(
+      `UPDATE media SET status = 'FINISHED', completed_at = $1, completed_count = COALESCE(completed_count, 0) + 1 WHERE id = $2`,
+      [completedAt, mediaId]
+    );
+
+    const completionXP = Math.floor(MEDIA_COMPLETION_XP[String(mediaType || '')] ?? 40);
+    const completionStat = statSplit[0]?.stat;
+    if (completionStat && completionXP > 0) {
+      await awardBonusXP({
+        source: getMediaCompletionSource(String(mediaType || 'media')),
+        sourceId: String(mediaId),
+        statKey: completionStat as any,
+        amount: completionXP,
+        notes: mediaTitle || undefined,
+      });
+      mediaCompleteMessage = `${mediaTitle} completed (+${completionXP} XP)`;
+    } else {
+      mediaCompleteMessage = `${mediaTitle} completed`;
+    }
+    queryClient.invalidateQueries({ queryKey: ['media-item'] });
+    queryClient.invalidateQueries({ queryKey: ['media'] });
+    queryClient.invalidateQueries({ queryKey: ['terminal-media-list'] });
+  }
 
   // Update cache directly like QuickLogOverlay does
   if (toolIds.length > 0 && xpResult.perToolXP > 0) {
@@ -956,6 +1000,9 @@ async function executeSkillLog(skill: any, duration: { minutes: number; remainin
 
   if (mediaTitle) {
     output += `\n\nMedia: ${mediaTitle}`;
+  }
+  if (mediaCompleteMessage) {
+    output += `\nMedia Completion: ${mediaCompleteMessage}`;
   }
 
   if (courseName) {

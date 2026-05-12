@@ -1,7 +1,7 @@
 // src/services/terminal/commandExecutor.ts
 import { parseCommand, parseDuration } from './commandParser';
 import { AVAILABLE_COMMANDS, type CommandResult } from './types';
-import { getXPDisplayValues, awardSessionXP, getLevelFromXP } from '@/services/xpService';
+import { getXPDisplayValues, awardSessionXP, getLevelFromXP, awardBonusXP } from '@/services/xpService';
 import { getDB } from '@/lib/db';
 import { refreshAppData } from '@/lib/refreshAppData';
 import { queryClient } from '@/main';
@@ -11,6 +11,20 @@ import { todayStr, calcCheckInXP, MAX_SHIELDS } from '@/services/habitService';
 
 // Pending delete state (module-level for confirmation across calls)
 let pendingDelete: { type: string; name: string; id: string } | null = null;
+
+const MEDIA_COMPLETION_XP: Record<string, number> = {
+  book: 100,
+  comic: 50,
+  film: 40,
+  documentary: 50,
+  tv: 75,
+  album: 30,
+  game: 60,
+};
+
+function getMediaCompletionSource(type: string): string {
+  return `${type || 'media'}_complete`;
+}
 
 export async function executeCommand(input: string, context?: any): Promise<CommandResult> {
   if (!input.trim()) {
@@ -75,6 +89,15 @@ export async function executeCommand(input: string, context?: any): Promise<Comm
         queryClient.invalidateQueries({ queryKey: ['terminal-courses-list'] });
         return { success: true, output: `Course '${name}' deleted.` };
       }
+      if (type === 'event') {
+        await db.query(`DELETE FROM planner_exceptions WHERE entry_id = $1`, [id]);
+        await db.query(`DELETE FROM planner_entries WHERE id = $1`, [id]);
+        queryClient.invalidateQueries({ queryKey: ['planner-entries'] });
+        queryClient.invalidateQueries({ queryKey: ['planner-exceptions'] });
+        queryClient.invalidateQueries({ queryKey: ['planner'] });
+        queryClient.invalidateQueries({ queryKey: ['terminal-events-list'] });
+        return { success: true, output: `Event '${name}' deleted.` };
+      }
 
       return { success: false, output: '', error: `Unknown delete type: ${type}` };
     } catch (err: any) {
@@ -116,7 +139,7 @@ export async function executeCommand(input: string, context?: any): Promise<Comm
       case 'add':
         return executeAdd(args, flags);
       case 'delete':
-        return executeDelete(args);
+        return executeDelete(args, flags);
       default:
         return { success: false, output: '', error: `Unknown command: ${command}. Type 'help' for available commands.` };
     }
@@ -615,7 +638,7 @@ async function executeLog(args: string[], flags: Record<string, string | string[
     return {
       success: false,
       output: '',
-      error: 'Usage: log [duration] [skill|exercise] [-t tool1] [-a augment1] [-m media] [-c course] [-p project] [-stats stat:percent/...] [-n "note"]\n       log [duration] [exercise] -set1 [value] [-set2...] [-intensity N] [-n note]\nExample: log 1 hour mma, log 2h coding -t vscode, log 30m bench press -set1 200-10 -set2 200-8',
+      error: 'Usage: log [duration] [skill|exercise] [-t tool1] [-a augment1] [-m media] [-complete] [-c course] [-p project] [-stats stat:percent/...] [-n "note"]\n       log [duration] [exercise] -set1 [value] [-set2...] [-intensity N] [-m media] [-complete] [-n note]\nExample: log 1 hour mma, log 2h coding -t vscode -m Star Wars -complete, log 30m bench press -set1 200-10 -set2 200-8',
     };
   }
 
@@ -757,13 +780,15 @@ async function executeSkillLog(skill: any, duration: { minutes: number; remainin
   // Process -m (media) flag
   let mediaId = null;
   let mediaTitle = null;
+  let mediaType = null;
   const mediaFlag = flags.m || flags.media;
   if (mediaFlag) {
     const mediaName = Array.isArray(mediaFlag) ? mediaFlag[0] : mediaFlag;
-    const mediaResult = await db.query<any>(`SELECT id, title FROM media WHERE LOWER(title) = LOWER('${mediaName.replace(/'/g, "''")}')`);
+    const mediaResult = await db.query<any>(`SELECT id, title, type FROM media WHERE LOWER(title) = LOWER('${mediaName.replace(/'/g, "''")}')`);
     if (mediaResult.rows.length > 0) {
       mediaId = mediaResult.rows[0].id;
       mediaTitle = mediaResult.rows[0].title;
+      mediaType = mediaResult.rows[0].type;
     } else {
       return { success: false, output: '', error: `Media not found: ${mediaName}` };
     }
@@ -854,6 +879,34 @@ async function executeSkillLog(skill: any, duration: { minutes: number; remainin
       ${projectId ? `'${projectId}'` : 'NULL'}
     );
   `);
+
+  let mediaCompleteMessage: string | null = null;
+  const shouldCompleteMedia = mediaId && Object.prototype.hasOwnProperty.call(flags, 'complete');
+  if (shouldCompleteMedia) {
+    const completedAt = new Date().toISOString();
+    await db.query(
+      `UPDATE media SET status = 'FINISHED', completed_at = $1, completed_count = COALESCE(completed_count, 0) + 1 WHERE id = $2`,
+      [completedAt, mediaId]
+    );
+
+    const completionXP = Math.floor(MEDIA_COMPLETION_XP[String(mediaType || '')] ?? 40);
+    const completionStat = statSplit[0]?.stat;
+    if (completionStat && completionXP > 0) {
+      await awardBonusXP({
+        source: getMediaCompletionSource(String(mediaType || 'media')),
+        sourceId: String(mediaId),
+        statKey: completionStat as any,
+        amount: completionXP,
+        notes: mediaTitle || undefined,
+      });
+      mediaCompleteMessage = `${mediaTitle} completed (+${completionXP} XP)`;
+    } else {
+      mediaCompleteMessage = `${mediaTitle} completed`;
+    }
+    queryClient.invalidateQueries({ queryKey: ['media-item'] });
+    queryClient.invalidateQueries({ queryKey: ['media'] });
+    queryClient.invalidateQueries({ queryKey: ['terminal-media-list'] });
+  }
 
   // Update cache
   if (toolIds.length > 0 && xpResult.perToolXP > 0) {
@@ -964,6 +1017,9 @@ async function executeSkillLog(skill: any, duration: { minutes: number; remainin
   
   if (mediaTitle) {
     output += `\n\nMedia: ${mediaTitle}`;
+  }
+  if (mediaCompleteMessage) {
+    output += `\nMedia Completion: ${mediaCompleteMessage}`;
   }
   
   if (courseName) {
@@ -1098,13 +1154,15 @@ async function executeExerciseLog(exercise: any, duration: { minutes: number; re
   // Process -m (media) flag
   let mediaId = null;
   let mediaTitle = null;
+  let mediaType = null;
   const mediaFlag = flags.m || flags.media;
   if (mediaFlag) {
     const mediaName = Array.isArray(mediaFlag) ? mediaFlag[0] : mediaFlag;
-    const mediaResult = await db.query<any>(`SELECT id, title FROM media WHERE LOWER(title) = LOWER('${mediaName.replace(/'/g, "''")}')`);
+    const mediaResult = await db.query<any>(`SELECT id, title, type FROM media WHERE LOWER(title) = LOWER('${mediaName.replace(/'/g, "''")}')`);
     if (mediaResult.rows.length > 0) {
       mediaId = mediaResult.rows[0].id;
       mediaTitle = mediaResult.rows[0].title;
+      mediaType = mediaResult.rows[0].type;
     } else {
       return { success: false, output: '', error: `Media not found: ${mediaName}` };
     }
@@ -1217,6 +1275,34 @@ async function executeExerciseLog(exercise: any, duration: { minutes: number; re
     );
   `);
 
+  let mediaCompleteMessage: string | null = null;
+  const shouldCompleteMedia = mediaId && Object.prototype.hasOwnProperty.call(flags, 'complete');
+  if (shouldCompleteMedia) {
+    const completedAt = new Date().toISOString();
+    await db.query(
+      `UPDATE media SET status = 'FINISHED', completed_at = $1, completed_count = COALESCE(completed_count, 0) + 1 WHERE id = $2`,
+      [completedAt, mediaId]
+    );
+
+    const completionXP = Math.floor(MEDIA_COMPLETION_XP[String(mediaType || '')] ?? 40);
+    const completionStat = statSplit[0]?.stat;
+    if (completionStat && completionXP > 0) {
+      await awardBonusXP({
+        source: getMediaCompletionSource(String(mediaType || 'media')),
+        sourceId: String(mediaId),
+        statKey: completionStat as any,
+        amount: completionXP,
+        notes: mediaTitle || undefined,
+      });
+      mediaCompleteMessage = `${mediaTitle} completed (+${completionXP} XP)`;
+    } else {
+      mediaCompleteMessage = `${mediaTitle} completed`;
+    }
+    queryClient.invalidateQueries({ queryKey: ['media-item'] });
+    queryClient.invalidateQueries({ queryKey: ['media'] });
+    queryClient.invalidateQueries({ queryKey: ['terminal-media-list'] });
+  }
+
   // Update exercise XP
   const newExerciseXP = Number(exercise.xp || 0) + exerciseXP;
   const newLevel = getLevelFromXP(newExerciseXP);
@@ -1308,6 +1394,9 @@ async function executeExerciseLog(exercise: any, duration: { minutes: number; re
   
   if (mediaTitle) {
     output += `\n\nMedia: ${mediaTitle}`;
+  }
+  if (mediaCompleteMessage) {
+    output += `\nMedia Completion: ${mediaCompleteMessage}`;
   }
   
   if (courseName) {
@@ -1523,7 +1612,7 @@ async function executeAdd(args: string[], flags: Record<string, string | string[
     return {
       success: false,
       output: '',
-      error: "Usage: add skill [name] -stats [stat1:%/stat2:%] [-n note]\n       add augment [name] -type [type] [-url http://...] [-d description] [-n note]\n       add tool [name] -type [type] [-url http://...] [-d description] [-n note]\nExample: add skill sword fighting -stats body:50/flow:50 -n this is a note\nExample: add skill reading -stats mind\nExample: add augment mma -type Core Intelligence -url https://... -d fighting technique\nExample: add tool vscode -type software -url https://code.visualstudio.com -d editor"
+      error: "Usage: add event [event_name] -date mm/dd/yy [-time hh:mm AM/PM]\n       add skill [name] -stats [stat1:%/stat2:%] [-n note]\n       add augment [name] -type [type] [-url http://...] [-d description] [-n note]\n       add tool [name] -type [type] [-url http://...] [-d description] [-n note]\nExample: add event Team Sync -date 05/20/26 -time 09:30 AM\nExample: add skill sword fighting -stats body:50/flow:50 -n this is a note\nExample: add skill reading -stats mind\nExample: add augment mma -type Core Intelligence -url https://... -d fighting technique\nExample: add tool vscode -type software -url https://code.visualstudio.com -d editor"
     };
   }
 
@@ -1552,7 +1641,105 @@ async function executeAdd(args: string[], flags: Record<string, string | string[
     return executeAddCourse(args.slice(1), flags);
   }
 
-  return { success: false, output: '', error: `Unknown type: ${type}. Supported types: skill, augment, tool, resource, note, course` };
+  if (type === 'event') {
+    return executeAddEvent(args.slice(1), flags);
+  }
+
+  return { success: false, output: '', error: `Unknown type: ${type}. Supported types: event, skill, augment, tool, resource, note, course` };
+}
+
+function parseEventDateToIso(input: string): string | null {
+  const m = input.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
+  if (!m) return null;
+  const month = Number(m[1]);
+  const day = Number(m[2]);
+  const yearRaw = Number(m[3]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  const year = m[3].length === 2 ? 2000 + yearRaw : yearRaw;
+  const dt = new Date(year, month - 1, day);
+  if (dt.getFullYear() !== year || dt.getMonth() !== month - 1 || dt.getDate() !== day) return null;
+  const mm = String(month).padStart(2, '0');
+  const dd = String(day).padStart(2, '0');
+  return `${year}-${mm}-${dd}`;
+}
+
+function parseOptionalEventTimeTo24h(parts: string[]): { time: string | null; nameParts: string[] } {
+  if (parts.length < 2) return { time: null, nameParts: parts };
+  const meridiem = parts[parts.length - 1]?.toUpperCase();
+  const timeToken = parts[parts.length - 2];
+  if (!meridiem || !timeToken) return { time: null, nameParts: parts };
+  if (meridiem !== 'AM' && meridiem !== 'PM') return { time: null, nameParts: parts };
+  const t = timeToken.match(/^(\d{1,2}):(\d{2})$/);
+  if (!t) return { time: null, nameParts: parts };
+  let hh = Number(t[1]);
+  const mm = Number(t[2]);
+  if (hh < 1 || hh > 12 || mm < 0 || mm > 59) return { time: null, nameParts: parts };
+  if (meridiem === 'AM') {
+    if (hh === 12) hh = 0;
+  } else if (hh !== 12) {
+    hh += 12;
+  }
+  const hh24 = String(hh).padStart(2, '0');
+  const mm2 = String(mm).padStart(2, '0');
+  return { time: `${hh24}:${mm2}`, nameParts: parts.slice(0, -2) };
+}
+
+function parseTime12hTo24h(raw: string): string | null {
+  const parts = raw.trim().split(/\s+/);
+  const parsed = parseOptionalEventTimeTo24h(parts);
+  if (parsed.nameParts.length > 0) return null;
+  return parsed.time;
+}
+
+async function executeAddEvent(nameArgs: string[], flags: Record<string, string | string[]>): Promise<CommandResult> {
+  try {
+    const title = nameArgs.join(' ').trim();
+    if (!title) {
+      return { success: false, output: '', error: "Usage: add event [event_name] -date mm/dd/yy [-time hh:mm AM/PM]\nExample: add event Team Sync -date 05/20/26" };
+    }
+
+    const dateFlag = flags.date;
+    const dateRaw = Array.isArray(dateFlag) ? dateFlag[0] : dateFlag;
+    if (!dateRaw) {
+      return { success: false, output: '', error: "Please provide a date using -date.\nExample: add event Team Sync -date 05/20/26" };
+    }
+    const rawDate = dateRaw.trim().split(/\s+/)[0];
+    const dateIso = parseEventDateToIso(rawDate);
+    if (!dateIso) {
+      return { success: false, output: '', error: "Invalid date. Use mm/dd/yy (or mm/dd/yyyy).\nExample: add event Team Sync -date 05/20/26" };
+    }
+
+    let timeValue: string | null = null;
+    const timeFlag = flags.time;
+    if (timeFlag) {
+      const timeRaw = (Array.isArray(timeFlag) ? timeFlag[0] : timeFlag) ?? '';
+      const parsedTime = parseTime12hTo24h(timeRaw);
+      if (!parsedTime) {
+        return { success: false, output: '', error: "Invalid time. Use hh:mm AM/PM.\nExample: -time 09:30 AM" };
+      }
+      timeValue = parsedTime;
+    }
+
+    const db = await getDB();
+    const id = crypto.randomUUID();
+    await db.query(
+      `INSERT INTO planner_entries (id, title, date, time, completed, recurrence_type, recurrence_interval, recurrence_days_of_week, recurrence_end_type, recurrence_end_date, recurrence_count, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, false, 'NONE', 1, NULL, NULL, NULL, NULL, NOW(), NOW())`,
+      [id, title, dateIso, timeValue]
+    );
+
+    queryClient.invalidateQueries({ queryKey: ['planner-entries'] });
+    queryClient.invalidateQueries({ queryKey: ['planner-exceptions'] });
+    queryClient.invalidateQueries({ queryKey: ['planner'] });
+
+    return {
+      success: true,
+      output: `Event added: ${title}\nDate: ${dateIso}${timeValue ? `\nTime: ${timeValue}` : ''}\nRecurrence: NONE`,
+    };
+  } catch (err: any) {
+    console.error('[ADD EVENT] Error:', err);
+    return { success: false, output: '', error: err.message || 'Failed to add event' };
+  }
 }
 
 async function executeAddSkill(nameArgs: string[], flags: Record<string, string | string[]>): Promise<CommandResult> {
@@ -1919,9 +2106,9 @@ async function executeAddCourse(nameArgs: string[], flags: Record<string, string
   }
 }
 
-async function executeDelete(args: string[]): Promise<CommandResult> {
+async function executeDelete(args: string[], flags: Record<string, string | string[]>): Promise<CommandResult> {
   if (args.length === 0) {
-    return { success: false, output: '', error: "Usage: delete skill [name] | delete augment [name] | delete tool [name] | delete resource [name]\nExample: delete skill reading" };
+    return { success: false, output: '', error: "Usage: delete [event_name] [-date mm/dd/yy] | delete skill [name] | delete augment [name] | delete tool [name] | delete resource [name]\nExample: delete Team Sync -date 12/03/26\nExample: delete skill reading" };
   }
 
   const type = args[0]?.toLowerCase();
@@ -1950,7 +2137,56 @@ async function executeDelete(args: string[]): Promise<CommandResult> {
     return executeDeleteCourse(args.slice(1));
   }
 
-  return { success: false, output: '', error: `Unknown type: ${type}. Supported types: skill, augment, tool, resource, note, course` };
+  if (type === 'event') {
+    return executeDeleteEvent(args.slice(1), flags);
+  }
+
+  return executeDeleteEvent(args, flags);
+}
+
+async function executeDeleteEvent(nameArgs: string[], flags: Record<string, string | string[]>): Promise<CommandResult> {
+  try {
+    const name = nameArgs.join(' ').trim();
+    if (!name) {
+      return { success: false, output: '', error: "Please provide an event name.\nExample: delete Team Sync" };
+    }
+    const db = await getDB();
+
+    const dateFlag = flags.date;
+    const dateRaw = Array.isArray(dateFlag) ? dateFlag[0] : dateFlag;
+    const dateIso = dateRaw ? parseEventDateToIso(dateRaw.trim()) : null;
+    if (dateRaw && !dateIso) {
+      return { success: false, output: '', error: "Invalid -date. Use mm/dd/yy.\nExample: delete English Class -date 12/03/26" };
+    }
+
+    const res = await db.query<{ id: string; title: string; date: string; time: string | null }>(
+      `SELECT id, title, date, time
+       FROM planner_entries
+       WHERE LOWER(title) = LOWER($1) ${dateIso ? `AND date = '${dateIso}'` : ''}
+       ORDER BY date ASC, time ASC NULLS LAST, created_at ASC
+      `,
+      [name]
+    );
+
+    if (res.rows.length === 0) {
+      return { success: false, output: '', error: dateIso ? `No event '${name}' found on ${dateIso}.` : `Event '${name}' not found.` };
+    }
+
+    if (!dateIso && res.rows.length > 1) {
+      const options = res.rows.slice(0, 5).map((r) => `${r.date}${r.time ? ` ${r.time}` : ''}`).join(', ');
+      return {
+        success: false,
+        output: '',
+        error: `Multiple events found for '${name}'. Use -date to target one.\nExample: delete ${name} -date mm/dd/yy\nMatches: ${options}`,
+      };
+    }
+
+    pendingDelete = { type: 'event', name: res.rows[0].title, id: res.rows[0].id };
+    return { success: true, output: `Delete event '${res.rows[0].title}'? Type: y (yes) or n (no)` };
+  } catch (err: any) {
+    console.error('[DELETE EVENT] Error:', err);
+    return { success: false, output: '', error: err.message || 'Failed to delete event' };
+  }
 }
 
 async function executeDeleteSkill(nameArgs: string[]): Promise<CommandResult> {

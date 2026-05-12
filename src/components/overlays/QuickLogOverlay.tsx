@@ -363,7 +363,7 @@ export default function QuickLogOverlay({ open, onClose, initialTab = 'quick' }:
     queryKey: ['quick-log-media'],
     queryFn: async () => {
       const db = await getDB();
-      const r  = await db.query<{ id: string; title: string; type: string; status: string; pages: number | null; page_current: number | null }>(`SELECT id, title, type, status, pages, page_current FROM media WHERE status != 'FINISHED' ORDER BY title;`);
+      const r  = await db.query<{ id: string; title: string; type: string; status: string; pages: number | null; page_current: number | null }>(`SELECT id, title, type, status, pages, page_current FROM media ORDER BY title;`);
       return r.rows;
     },
   });
@@ -745,7 +745,7 @@ export default function QuickLogOverlay({ open, onClose, initialTab = 'quick' }:
         const updates: string[] = [];
         if (mediaPage && media.type === 'book') updates.push(`page_current = ${parseInt(mediaPage)}`);
         if (mediaFinished) {
-          updates.push(`status = 'FINISHED'`, `completed_at = '${new Date().toISOString()}'`);
+          updates.push(`status = 'FINISHED'`, `completed_at = '${new Date().toISOString()}'`, `completed_count = COALESCE(completed_count, 0) + 1`);
         }
         if (updates.length > 0) {
           await db.exec(`UPDATE media SET ${updates.join(', ')} WHERE id = '${media.id}';`);
@@ -816,6 +816,7 @@ export default function QuickLogOverlay({ open, onClose, initialTab = 'quick' }:
       }
 
         await refreshAppData(queryClient);
+        queryClient.invalidateQueries({ queryKey: ['media-item'] });
 
         toast({ title: '✓ SESSION LOGGED', description: `${skillName} — ${effectiveDuration}m` });
         onClose();

@@ -282,7 +282,7 @@ export default function OutputLogPanel({ onClose }: Props) {
     queryFn: async () => {
       const db = await getDB();
       const r = await db.query<{ id: string; title: string; type: string; status: string; pages: number | null; page_current: number | null }>(
-        `SELECT id, title, type, status, pages, page_current FROM media WHERE status != 'FINISHED' ORDER BY title;`
+        `SELECT id, title, type, status, pages, page_current FROM media ORDER BY title;`
       );
       return r.rows;
     },
@@ -571,7 +571,7 @@ export default function OutputLogPanel({ onClose }: Props) {
         const updates: string[] = [];
         if (mediaPage && media.type === 'book') updates.push(`page_current = ${parseInt(mediaPage, 10)}`);
         if (mediaFinished) {
-          updates.push(`status = 'FINISHED'`, `completed_at = '${now}'`);
+          updates.push(`status = 'FINISHED'`, `completed_at = '${now}'`, `completed_count = COALESCE(completed_count, 0) + 1`);
         }
         if (updates.length > 0) {
           await db.exec(`UPDATE media SET ${updates.join(', ')} WHERE id = '${media.id}';`);
@@ -641,6 +641,7 @@ export default function OutputLogPanel({ onClose }: Props) {
       }
 
       await refreshAppData(queryClient);
+      queryClient.invalidateQueries({ queryKey: ['media-item'] });
 
       // OUTPUT uses same style effect flow as regular skill logs.
       triggerXPFloat(window.innerWidth / 2, window.innerHeight / 2 - 60, expectedXP.exerciseXP, undefined, false);

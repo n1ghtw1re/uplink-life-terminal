@@ -84,6 +84,7 @@ export const AVAILABLE_COMMANDS: TerminalCommand[] = [
       'log 2h music production',
       'log 45m meditation',
       'log 1h reading -m Snow White',
+      'log 2h reading -m Snow White -complete',
       'log 2 hours coding -t vscode -p Uplink',
       'log 30m bench press -set1 200-10 -set2 200-8 -intensity 6',
       'log 30m cycling -set1 10',
@@ -101,9 +102,11 @@ export const AVAILABLE_COMMANDS: TerminalCommand[] = [
   },
   {
     name: 'add',
-    description: 'Add a new skill, augment, tool, resource, note, or course',
-    syntax: 'add skill [name] -stats [.../...] [-n note] | add course [name] -stats [.../...] | add augment|tool|resource [name] -type [type] [-url ...] [-d desc] [-n note] | add note [name] -content [content]',
+    description: 'Add a new skill, augment, tool, resource, note, course, or planner event',
+    syntax: 'add event [event_name] -date mm/dd/yy [-time hh:mm AM/PM] | add skill [name] -stats [.../...] [-n note] | add course [name] -stats [.../...] | add augment|tool|resource [name] -type [type] [-url ...] [-d desc] [-n note] | add note [name] -content [content]',
     examples: [
+      'add event Team Sync -date 05/20/26 -time 09:30 AM',
+      'add event Team Sync -date 05/20/26',
       'add skill sword fighting -stats body:50/flow:50 -n this is a note',
       'add skill reading -stats mind',
       'add course python -stats mind:50/flow:50',
@@ -115,9 +118,11 @@ export const AVAILABLE_COMMANDS: TerminalCommand[] = [
   },
   {
     name: 'delete',
-    description: 'Delete a skill, augment, tool, resource, note, or course (with confirmation)',
-    syntax: 'delete skill|augment|tool|resource|note|course [name]',
+    description: 'Delete an event, skill, augment, tool, resource, note, or course (with confirmation)',
+    syntax: 'delete [event_name] [-date mm/dd/yy] | delete skill|augment|tool|resource|note|course [name]',
     examples: [
+      'delete English Class -date 12/03/26',
+      'delete Team Sync',
       'delete skill reading',
       'delete augment mma',
       'delete tool vscode',
