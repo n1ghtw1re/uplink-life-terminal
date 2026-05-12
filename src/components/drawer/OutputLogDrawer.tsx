@@ -8,6 +8,13 @@ const mono = "'IBM Plex Mono', monospace";
 const acc = 'hsl(var(--accent))';
 const adim = 'hsl(var(--accent-dim))';
 const dim = 'hsl(var(--text-dim))';
+const formatTotalTime = (minutes: number) => {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h > 0 && m > 0) return `${h}h ${m}m`;
+  if (h > 0) return `${h}h`;
+  return `${m}m`;
+};
 
 interface Props {
   outputLogId: string;
@@ -94,6 +101,10 @@ export default function OutputLogDrawer({ outputLogId, onClose }: Props) {
             <div style={{ fontSize: 9, color: adim, letterSpacing: 2, marginBottom: 6 }}>// SUMMARY</div>
             <div style={{ fontSize: 10, color: dim, marginBottom: 3 }}>Duration: <span style={{ color: acc }}>{log.duration_minutes}m</span></div>
             <div style={{ fontSize: 10, color: dim, marginBottom: 3 }}>Intensity: <span style={{ color: acc }}>{log.intensity}/10</span></div>
+            <div style={{ margin: '8px 0 10px', border: `1px solid ${adim}`, padding: '6px 8px' }}>
+              <div style={{ fontSize: 8, color: adim, letterSpacing: 1 }}>TOTAL TIME</div>
+              <div style={{ fontSize: 20, color: acc }}>{formatTotalTime(Number(log.duration_minutes ?? 0))}</div>
+            </div>
             <div style={{ fontSize: 10, color: dim, marginBottom: 10 }}>
               Stats: <span style={{ color: acc }}>
                 {statSplit.map((s: any) => `${STAT_META[s.stat as StatKey]?.name ?? s.stat} ${s.percent}%`).join(' / ')}

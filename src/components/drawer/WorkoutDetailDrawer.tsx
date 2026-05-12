@@ -15,6 +15,13 @@ const acc = 'hsl(var(--accent))';
 const adim = 'hsl(var(--accent-dim))';
 const dim = 'hsl(var(--text-dim))';
 const bgS = 'hsl(var(--bg-secondary))';
+const formatTotalTime = (minutes: number) => {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h > 0 && m > 0) return `${h}h ${m}m`;
+  if (h > 0) return `${h}h`;
+  return `${m}m`;
+};
 
 function AutoSearch<T extends { id: string; name: string; sub?: string }>({
   placeholder, onSelect, items, selectedIds = [], color = acc,
@@ -99,6 +106,21 @@ export default function WorkoutDetailDrawer({ workoutId, onClose }: Props) {
     },
   });
 
+  const { data: totalMinutes = 0 } = useQuery({
+    queryKey: ['workout-total-minutes', workoutId],
+    enabled: !!workoutId,
+    queryFn: async () => {
+      const db = await getDB();
+      const res = await db.query<{ total_minutes: number }>(
+        `SELECT COALESCE(SUM(duration_minutes), 0)::int AS total_minutes
+         FROM output_logs
+         WHERE target_type = 'workout' AND target_id = $1;`,
+        [workoutId]
+      );
+      return Number(res.rows[0]?.total_minutes ?? 0);
+    },
+  });
+
   const saveMutation = useMutation({
     mutationFn: async () => {
       const db = await getDB();
@@ -173,6 +195,10 @@ export default function WorkoutDetailDrawer({ workoutId, onClose }: Props) {
         <div style={{ fontSize: 10, color: dim }}>{category?.label ?? workout.category_id} | {entries.length} entries</div>
         <div style={{ fontSize: 10, color: adim, marginTop: 6 }}>
           COMPLETIONS {workout.completed_count ?? 0} | {STAT_META[workout.primary_stat as StatKey].name} {workout.primary_pct}% / {STAT_META[workout.secondary_stat as StatKey].name} {workout.secondary_pct}%
+        </div>
+        <div style={{ marginTop: 8, border: `1px solid ${adim}`, background: bgS, padding: '6px 8px' }}>
+          <div style={{ fontSize: 8, color: adim, letterSpacing: 1 }}>TOTAL TIME</div>
+          <div style={{ fontSize: 20, color: acc }}>{formatTotalTime(totalMinutes)}</div>
         </div>
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '12px 20px' }}>

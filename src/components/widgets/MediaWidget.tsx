@@ -204,7 +204,6 @@ const MediaWidget = ({ onClose, onFullscreen, isFullscreen, onMediaClick, onOpen
                     {m.linked_stat.toUpperCase()}
                   </span>
                 )}
-                {m.is_legacy && <span style={{ color: 'hsl(var(--text-dim))', marginLeft: 4, fontSize: 9 }}>[L]</span>}
                 <span style={{ color: 'hsl(var(--success))', marginLeft: 4 }}>✓</span>
               </div>
             ))}

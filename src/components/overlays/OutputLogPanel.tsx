@@ -2,7 +2,7 @@ import { useMemo, useState, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getDB } from '@/lib/db';
 import { toast } from '@/hooks/use-toast';
-import { XP_PER_MINUTE, LEGACY_RATE, SKILL_SHARE, STAT_SHARE, MASTER_SHARE, getLevelFromXP, awardBonusXP } from '@/services/xpService';
+import { XP_PER_MINUTE, SKILL_SHARE, STAT_SHARE, MASTER_SHARE, getLevelFromXP, awardBonusXP } from '@/services/xpService';
 import { STAT_META, StatKey } from '@/types';
 import { triggerXPFloat } from '@/components/effects/XPFloatLayer';
 import { triggerLevelUp } from '@/components/effects/LevelUpAnimation';
@@ -146,7 +146,6 @@ export default function OutputLogPanel({ onClose }: Props) {
   const [useCustomDuration, setUseCustomDuration] = useState(false);
   const [customDuration, setCustomDuration] = useState('');
   const [intensity, setIntensity] = useState(5);
-  const [isLegacy, setIsLegacy] = useState(false);
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
@@ -348,7 +347,7 @@ export default function OutputLogPanel({ onClose }: Props) {
   }, [targetId, targetType, exercises, workoutEntries]);
 
   const expectedXP = useMemo(() => {
-    const factor = isLegacy ? LEGACY_RATE : 1;
+    const factor = 1;
     const effectiveDuration = useCustomDuration ? (parseInt(customDuration, 10) || 0) : duration;
     const base = Math.floor(effectiveDuration * XP_PER_MINUTE * factor * (intensity / 5));
     return {
@@ -356,7 +355,7 @@ export default function OutputLogPanel({ onClose }: Props) {
       statXP: Math.floor(base * STAT_SHARE),
       masterXP: Math.floor(base * MASTER_SHARE),
     };
-  }, [duration, useCustomDuration, customDuration, intensity, isLegacy]);
+  }, [duration, useCustomDuration, customDuration, intensity]);
 
   const loadDefaultSplit = (item: any) => {
     if (!item) return;
@@ -461,7 +460,7 @@ export default function OutputLogPanel({ onClose }: Props) {
         return;
       }
 
-      const factor = isLegacy ? LEGACY_RATE : 1;
+      const factor = 1;
       const baseXP = Math.floor(effectiveDuration * XP_PER_MINUTE * factor * (intensity / 5));
       const toolIds = tools.map(t => t.id);
       const augIds = augments.map(a => a.id);
@@ -471,7 +470,7 @@ export default function OutputLogPanel({ onClose }: Props) {
       await db.query(
         `INSERT INTO output_logs (id, target_type, target_id, duration_minutes, intensity, stat_split, notes, is_legacy, created_at, tool_ids, total_tool_xp, augment_ids, total_augment_xp, course_id, media_id, project_id)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16);`,
-        [logId, targetType, targetId, effectiveDuration, intensity, JSON.stringify(statSplit), notes.trim() || null, isLegacy, now, JSON.stringify(toolIds), perToolXP * toolIds.length, JSON.stringify(augIds), perAugXP * augIds.length, course?.id ?? null, media?.id ?? null, project?.id ?? null]
+        [logId, targetType, targetId, effectiveDuration, intensity, JSON.stringify(statSplit), notes.trim() || null, false, now, JSON.stringify(toolIds), perToolXP * toolIds.length, JSON.stringify(augIds), perAugXP * augIds.length, course?.id ?? null, media?.id ?? null, project?.id ?? null]
       );
 
       const allocations: Array<{ exerciseId: string; xp: number; details: any }> = [];
@@ -579,13 +578,13 @@ export default function OutputLogPanel({ onClose }: Props) {
         }
         if (mediaFinished && statSplit.length > 0) {
           const MEDIA_BONUS: Record<string, number> = { book: 100, comic: 50, film: 40, documentary: 50, tv: 75, album: 30, game: 60 };
-          const bonus = Math.floor((MEDIA_BONUS[media.type] ?? 40) * (isLegacy ? LEGACY_RATE : 1));
+          const bonus = Math.floor(MEDIA_BONUS[media.type] ?? 40);
           await awardBonusXP({ source: `${media.type}_complete`, sourceId: media.id, statKey: statSplit[0].stat, amount: bonus, notes: media.title });
         }
       }
 
       if (course && completedSections.length > 0) {
-        const sectionBonus = Math.floor(100 * (isLegacy ? LEGACY_RATE : 1));
+        const sectionBonus = 100;
         const hasLinkedSkill = !!course.linked_skill_id;
         const coursePrimaryStat = course.linked_stats?.[0];
         
@@ -616,7 +615,7 @@ export default function OutputLogPanel({ onClose }: Props) {
       
       if (course && markCourseComplete) {
         await db.exec(`UPDATE courses SET status = 'COMPLETE', progress = 100, completed_at = '${now}' WHERE id = '${course.id}';`);
-        const courseBonus = Math.floor(100 * (isLegacy ? LEGACY_RATE : 1));
+        const courseBonus = 100;
         const hasLinkedSkill = !!course.linked_skill_id;
         const coursePrimaryStat = course.linked_stats?.[0];
         
@@ -964,9 +963,6 @@ export default function OutputLogPanel({ onClose }: Props) {
           <div style={{ fontSize: 9, color: dim, marginBottom: 4 }}>{STAT_META[primaryStat].name} {primaryPct}% / {STAT_META[secondaryStat].name} {100 - primaryPct}%</div>
           <input type="range" min={10} max={90} step={5} value={primaryPct} onChange={e => setPrimaryPct(Number(e.target.value))} style={{ width: '100%' }} />
         </div>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 9, color: isLegacy ? '#ffaa00' : adim }}>
-          <input type="checkbox" checked={isLegacy} onChange={e => setIsLegacy(e.target.checked)} /> LEGACY (50%)
-        </label>
         <div style={{ fontSize: 9, color: dim, lineHeight: 1.6 }}>
           Workout rule: workout gets no XP. Exercise share is split across workout entries. Duplicate entries count separately.
         </div>

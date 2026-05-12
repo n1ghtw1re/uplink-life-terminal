@@ -166,22 +166,22 @@ function TagSection({ label, color, hasItems, children }: { label: string; color
 }
 
 // ── XP Preview panel ──────────────────────────────────────────
-function XPPreview({ duration, statSplit, toolIds, augIds, isLegacy, toolNames, augNames, media, mediaFinished, course, completedSections, markCourseComplete }: {
+function XPPreview({ duration, statSplit, toolIds, augIds, toolNames, augNames, media, mediaFinished, course, completedSections, markCourseComplete }: {
   duration: number; statSplit: { stat: string; percent: number }[];
-  toolIds: string[]; augIds: string[]; isLegacy: boolean;
+  toolIds: string[]; augIds: string[];
   toolNames: Record<string, string>; augNames: Record<string, string>;
   media?: TaggedMedia | null; mediaFinished?: boolean;
   course?: TaggedCourse | null; completedSections?: string[]; markCourseComplete?: boolean;
 }) {
   if (!duration || statSplit.length === 0) return null;
-  const p = previewXP({ durationMinutes: duration, statSplit, toolIds, augmentIds: augIds, isLegacy });
+  const p = previewXP({ durationMinutes: duration, statSplit, toolIds, augmentIds: augIds });
 
   const MEDIA_BONUS: Record<string, number> = { book: 100, comic: 50, film: 40, documentary: 50, tv: 75, album: 30, game: 60 };
-  const mediaBonus = media && mediaFinished ? Math.floor((MEDIA_BONUS[media.type] ?? 40) * (isLegacy ? 0.5 : 1)) : 0;
+  const mediaBonus = media && mediaFinished ? Math.floor(MEDIA_BONUS[media.type] ?? 40) : 0;
   
   const sectionCount = completedSections?.length ?? 0;
   const hasLinkedSkill = !!course?.linked_skill_id;
-  const basePerModule = Math.floor(100 * (isLegacy ? 0.5 : 1));
+  const basePerModule = 100;
   const coursePrimaryStat = course?.linked_stats?.[0];
   
   const sectionSkill = hasLinkedSkill ? Math.floor(basePerModule * 0.5) : 0;
@@ -297,7 +297,6 @@ function XPPreview({ duration, statSplit, toolIds, augIds, isLegacy, toolNames, 
         </div>
       )}
 
-      {isLegacy && <div style={{ fontSize: 9, color: '#ffaa00', marginTop: 6, letterSpacing: 1 }}>⚑ LEGACY — 50% XP</div>}
     </div>
   );
 }
@@ -321,7 +320,6 @@ export default function QuickLogOverlay({ open, onClose, initialTab = 'quick' }:
   const [useCustom, setUseCustom]     = useState(false);
   const [statSplit, setStatSplit]     = useState<{ stat: StatKey; percent: number }[]>([]);
   const [notes, setNotes]             = useState('');
-  const [isLegacy, setIsLegacy]       = useState(false);
   const [logDate, setLogDate]         = useState('');
   const [submitting, setSubmitting]   = useState(false);
   const submitLock = React.useRef(false);
@@ -422,7 +420,7 @@ export default function QuickLogOverlay({ open, onClose, initialTab = 'quick' }:
     if (!open) return;
     setStatFilter(null); setSkillId(''); setSkillName(''); setSkillStatKeys([]); setSessionStatKeys([]); setSkillDefaultSplit([100]);
     setDuration(60); setCustomDuration(''); setUseCustom(false); setStatSplit([]);
-    setNotes(''); setIsLegacy(false); setLogDate('');
+    setNotes(''); setLogDate('');
     setTools([]); setAugments([]); setMedia(null); setMediaPage(''); setMediaFinished(false);
     setCourse(null); setCompletedSections([]); setMarkCourseComplete(false);
     setProject(null); setCompletedObjectives([]);
@@ -521,7 +519,6 @@ export default function QuickLogOverlay({ open, onClose, initialTab = 'quick' }:
     setUseCustom(false);
     setCustomDuration('');
     setNotes(tpl.notes ?? '');
-    setIsLegacy(Boolean(tpl.is_legacy));
     // Reset date to empty so it defaults to current time on submit
     setLogDate('');
 
@@ -639,7 +636,7 @@ export default function QuickLogOverlay({ open, onClose, initialTab = 'quick' }:
       const augIds    = augments.map(a => a.id);
 
       // Calculate XP first so we can store it in the session record
-      const factor    = isLegacy ? 0.5 : 1.0;
+      const factor    = 1.0;
       const base      = effectiveDuration * 10 * factor;
       const skillXP   = Math.floor(base * 0.5);
       const masterXP  = Math.floor(base * 0.25);
@@ -654,14 +651,14 @@ export default function QuickLogOverlay({ open, onClose, initialTab = 'quick' }:
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
         [sessionId, skillId, skillName, effectiveDuration,
          JSON.stringify(statSplit), notes.trim() || null,
-         isLegacy, loggedAt, skillXP, masterXP,
+         false, loggedAt, skillXP, masterXP,
          JSON.stringify(toolIds), perToolXP * toolIds.length,
          JSON.stringify(augIds), perAugXP * augIds.length,
          media?.id ?? null, course?.id ?? null, project?.id ?? null]
       );
 
       // Award XP
-      const xpResult = await awardSessionXP({ sessionId, skillId, skillName, durationMinutes: effectiveDuration, statSplit, toolIds, augmentIds: augIds, isLegacy });
+      const xpResult = await awardSessionXP({ sessionId, skillId, skillName, durationMinutes: effectiveDuration, statSplit, toolIds, augmentIds: augIds });
 
       if (toolIds.length > 0 && xpResult.perToolXP > 0) {
         queryClient.setQueryData(['tools'], (prev: any[] | undefined) =>
@@ -755,14 +752,14 @@ export default function QuickLogOverlay({ open, onClose, initialTab = 'quick' }:
         }
         if (mediaFinished && statSplit.length > 0) {
           const MEDIA_BONUS: Record<string, number> = { book: 100, comic: 50, film: 40, documentary: 50, tv: 75, album: 30, game: 60 };
-          const bonus = Math.floor((MEDIA_BONUS[media.type] ?? 40) * (isLegacy ? 0.5 : 1));
+          const bonus = Math.floor(MEDIA_BONUS[media.type] ?? 40);
           await awardBonusXP({ source: `${media.type}_complete`, sourceId: media.id, statKey: statSplit[0].stat, amount: bonus, notes: media.title });
         }
       }
 
       // Course section completions
       if (course && completedSections.length > 0) {
-        const sectionBonus = Math.floor(100 * (isLegacy ? 0.5 : 1));
+        const sectionBonus = 100;
         const hasLinkedSkill = !!course.linked_skill_id;
         const coursePrimaryStat = course.linked_stats?.[0];
         
@@ -792,7 +789,7 @@ export default function QuickLogOverlay({ open, onClose, initialTab = 'quick' }:
       }
       if (course && markCourseComplete) {
         await db.exec(`UPDATE courses SET status = 'COMPLETE', progress = 100, completed_at = '${new Date().toISOString()}' WHERE id = '${course.id}';`);
-        const courseBonus = Math.floor(100 * (isLegacy ? 0.5 : 1));
+        const courseBonus = 100;
         const hasLinkedSkill = !!course.linked_skill_id;
         const coursePrimaryStat = course.linked_stats?.[0];
         
@@ -1025,10 +1022,6 @@ export default function QuickLogOverlay({ open, onClose, initialTab = 'quick' }:
 
               {/* Options */}
               <div style={{ marginBottom: 14, display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 9, color: isLegacy ? '#ffaa00' : adim, letterSpacing: 1 }}>
-                  <span onClick={() => setIsLegacy(v => !v)} style={{ width: 13, height: 13, border: `1px solid ${isLegacy ? '#ffaa00' : adim}`, background: isLegacy ? 'rgba(255,170,0,0.15)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, flexShrink: 0 }}>{isLegacy ? '✓' : ''}</span>
-                  LEGACY ENTRY (50% XP)
-                </label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ fontSize: 9, color: adim, letterSpacing: 1 }}>DATE:</span>
                   <input type="date" value={logDate} onChange={e => setLogDate(e.target.value)}
@@ -1267,7 +1260,6 @@ export default function QuickLogOverlay({ open, onClose, initialTab = 'quick' }:
                 statSplit={statSplit}
                 toolIds={tools.map(t => t.id)}
                 augIds={augments.map(a => a.id)}
-                isLegacy={isLegacy}
                 toolNames={toolNames}
                 augNames={augNames}
                 media={media}

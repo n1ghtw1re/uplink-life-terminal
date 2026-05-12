@@ -92,7 +92,6 @@ const { data: courses } = useQuery({
                 marginLeft: 'auto',
               }}>
                 {c.status}{c.status === 'COMPLETE' ? ' ✓' : ''}
-                {c.is_legacy && <span style={{ color: 'hsl(var(--text-dim))', marginLeft: 4 }}>[L]</span>}
               </span>
             </div>
           </div>

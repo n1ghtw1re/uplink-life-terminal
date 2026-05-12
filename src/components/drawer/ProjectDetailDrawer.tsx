@@ -16,6 +16,13 @@ const dim   = 'hsl(var(--text-dim))';
 const bgS   = 'hsl(var(--bg-secondary))';
 const bgT   = 'hsl(var(--bg-tertiary))';
 const green = '#44ff88';
+const formatTotalTime = (minutes: number) => {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h > 0 && m > 0) return `${h}h ${m}m`;
+  if (h > 0) return `${h}h`;
+  return `${m}m`;
+};
 
 const PROJECT_TYPES    = ['software','creative','business','research','physical','educational','other'];
 const PROJECT_STATUSES = ['ACTIVE','PAUSED','COMPLETE','ARCHIVED'];
@@ -221,6 +228,19 @@ export default function ProjectDetailDrawer({ projectId, onClose }: Props) {
     },
   });
 
+  const { data: totalMinutes = 0 } = useQuery({
+    queryKey: ['project-total-minutes', projectId],
+    enabled: !!projectId,
+    queryFn: async () => {
+      const db = await getDB();
+      const res = await db.query<{ total_minutes: number }>(
+        `SELECT COALESCE(SUM(duration_minutes), 0)::int AS total_minutes FROM sessions WHERE project_id = $1;`,
+        [projectId]
+      );
+      return Number(res.rows[0]?.total_minutes ?? 0);
+    },
+  });
+
   const addObjective = useMutation({
     mutationFn: async () => {
       if (!newObjTitle.trim()) return;
@@ -344,6 +364,10 @@ export default function ProjectDetailDrawer({ projectId, onClose }: Props) {
             <span style={{ fontSize: 9, color: dim }}>{doneCount}/{totalCount}</span>
           </div>
         )}
+        <div style={{ marginTop: 8, border: `1px solid ${adim}`, background: bgS, padding: '6px 8px' }}>
+          <div style={{ fontSize: 8, color: adim, letterSpacing: 1 }}>TOTAL TIME</div>
+          <div style={{ fontFamily: vt, fontSize: 20, color: acc }}>{formatTotalTime(totalMinutes)}</div>
+        </div>
       </div>
 
       {/* Scrollable body */}

@@ -61,7 +61,6 @@ export default function AddMediaModal({ onClose, defaultType = 'book' }: Props) 
 
   const [rating, setRating]     = useState<number>(0);
   const [notes, setNotes]       = useState('');
-  const [isLegacy, setIsLegacy] = useState(false);
   const [saving, setSaving]     = useState(false);
 
   // Type-specific meta fields
@@ -110,7 +109,7 @@ export default function AddMediaModal({ onClose, defaultType = 'book' }: Props) 
           linked_stat:  linkedStat || null,
           rating:       rating || null,
           notes:        notes.trim() || null,
-          is_legacy:    isLegacy,
+          is_legacy:    false,
           completed_at: status === 'FINISHED' ? new Date().toISOString() : null,
           pages:         type === 'book' ? (pages ? parseInt(pages) : null) : null,
           page_current:  type === 'book' ? (pageCurrent ? parseInt(pageCurrent) : null) : null,
@@ -134,9 +133,8 @@ export default function AddMediaModal({ onClose, defaultType = 'book' }: Props) 
       if (error) throw error;
 
       // Award bonus XP to stat + master only on completion
-      // Legacy items get 50% of the bonus
       if (status === 'FINISHED' && linkedStat) {
-        const baseXP  = Math.floor(XP_ON_COMPLETE[type] * (isLegacy ? 0.5 : 1.0));
+        const baseXP  = Math.floor(XP_ON_COMPLETE[type]);
         const { awardBonusXP } = await import('@/services/xpService');
         await awardBonusXP({
           source:   `${type}_complete`,
@@ -502,27 +500,8 @@ export default function AddMediaModal({ onClose, defaultType = 'book' }: Props) 
         </div>
       )}
 
-      {/* ── Legacy + XP preview ── */}
+      {/* ── XP preview ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-        <div
-          style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer' }}
-          onClick={() => setIsLegacy(!isLegacy)}
-        >
-          <span style={{
-            width: 13, height: 13,
-            border: `1px solid ${isLegacy ? 'hsl(var(--accent))' : 'hsl(var(--accent-dim))'}`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 10, color: 'hsl(var(--accent))',
-            background: isLegacy ? 'rgba(255,176,0,0.1)' : 'transparent',
-            flexShrink: 0,
-          }}>
-            {isLegacy ? '×' : ''}
-          </span>
-          <span style={{ color: isLegacy ? 'hsl(var(--accent))' : 'hsl(var(--text-dim))', fontSize: 10 }}>
-            LEGACY ENTRY
-          </span>
-        </div>
-
         {isComplete && (
           <div style={{
             marginLeft: 'auto',
@@ -531,7 +510,7 @@ export default function AddMediaModal({ onClose, defaultType = 'book' }: Props) 
             border: '1px solid hsl(var(--accent-dim))',
             padding: '3px 10px',
           }}>
-            +{isLegacy ? Math.floor(xp * 0.7) : xp} XP on save
+            +{xp} XP on save
           </div>
         )}
       </div>

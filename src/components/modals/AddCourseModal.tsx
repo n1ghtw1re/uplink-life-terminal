@@ -211,7 +211,6 @@ export default function AddCourseModal({ onClose }: Props) {
   const [url, setUrl]           = useState('');
   const [notes, setNotes]       = useState('');
   const [certEarned, setCertEarned] = useState(false);
-  const [isLegacy, setIsLegacy]     = useState(false);
   const [isOngoing, setIsOngoing]   = useState(false);
   const [saving, setSaving]         = useState(false);
 
@@ -276,9 +275,9 @@ export default function AddCourseModal({ onClose }: Props) {
           JSON.stringify(linkedToolIds),
           JSON.stringify(linkedAugmentIds),
           JSON.stringify(linkedMediaIds),
-          isLegacy ? 'COMPLETE' : 'ACTIVE',
-          isLegacy ? 100 : 0,
-          certEarned, isLegacy, isOngoing, now,
+          'ACTIVE',
+          0,
+          certEarned, false, isOngoing, now,
         ]
       );
 
@@ -499,7 +498,6 @@ export default function AddCourseModal({ onClose }: Props) {
         {([
           [certEarned, () => setCertEarned(!certEarned), 'CERTIFICATE EARNED'],
           [isOngoing,  () => setIsOngoing(!isOngoing),    'ONGOING COURSE (no finish XP)'],
-          [isLegacy,   () => setIsLegacy(!isLegacy),     'LEGACY ENTRY'],
         ] as [boolean, () => void, string][]).map(([val, toggle, label]) => (
           <div
             key={label}
@@ -522,18 +520,6 @@ export default function AddCourseModal({ onClose }: Props) {
           </div>
         ))}
       </div>
-
-      {isLegacy && (
-        <div style={{
-          background: 'rgba(255,176,0,0.04)',
-          border: '1px solid hsl(var(--accent-dim))',
-          padding: '7px 10px',
-          fontSize: 10,
-          color: 'hsl(var(--text-dim))',
-        }}>
-          Legacy entries are marked COMPLETE and award reduced XP. Does not affect streaks.
-        </div>
-      )}
 
       {/* Notes */}
       <div>

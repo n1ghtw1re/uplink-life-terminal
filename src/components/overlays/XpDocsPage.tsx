@@ -240,7 +240,7 @@ export default function XpDocsPage({ onClose }: Props) {
                 <BodyText>When you add Media or a Course, a progress bar appears.</BodyText>
                 <BodyText>Completion Bonus: finishing media grants a significant Main XP boost.</BodyText>
                 <BodyText>Tiered Rewards: books grant the highest bonus, followed by films and albums, with TV shows granting the least.</BodyText>
-                <BodyText>Legacy Logging: marking something as LEGACY grants 50% of the total XP immediately to backfill your history.</BodyText>
+                <BodyText>Logging awards full XP based on duration, stat split, and linked items.</BodyText>
               </div>
             </div>
 

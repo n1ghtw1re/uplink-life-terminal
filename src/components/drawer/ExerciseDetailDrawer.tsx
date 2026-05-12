@@ -17,6 +17,14 @@ const acc = 'hsl(var(--accent))';
 const adim = 'hsl(var(--accent-dim))';
 const dim = 'hsl(var(--text-dim))';
 const bgTer = 'hsl(var(--bg-tertiary))';
+const bgSec = 'hsl(var(--bg-secondary))';
+const formatTotalTime = (minutes: number) => {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h > 0 && m > 0) return `${h}h ${m}m`;
+  if (h > 0) return `${h}h`;
+  return `${m}m`;
+};
 
 function XPBar({ value, max }: { value: number; max: number }) {
   const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
@@ -68,6 +76,22 @@ export default function ExerciseDetailDrawer({ exerciseId, onClose }: Props) {
         [exerciseId]
       );
       return res.rows;
+    },
+  });
+
+  const { data: totalMinutes = 0 } = useQuery({
+    queryKey: ['exercise-total-minutes', exerciseId],
+    enabled: !!exerciseId,
+    queryFn: async () => {
+      const db = await getDB();
+      const res = await db.query<{ total_minutes: number }>(
+        `SELECT COALESCE(SUM(ol.duration_minutes), 0)::int AS total_minutes
+         FROM output_log_exercises ole
+         JOIN output_logs ol ON ol.id = ole.output_log_id
+         WHERE ole.exercise_id = $1;`,
+        [exerciseId]
+      );
+      return Number(res.rows[0]?.total_minutes ?? 0);
     },
   });
 
@@ -139,6 +163,10 @@ export default function ExerciseDetailDrawer({ exerciseId, onClose }: Props) {
         </div>
         <div style={{ fontSize: 9, color: adim, marginTop: 4 }}>
           {xpDisplay.totalXP.toLocaleString()} / {xpDisplay.totalXPToNextLevel.toLocaleString()} XP to LVL {level.level + 1}
+        </div>
+        <div style={{ marginTop: 8, border: `1px solid ${adim}`, background: bgSec, padding: '6px 8px' }}>
+          <div style={{ fontSize: 8, color: adim, letterSpacing: 1 }}>TOTAL TIME</div>
+          <div style={{ fontFamily: vt, fontSize: 18, color: acc }}>{formatTotalTime(totalMinutes)}</div>
         </div>
         <div style={{ fontSize: 10, color: adim, marginTop: 6 }}>
           {STAT_META[exercise.primary_stat as StatKey].name} {exercise.primary_pct}% / {STAT_META[exercise.secondary_stat as StatKey].name} {exercise.secondary_pct}%

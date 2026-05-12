@@ -52,6 +52,13 @@ const bgSec = 'hsl(var(--bg-secondary))';
 const bgTer = 'hsl(var(--bg-tertiary))';
 const green = '#44ff88';
 const STAT_KEYS: StatKey[] = ['body', 'wire', 'mind', 'cool', 'grit', 'flow', 'ghost'];
+const formatTotalTime = (minutes: number) => {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h > 0 && m > 0) return `${h}h ${m}m`;
+  if (h > 0) return `${h}h`;
+  return `${m}m`;
+};
 
 function SectionLabel({ label }: { label: string }) {
   return (
@@ -150,6 +157,19 @@ export default function SkillDetailDrawer({ skillId, onClose, onOpenLog }: Props
         [skillId]
       );
       return res.rows;
+    },
+  });
+
+  const { data: totalMinutes = 0 } = useQuery({
+    queryKey: ['skill-total-minutes', skillId],
+    enabled: !!skillId,
+    queryFn: async () => {
+      const db = await getDB();
+      const res = await db.query<{ total_minutes: number }>(
+        `SELECT COALESCE(SUM(duration_minutes), 0)::int AS total_minutes FROM sessions WHERE skill_id = $1;`,
+        [skillId]
+      );
+      return Number(res.rows[0]?.total_minutes ?? 0);
     },
   });
 
@@ -307,6 +327,10 @@ export default function SkillDetailDrawer({ skillId, onClose, onOpenLog }: Props
         </div>
         <div style={{ fontSize: 9, color: accentDim }}>
           {getXPDisplayValues(skill.xp).totalXP.toLocaleString()} / {getXPDisplayValues(skill.xp).totalXPToNextLevel.toLocaleString()} XP to LVL {skill.level + 1}
+        </div>
+        <div style={{ marginTop: 8, border: `1px solid ${accentDim}`, background: bgSec, padding: '6px 8px' }}>
+          <div style={{ fontSize: 8, color: accentDim, letterSpacing: 1 }}>TOTAL TIME</div>
+          <div style={{ fontFamily: vt, fontSize: 18, color: accent }}>{formatTotalTime(totalMinutes)}</div>
         </div>
       </div>
 

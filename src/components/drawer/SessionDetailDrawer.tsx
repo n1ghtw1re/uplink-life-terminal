@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getDB } from '@/lib/db';
 import { refreshAppData } from '@/lib/refreshAppData';
-import { getLevelFromXP, XP_PER_MINUTE, LEGACY_RATE, SKILL_SHARE, STAT_SHARE, MASTER_SHARE } from '@/services/xpService';
+import { getLevelFromXP, XP_PER_MINUTE, SKILL_SHARE, STAT_SHARE, MASTER_SHARE } from '@/services/xpService';
 
 const mono = "'IBM Plex Mono', monospace";
 const vt = "'VT323', monospace";
@@ -209,10 +209,9 @@ async function awardNewSessionXP(
   db: Awaited<ReturnType<typeof getDB>>,
   session: SessionData,
   newDuration: number,
-  newNotes: string | null,
-  newLegacy: boolean
+  newNotes: string | null
 ) {
-  const factor = newLegacy ? LEGACY_RATE : 1.0;
+  const factor = 1.0;
   const base = newDuration * XP_PER_MINUTE * factor;
   const skillXP = Math.floor(base * SKILL_SHARE);
   const statBase = Math.floor(base * STAT_SHARE);
@@ -266,7 +265,7 @@ async function awardNewSessionXP(
     `UPDATE sessions SET duration_minutes=$1, skill_xp=$2, master_xp=$3,
      total_tool_xp=$4, total_augment_xp=$5, notes=$6, is_legacy=$7
      WHERE id=$8`,
-    [newDuration, skillXP, masterXP, totalToolXP, totalAugXP, newNotes, newLegacy, session.id]
+    [newDuration, skillXP, masterXP, totalToolXP, totalAugXP, newNotes, false, session.id]
   );
 
   // New XP log entries
@@ -299,7 +298,6 @@ export default function SessionDetailDrawer({ sessionId, onDeleted, onClose }: P
   const [editing, setEditing] = useState(false);
   const [editDuration, setEditDuration] = useState('');
   const [editNotes, setEditNotes] = useState('');
-  const [editLegacy, setEditLegacy] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
 
   const { data: session, isLoading } = useQuery({
@@ -402,7 +400,6 @@ export default function SessionDetailDrawer({ sessionId, onDeleted, onClose }: P
     if (!session) return;
     setEditDuration(String(session.duration_minutes));
     setEditNotes(session.notes ?? '');
-    setEditLegacy(session.is_legacy);
     setEditing(true);
   };
 
@@ -415,7 +412,7 @@ export default function SessionDetailDrawer({ sessionId, onDeleted, onClose }: P
       // 1. Reverse old XP
       await reverseSessionXP(db, session.id);
       // 2. Award new XP
-      await awardNewSessionXP(db, session, newDuration, editNotes.trim() || null, editLegacy);
+      await awardNewSessionXP(db, session, newDuration, editNotes.trim() || null);
     },
     onSuccess: async () => {
       await refreshAppData(queryClient);
@@ -493,7 +490,6 @@ export default function SessionDetailDrawer({ sessionId, onDeleted, onClose }: P
         </div>
         <div style={{ fontFamily: mono, fontSize: 9, color: dim, letterSpacing: 1 }}>
           {date}  {time}  ·  {durLabel}
-          {session.is_legacy && <span style={{ color: '#ffaa00', marginLeft: 8 }}>[LEGACY]</span>}
         </div>
       </div>
 
@@ -650,13 +646,6 @@ export default function SessionDetailDrawer({ sessionId, onDeleted, onClose }: P
                   style={{ width: '100%', padding: '5px 8px', fontSize: 10, background: bgS, border: `1px solid ${adim}`, color: acc, fontFamily: mono, outline: 'none', resize: 'vertical' as const, boxSizing: 'border-box' as const }}
                 />
               </div>
-
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 9, color: editLegacy ? '#ffaa00' : adim, letterSpacing: 1 }}>
-                <span onClick={() => setEditLegacy(v => !v)} style={{ width: 13, height: 13, border: `1px solid ${editLegacy ? '#ffaa00' : adim}`, background: editLegacy ? 'rgba(255,170,0,0.15)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9 }}>
-                  {editLegacy ? '✓' : ''}
-                </span>
-                LEGACY ENTRY (50% XP)
-              </label>
 
               <div style={{ fontSize: 9, color: '#ffaa00', padding: '6px 8px', border: '1px solid rgba(255,170,0,0.3)', background: 'rgba(255,170,0,0.05)' }}>
                 ⚠ Old XP will be reversed, new XP awarded based on updated duration.

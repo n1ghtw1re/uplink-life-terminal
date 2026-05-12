@@ -45,6 +45,13 @@ const accentDim = 'hsl(var(--accent-dim))';
 const dimText   = 'hsl(var(--text-dim))';
 const bgSec     = 'hsl(var(--bg-secondary))';
 const bgTer     = 'hsl(var(--bg-tertiary))';
+const formatTotalTime = (minutes: number) => {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h > 0 && m > 0) return `${h}h ${m}m`;
+  if (h > 0) return `${h}h`;
+  return `${m}m`;
+};
 
 // ── Helpers ───────────────────────────────────────────────────
 
@@ -199,7 +206,6 @@ export default function MediaDetailDrawer({ mediaId, onClose }: Props) {
   const [editYear, setEditYear]               = useState('');
   const [editStat, setEditStat]               = useState<StatKey | ''>('');
   const [editNotes, setEditNotes]             = useState('');
-  const [editLegacy, setEditLegacy]           = useState(false);
 
   // Reset edit/delete states when mediaId changes
   useEffect(() => {
@@ -252,7 +258,7 @@ export default function MediaDetailDrawer({ mediaId, onClose }: Props) {
 
       // Bonus XP — skip for channels (no XP bonuses)
       if (item.type !== 'channel') {
-        const baseXP = Math.floor(getXPValue(item.type) * (item.is_legacy ? 0.5 : 1.0));
+        const baseXP = Math.floor(getXPValue(item.type));
         const source  = getSourceType(item.type);
 
         if (item.linked_stat && baseXP > 0) {
@@ -273,6 +279,23 @@ export default function MediaDetailDrawer({ mediaId, onClose }: Props) {
       onSuccess: async () => {
         await refreshAppData(queryClient);
       },
+  });
+
+  const { data: totalMinutes = 0 } = useQuery({
+    queryKey: ['media-total-minutes', mediaId],
+    enabled: !!mediaId,
+    queryFn: async () => {
+      const db = await import('@/lib/db').then(m => m.getDB());
+      const sessionMinutes = await db.query<{ total_minutes: number }>(
+        `SELECT COALESCE(SUM(duration_minutes), 0)::int AS total_minutes FROM sessions WHERE media_id = $1;`,
+        [mediaId]
+      );
+      const outputMinutes = await db.query<{ total_minutes: number }>(
+        `SELECT COALESCE(SUM(duration_minutes), 0)::int AS total_minutes FROM output_logs WHERE media_id = $1;`,
+        [mediaId]
+      );
+      return Number(sessionMinutes.rows[0]?.total_minutes ?? 0) + Number(outputMinutes.rows[0]?.total_minutes ?? 0);
+    },
   });
 
   const updatePageProgress = useMutation({
@@ -305,7 +328,7 @@ export default function MediaDetailDrawer({ mediaId, onClose }: Props) {
         [editTitle.trim(), editCreator.trim() || null,
          editYear ? parseInt(editYear) : null,
          editStat || null, editNotes.trim() || null,
-         editLegacy, mediaId]
+         false, mediaId]
       );
     },
       onSuccess: async () => {
@@ -321,7 +344,6 @@ export default function MediaDetailDrawer({ mediaId, onClose }: Props) {
     setEditYear(item.year ? String(item.year) : '');
     setEditStat((item.linked_stat ?? '') as StatKey | '');
     setEditNotes(item.notes ?? '');
-    setEditLegacy(item.is_legacy);
     setEditing(true);
   };
 
@@ -394,13 +416,6 @@ export default function MediaDetailDrawer({ mediaId, onClose }: Props) {
           }}>
             {item.status}
           </span>
-          {item.is_legacy && (
-            <span style={{
-              fontSize: 9, color: dimText,
-              border: '1px solid rgba(153,104,0,0.4)',
-              padding: '1px 6px', letterSpacing: 1, opacity: 0.6,
-            }}>LEGACY</span>
-          )}
         </div>
 
         <div style={{
@@ -468,6 +483,10 @@ export default function MediaDetailDrawer({ mediaId, onClose }: Props) {
             </span>
           </div>
         )}
+        <div style={{ marginBottom: 10, border: `1px solid ${accentDim}`, background: bgSec, padding: '6px 8px' }}>
+          <div style={{ fontSize: 8, color: accentDim, letterSpacing: 1 }}>TOTAL TIME</div>
+          <div style={{ fontFamily: vt, fontSize: 20, color: accent }}>{formatTotalTime(totalMinutes)}</div>
+        </div>
 
         {/* Book/comic progress */}
         {(item.type === 'book' || item.type === 'comic') && totalPages && (
@@ -671,10 +690,6 @@ export default function MediaDetailDrawer({ mediaId, onClose }: Props) {
                   ))}
                 </div>
               </div>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 9, color: editLegacy ? '#ffaa00' : accentDim, letterSpacing: 1 }}>
-                <span onClick={() => setEditLegacy(v => !v)} style={{ width: 13, height: 13, border: `1px solid ${editLegacy ? '#ffaa00' : accentDim}`, background: editLegacy ? 'rgba(255,170,0,0.15)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9 }}>{editLegacy ? '✓' : ''}</span>
-                LEGACY ENTRY
-              </label>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={() => saveEdit.mutate()} disabled={saveEdit.isPending} style={{ flex: 1, padding: '6px', fontSize: 9, border: `1px solid ${accent}`, background: 'transparent', color: accent, fontFamily: mono, cursor: 'pointer' }}>
                   {saveEdit.isPending ? 'SAVING...' : '✓ SAVE'}

@@ -54,6 +54,14 @@ interface Props {
   onClose?: () => void;
 }
 
+const formatTotalTime = (minutes: number) => {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h > 0 && m > 0) return `${h}h ${m}m`;
+  if (h > 0) return `${h}h`;
+  return `${m}m`;
+};
+
 // ── Sub-components ────────────────────────────────────────────
 
 function XPBar({ value, max }: { value: number; max: number }) {
@@ -342,6 +350,23 @@ export default function CourseDetailDrawer({ courseId, onClose }: Props) {
     },
   });
 
+  const { data: totalMinutes = 0 } = useQuery({
+    queryKey: ['course-total-minutes', courseId],
+    enabled: !!courseId,
+    queryFn: async () => {
+      const db = await import('@/lib/db').then(m => m.getDB());
+      const sessionMinutes = await db.query<{ total_minutes: number }>(
+        `SELECT COALESCE(SUM(duration_minutes), 0)::int AS total_minutes FROM sessions WHERE course_id = $1;`,
+        [courseId]
+      );
+      const outputMinutes = await db.query<{ total_minutes: number }>(
+        `SELECT COALESCE(SUM(duration_minutes), 0)::int AS total_minutes FROM output_logs WHERE course_id = $1;`,
+        [courseId]
+      );
+      return Number(sessionMinutes.rows[0]?.total_minutes ?? 0) + Number(outputMinutes.rows[0]?.total_minutes ?? 0);
+    },
+  });
+
   // ── Recalculate + update progress ────────────────────────
 
   const updateProgress = async (updatedSections: Section[]) => {
@@ -380,7 +405,7 @@ export default function CourseDetailDrawer({ courseId, onClose }: Props) {
     // Award course completion bonus — num_sections × 100, skip if ongoing
     if (isComplete && course && !course.is_ongoing) {
       const totalSecs   = updatedSections.length || 1;
-      const courseBonus = Math.floor(totalSecs * 100 * (course.is_legacy ? 0.5 : 1.0));
+      const courseBonus = Math.floor(totalSecs * 100);
       const statKeys    = (course.linked_stats ?? []) as StatKey[];
       if (statKeys.length > 0) {
         const { awardBonusXP } = await import('@/services/xpService');
@@ -520,7 +545,7 @@ export default function CourseDetailDrawer({ courseId, onClose }: Props) {
             .update({ completed_at: new Date().toISOString() })
             .eq('id', section.id);
 
-          const sectionBonus  = Math.floor(100 * (course.is_legacy ? 0.5 : 1.0));
+          const sectionBonus  = 100;
           const { awardBonusXP } = await import('@/services/xpService');
           const linkedSkillIds = Array.isArray(course.linked_skill_ids) ? course.linked_skill_ids : [];
           const linkedSkillId = linkedSkillIds[0] || null;
@@ -600,7 +625,7 @@ onSuccess: async () => {
         .eq('id', section.id);
 
       if (nowDone) {
-        const sectionBonus = Math.floor(100 * (course.is_legacy ? 0.5 : 1.0));
+        const sectionBonus = 100;
         const { awardBonusXP } = await import('@/services/xpService');
         const linkedSkillIds = Array.isArray(course.linked_skill_ids) ? course.linked_skill_ids : [];
         const linkedSkillId = linkedSkillIds[0] || null;
@@ -864,6 +889,10 @@ onSuccess: async () => {
             )}
             <StatusBadge status={course.status} />
           </div>
+        </div>
+        <div style={{ marginTop: 8, border: `1px solid ${accentDim}`, background: 'hsl(var(--bg-secondary))', padding: '6px 8px' }}>
+          <div style={{ fontSize: 8, color: accentDim, letterSpacing: 1 }}>TOTAL TIME</div>
+          <div style={{ fontFamily: "'VT323', monospace", fontSize: 20, color: accent }}>{formatTotalTime(totalMinutes)}</div>
         </div>
 
         {/* XP toast */}

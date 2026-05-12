@@ -525,7 +525,7 @@ const Step2 = ({ sliders, onChange, onBack, onNext, onSkip }: {
             </span>
           </div>
           <div>
-            <span style={{ color: 'hsl(var(--text-dim))' }}>LEGACY XP SEED: </span>
+            <span style={{ color: 'hsl(var(--text-dim))' }}>STARTING XP SEED: </span>
             <span style={{ color: 'hsl(var(--accent-bright))' }}>~{masterXp.toLocaleString()} XP</span>
           </div>
         </div>
@@ -954,7 +954,7 @@ const Step6 = ({ wizardData, onBack, onLaunch, launching }: {
             <span style={{ color: 'hsl(var(--accent-bright))' }}>LVL {master.level} // {master.title}</span>
           </div>
           <div>
-            <span style={{ color: 'hsl(var(--text-dim))' }}>LEGACY XP: </span>
+            <span style={{ color: 'hsl(var(--text-dim))' }}>STARTING XP: </span>
             <span style={{ color: 'hsl(var(--accent))' }}>~{masterXp.toLocaleString()} XP</span>
           </div>
         </div>
@@ -1036,7 +1036,7 @@ const Step6 = ({ wizardData, onBack, onLaunch, launching }: {
 
 const LAUNCH_LINES = [
   'SAVING OPERATOR PROFILE................OK',
-  'SEEDING LEGACY XP......................OK',
+  'SEEDING STARTING XP....................OK',
   'CALIBRATING STAT LEVELS................OK',
   'GENERATING CLASS AFFINITY..............OK',
   'MOUNTING WIDGET GRID...................OK',

@@ -127,8 +127,8 @@ export function previewXP(params: {
   augmentIds: string[];
   isLegacy?: boolean;
 }) {
-  const { durationMinutes, statSplit, toolIds, augmentIds, isLegacy = false } = params;
-  const factor  = isLegacy ? LEGACY_RATE : 1.0;
+  const { durationMinutes, statSplit, toolIds, augmentIds } = params;
+  const factor  = 1.0;
   const base    = durationMinutes * XP_PER_MINUTE * factor;
   const skillXP = Math.floor(base * SKILL_SHARE);
   const statBase= Math.floor(base * STAT_SHARE);
@@ -152,8 +152,8 @@ export async function awardSessionXP(params: {
   isLegacy?: boolean;
 }) {
   const db = await getDB();
-  const { sessionId, skillId, skillName = '', durationMinutes, statSplit, toolIds, augmentIds, isLegacy = false } = params;
-  const factor   = isLegacy ? LEGACY_RATE : 1.0;
+  const { sessionId, skillId, skillName = '', durationMinutes, statSplit, toolIds, augmentIds } = params;
+  const factor   = 1.0;
   const base     = durationMinutes * XP_PER_MINUTE * factor;
   const skillXP  = Math.floor(base * SKILL_SHARE);
   const statBase = Math.floor(base * STAT_SHARE);

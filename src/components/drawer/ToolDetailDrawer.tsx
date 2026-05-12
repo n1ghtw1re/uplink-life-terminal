@@ -13,6 +13,13 @@ const dim   = 'hsl(var(--text-dim))';
 const bgS   = 'hsl(var(--bg-secondary))';
 const bgT   = 'hsl(var(--bg-tertiary))';
 const green = '#44ff88';
+const formatTotalTime = (minutes: number) => {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h > 0 && m > 0) return `${h}h ${m}m`;
+  if (h > 0) return `${h}h`;
+  return `${m}m`;
+};
 
 const TOOL_TYPES = ['equipment','facility','framework','hardware','instrument','language','platform','software','vehicle'];
 
@@ -94,6 +101,27 @@ export default function ToolDetailDrawer({ toolId, onClose }: Props) {
         ORDER BY logged_at DESC LIMIT 8;
       `);
       return res.rows;
+    },
+  });
+
+  const { data: totalMinutes = 0 } = useQuery({
+    queryKey: ['tool-total-minutes', toolId],
+    enabled: !!toolId,
+    queryFn: async () => {
+      const db = await getDB();
+      const sessionMinutes = await db.query<{ total_minutes: number }>(
+        `SELECT COALESCE(SUM(duration_minutes), 0)::int AS total_minutes
+         FROM sessions
+         WHERE tool_ids::text LIKE $1;`,
+        [`%${toolId}%`]
+      );
+      const outputMinutes = await db.query<{ total_minutes: number }>(
+        `SELECT COALESCE(SUM(duration_minutes), 0)::int AS total_minutes
+         FROM output_logs
+         WHERE tool_ids::text LIKE $1;`,
+        [`%${toolId}%`]
+      );
+      return Number(sessionMinutes.rows[0]?.total_minutes ?? 0) + Number(outputMinutes.rows[0]?.total_minutes ?? 0);
     },
   });
 
@@ -192,6 +220,10 @@ export default function ToolDetailDrawer({ toolId, onClose }: Props) {
         </div>
         <div style={{ fontSize: 9, color: adim }}>
           {getXPDisplayValues(Number(tool.xp)).totalXP.toLocaleString()} / {getXPDisplayValues(Number(tool.xp)).totalXPToNextLevel.toLocaleString()} XP to LVL {level + 1}
+        </div>
+        <div style={{ marginTop: 8, border: `1px solid ${adim}`, background: bgS, padding: '6px 8px' }}>
+          <div style={{ fontSize: 8, color: adim, letterSpacing: 1 }}>TOTAL TIME</div>
+          <div style={{ fontFamily: vt, fontSize: 18, color: acc }}>{formatTotalTime(totalMinutes)}</div>
         </div>
       </div>
 
