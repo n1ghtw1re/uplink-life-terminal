@@ -201,7 +201,7 @@ export function useTerminalAutocomplete(input: string) {
 
     // OPEN command context
     if (context === 'open' || context === 'close') {
-      const widgets = ['xp', 'checkin', 'habits', 'planner', 'recovery', 'ingredients', 'intake', 'exercise', 'workouts', 'output', 'recipes', 'heatmap', 'stats', 'courses', 'media', 'skills', 'tools', 'resources', 'augments', 'projects', 'vault', 'notes', 'clock', 'calculator', 'converter', 'terminal'];
+      const widgets = ['all', 'xp', 'checkin', 'habits', 'planner', 'recovery', 'ingredients', 'intake', 'exercise', 'workouts', 'output', 'recipes', 'heatmap', 'stats', 'courses', 'media', 'skills', 'tools', 'resources', 'augments', 'projects', 'vault', 'notes', 'clock', 'calculator', 'converter', 'terminal'];
       if (!lastWord) {
         return widgets.map(w => ({ value: w, type: 'widget' as const, score: 100 }));
       }

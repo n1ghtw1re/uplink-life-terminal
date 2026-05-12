@@ -31,7 +31,7 @@ function BodyText({ children }: { children: React.ReactNode }) {
 
 const COMMANDS = [
   { name: 'clear', desc: 'Clear terminal output', syntax: 'clear' },
-  { name: 'close', desc: 'Close a widget', syntax: 'close [widget_name]' },
+  { name: 'close', desc: 'Close a widget (or all widgets)', syntax: 'close [widget_name] | close all' },
   { name: 'drawer', desc: 'Open or close drawer', syntax: 'drawer [name] | drawer close' },
   { name: 'HABIT', desc: 'Check-in a habit (binary or quantitative)', syntax: 'HABIT [name] [#quantity]' },
   { name: 'ADD', desc: 'Add a new entity or planner event', syntax: 'ADD [type] [name] [flags]' },
@@ -39,7 +39,7 @@ const COMMANDS = [
   { name: 'help', desc: 'Show available commands', syntax: 'help' },
   { name: 'list', desc: 'List items (skills, tools, etc.)', syntax: 'list [type]' },
   { name: 'log', desc: 'Log a session against a skill', syntax: 'log [duration] [skill] [flags]' },
-  { name: 'open', desc: 'Open a widget', syntax: 'open [widget_name]' },
+  { name: 'open', desc: 'Open a widget (or all widgets)', syntax: 'open [widget_name] | open all' },
   { name: 'status', desc: 'Show operator status', syntax: 'status' },
 ];
 

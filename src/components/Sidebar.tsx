@@ -48,7 +48,7 @@ interface SidebarProps {
   onOpenClockWidget?: () => void;
   onOpenCalculatorWidget?: () => void;
   onOpenUnitConverterWidget?: () => void;
-  widgetHandler?: (action: 'open' | 'close', widgetId: string) => void;
+  widgetHandler?: (action: 'open' | 'close' | 'openAll' | 'closeAll', widgetId?: string) => void;
 }
 
 const sectionMap: Record<string, string> = {

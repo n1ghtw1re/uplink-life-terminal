@@ -11,7 +11,7 @@ interface WidgetProps {
   onFullscreen?: () => void;
   isFullscreen?: boolean;
   isFocused?: boolean;
-  widgetHandler?: (action: 'open' | 'close', widgetId: string) => void;
+  widgetHandler?: (action: 'open' | 'close' | 'openAll' | 'closeAll', widgetId?: string) => void;
   drawerHandler?: (type: string, name: string, data?: any) => void;
   closeDrawerHandler?: () => void;
 }

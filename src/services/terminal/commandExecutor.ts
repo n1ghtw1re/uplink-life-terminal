@@ -1462,8 +1462,16 @@ function executeOpen(args: string[], widgetHandler?: any): CommandResult {
     return {
       success: false,
       output: '',
-      error: 'Usage: open [widget_name]\nExample: open xp, open skills, open terminal',
+      error: 'Usage: open [widget_name]\n       open all\nExample: open xp, open skills, open terminal, open all',
     };
+  }
+
+  if (args[0]?.toLowerCase() === 'all') {
+    if (widgetHandler) {
+      widgetHandler('openAll');
+      return { success: true, output: 'All widgets opened.' };
+    }
+    return { success: false, output: '', error: 'Widget handler not available' };
   }
 
   const widgetName = args.join(' ').toLowerCase();
@@ -1505,8 +1513,16 @@ function executeClose(args: string[], widgetHandler?: any): CommandResult {
     return {
       success: false,
       output: '',
-      error: 'Usage: close [widget_name]\nExample: close xp, close skills, close terminal',
+      error: 'Usage: close [widget_name]\n       close all\nExample: close xp, close skills, close terminal, close all',
     };
+  }
+
+  if (args[0]?.toLowerCase() === 'all') {
+    if (widgetHandler) {
+      widgetHandler('closeAll');
+      return { success: true, output: 'All widgets closed.' };
+    }
+    return { success: false, output: '', error: 'Widget handler not available' };
   }
 
   const widgetName = args.join(' ').toLowerCase();

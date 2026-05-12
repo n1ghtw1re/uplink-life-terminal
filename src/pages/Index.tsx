@@ -343,10 +343,24 @@ const Index = () => {
     localStorage.setItem('uplink-active-widgets', JSON.stringify(activeWidgets.filter(w => w !== id)));
   };
 
-  const widgetHandler = (action: 'open' | 'close', widgetId: string) => {
-    if (action === 'open') {
+  const widgetHandler = (action: 'open' | 'close' | 'openAll' | 'closeAll', widgetId?: string) => {
+    if (action === 'openAll') {
+      ALL_WIDGET_IDS.forEach(id => {
+        if (!activeWidgets.includes(id)) handleRestore(id);
+      });
+      return;
+    }
+    if (action === 'closeAll') {
+      const toClose = [...activeWidgets];
+      setLayout(prev => prev.filter(i => !toClose.includes(i.i)));
+      setActiveWidgets([]);
+      localStorage.setItem('uplink-layout', JSON.stringify(layout.filter(i => !toClose.includes(i.i))));
+      localStorage.setItem('uplink-active-widgets', '[]');
+      return;
+    }
+    if (action === 'open' && widgetId) {
       handleOpenWidgetById(widgetId);
-    } else {
+    } else if (action === 'close' && widgetId) {
       handleCloseWidgetById(widgetId);
     }
   };

@@ -53,15 +53,15 @@ export const AVAILABLE_COMMANDS: TerminalCommand[] = [
   },
   {
     name: 'open',
-    description: 'Open a widget',
-    syntax: 'open [widget_name]',
-    examples: ['open xp', 'open exercise', 'open terminal'],
+    description: 'Open a widget (or all widgets)',
+    syntax: 'open [widget_name] | open all',
+    examples: ['open xp', 'open exercise', 'open terminal', 'open all'],
   },
   {
     name: 'close',
-    description: 'Close a widget',
-    syntax: 'close [widget_name]',
-    examples: ['close xp', 'close exercise'],
+    description: 'Close a widget (or all widgets)',
+    syntax: 'close [widget_name] | close all',
+    examples: ['close xp', 'close exercise', 'close all'],
   },
   {
     name: 'drawer',

@@ -14,7 +14,7 @@ const bgS = 'hsl(var(--bg-secondary))';
 interface Props {
   expanded: boolean;
   onToggle?: () => void;
-  widgetHandler?: (action: 'open' | 'close', widgetId: string) => void;
+  widgetHandler?: (action: 'open' | 'close' | 'openAll' | 'closeAll', widgetId?: string) => void;
   drawerHandler?: (type: string, name: string, data?: any) => void;
   closeDrawerHandler?: () => void;
 }
